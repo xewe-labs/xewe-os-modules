@@ -2,7 +2,7 @@
 
 The registry of [XeWe OS](https://github.com/xewe-labs/xewe-os) modules.
 [`repositories.txt`](repositories.txt) lists module repositories, one per line.
-`xewe-os/scripts/setup.sh` reads that list to show the available modules, resolve their
+`xewe-os/setup.sh` reads that list to show the available modules, resolve their
 requirements and install the ones you choose. Anyone can add a module with a pull request.
 
 ## How setup.sh uses it
@@ -17,7 +17,7 @@ requirements and install the ones you choose. Anyone can add a module with a pul
 To try a modified list before it is merged:
 
 ```bash
-scripts/setup.sh --modules-index path/to/repositories.txt
+./setup.sh --modules-index path/to/repositories.txt
 ```
 
 Entries in a local list may also be folders with a module checkout, which is handy while
