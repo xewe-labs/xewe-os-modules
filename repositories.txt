@@ -1,0 +1,12 @@
+# XeWe OS module registry
+#
+# One module repository per line: the repository's home page URL (or any git URL).
+# The repository must have module.properties and src/<Folder>/ at its root.
+# Add yours with a pull request; see README.md for the requirements.
+
+https://github.com/xewe-labs/xewe-os-module-wifi
+https://github.com/xewe-labs/xewe-os-module-web-interface
+https://github.com/xewe-labs/xewe-os-module-time
+https://github.com/xewe-labs/xewe-os-module-scheduler
+https://github.com/xewe-labs/xewe-os-module-buttons
+https://github.com/xewe-labs/xewe-os-module-pins
