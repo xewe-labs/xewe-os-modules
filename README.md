@@ -1,129 +1,87 @@
-# xewe-os-modules — the registry of XeWe OS modules
+# xewe-os-modules
 
-XeWe OS module registry · created 2026-09-15 · Solo: Max Dokukin · Status: Active (6 modules listed)
+The modules of [XeWe OS](https://github.com/xewe-labs/xewe-os), in one repo. Each module is a
+C++ class built on [XeWeCore](https://github.com/xewe-labs/xewe-os-core) plus the metadata and
+tests that `xewe` (from [xewe-os-tools](https://github.com/xewe-labs/xewe-os-tools)) needs to
+install, order and test it. The full rules are in [CONTRACT.md](CONTRACT.md); agents also read
+[AGENTS.md](AGENTS.md). The module list is [MODULES.md](MODULES.md) (generated).
 
-## Overview
+License: GPL-3.0-only, see [LICENSE.txt](LICENSE.txt).
 
-The registry of [XeWe OS](https://github.com/xewe-labs/xewe-os) modules.
-[`repositories.txt`](repositories.txt) lists module repositories, one per line.
-`xewe-os/setup.sh` reads that list to show the available modules, resolve their
-requirements and install the ones you choose. Anyone can add a module with a pull request. The
-registry was created when the modules were split out of the firmware into their own repositories
-(September 2026); it holds no code, only the list and the contract a module must meet.
-
-## Highlights
-
-- One file, one module repository per line; blank lines and `#` comments are ignored
-- Each module describes itself in `module.properties` (11 keys) — the registry never duplicates that metadata
-- `setup.sh` rejects duplicate slugs, invalid slugs, reused install folders and dependency cycles
-- Any public git repository may be listed, not only repositories in the `xewe-labs` organization
-
-## How it works
+## What a module is
 
 ```
-setup.sh → download repositories.txt (main) → for each URL: fetch module.properties (raw URL, else shallow clone)
-         → checklist of slug + description → add depends_modules → clone chosen modules → copy src/<Folder>/ into src/modules/
+modules/<slug>/
+├── module.properties          # metadata; read by xewe setup / modules select / validate
+├── src/<Folder>/<Folder>.h    # class <Folder> : public xewe::Module, includes <XeWeCore.h>
+├── src/<Folder>/<Folder>.cpp
+├── tests/test_<slug>.py       # pytest, run by `xewe test` inside an xewe-os harness
+└── README.md
 ```
 
-1. Downloads `repositories.txt` from this repository (`main` branch).
-2. Reads each listed repository's `module.properties` for its slug, description and required
-   modules.
-3. Shows the modules in a checklist; required modules are added automatically.
-4. Clones each chosen module (branch `main` unless `--modules-ref` is given) and copies its
-   `src/<Folder>/` into the firmware.
+- **Install.** `./setup.sh --modules <slug>` (or `xewe modules select <slug>`) in an xewe-os
+  project copies `src/<Folder>/` to `src/modules/<Folder>/` and writes `src/modules/Modules.h`:
+  one `#include "<Folder>/<Folder>.h"` and the module's `declare=` line (for example
+  `Wifi wifi(os);`), dependencies first. Nothing else from the module goes into the firmware.
+- **Identity.** `slug` is the directory name and the `--modules` value. `id` is the CLI group
+  (`$<id> ...`) and the NVS namespace: at most 15 characters, and it never changes once released.
+  `name` equals the name the C++ class passes to `xewe::Module` (`$<id> status` prints
+  `<name> module enabled`).
+- **Dependencies.** `depends_modules=wifi` selects and orders the dependency, the `declare` line
+  passes its variable (`Time time_module(os, wifi);`), and the header includes it relatively
+  (`#include "../Wifi/Wifi.h"`).
+- **Versions.** `version` is the module's own semver (informational, plus the promise for its
+  commands); `requires_core` is the XeWeCore range in the tools' syntax, `>=2.0.0,<3.0.0`. The
+  repo tag (`v0.2.0`) is what an xewe-os `xewe.lock` pins.
 
-### Listed modules
+## Adding a module
 
-| Module | Slug / CLI id | Requires | Repository |
-|---|---|---|---|
-| Wifi | `wifi` / `$wifi` | — | [xewe-os-module-wifi](https://github.com/xewe-labs/xewe-os-module-wifi) |
-| WebInterface | `web-interface` / `$web_interface` | wifi | [xewe-os-module-web-interface](https://github.com/xewe-labs/xewe-os-module-web-interface) |
-| Time | `time` / `$time` | wifi | [xewe-os-module-time](https://github.com/xewe-labs/xewe-os-module-time) |
-| Scheduler | `scheduler` / `$schedule` | time | [xewe-os-module-scheduler](https://github.com/xewe-labs/xewe-os-module-scheduler) |
-| Buttons | `buttons` / `$buttons` | — | [xewe-os-module-buttons](https://github.com/xewe-labs/xewe-os-module-buttons) |
-| Pins | `pins` / `$pins` | — | [xewe-os-module-pins](https://github.com/xewe-labs/xewe-os-module-pins) |
+1. Copy an existing module that looks like yours (`modules/pins` has no dependencies and no
+   stored state; `modules/time` depends on `wifi`), or start from XeWeCore's
+   `extras/ModuleTemplate`. Rename the folder, files and class.
+2. Fill in `module.properties` with every key, in the order of CONTRACT.md section 2:
+   `repo=https://github.com/xewe-labs/xewe-os-modules/tree/main/modules/<slug>`,
+   `declare=<Folder> <var>(os[, <dep var>...]);`, `depends_libraries=` for Arduino libraries
+   pinned in the harness lock only (not esp32-core libraries, not XeWeCore).
+3. Follow the C++ rules in [AGENTS.md](AGENTS.md) (`host` parameter, `[this]` captures, no `cli(`,
+   `xewe::span`, a `status()` override).
+4. Write `tests/test_<slug>.py` with `test_compiles`, `test_status` and one behaviour test
+   (template in CONTRACT.md section 4).
+5. `tools/validate.py --write-index`, then run the checks below.
 
-### Adding a module
+## Testing a module through an xewe-os harness
 
-Open a pull request that adds one line with your repository's URL to `repositories.txt`, e.g.
+Modules are tested inside a **copy** of the [xewe-os](https://github.com/xewe-labs/xewe-os)
+template, never the template itself (`setup --modules` rewrites its `xewe.lock`). Phase 1 takes
+the local checkouts through environment variables:
 
-```text
-https://github.com/<you>/xewe-os-module-relay
+```sh
+cp -r /path/to/xewe-os "$SCRATCH/harness" && cd "$SCRATCH/harness"
+export XEWE_TOOLS_SOURCE=/path/to/xewe-os-tools XEWE_CORE_SOURCE=/path/to/xewe-os-core \
+       XEWE_MODULES_SOURCE=/path/to/xewe-os-modules
+# optional: reuse an installed esp32 core instead of downloading it
+export XEWE_ARDUINO_DATA=/path/to/arduino15
+
+./setup.sh --modules wifi </dev/null                            # wifi and its dependencies
+build/.venv/bin/python -m xewe test --module wifi               # one chip (the lock's chip)
+build/.venv/bin/python -m xewe test --module wifi --all-chips   # c3, c6, s3
+build/.venv/bin/python -m xewe test --host-only                 # host tests only, no build
 ```
 
-Your repository must meet these requirements (reviewers check them):
+`setup.sh` copies the modules checkout, so re-run it after editing a module here. Without a
+board, `test_compiles` really builds and passes or fails, and the serial tests report
+`compiled, not run`; the run exits 0. Hardware tests assume a provisioned board (first-boot
+prompts answered); each test file states its preconditions.
 
-- [ ] **Public git repository** reachable at the URL, with the module on branch `main`.
-- [ ] **`module.properties`** at the root with all of these keys:
+Repo checks, from the module repo with the harness venv:
 
-  ```
-  name=Relay
-  slug=relay
-  id=relay
-  version=0.1.0
-  description=Switches a relay from the command line and schedules
-  repo=https://github.com/<you>/xewe-os-module-relay
-  folder=Relay
-  include=src/Relay/Relay.h
-  declare=Relay relay(os, time_module);
-  depends_modules=time
-  depends_libraries=XeWeOS (>=0.1.0)
-  ```
-
-- [ ] **Unique names:** `slug`, `id` (CLI group and NVS namespace, at most 15 characters),
-  `folder`, the class name and the variable name in `declare` must not be used by any module
-  already listed. Modules share one firmware, one CLI and one NVS partition.
-- [ ] **`slug`** uses lowercase letters, digits and dashes; the repository should be named
-  `xewe-os-module-<slug>`.
-- [ ] **Source layout:** the module is in `src/<Folder>/`, one folder named like its class, and
-  includes other modules relatively (`#include "../Wifi/Wifi.h"`).
-- [ ] **Requirements exist:** every slug in `depends_modules` is already in this registry.
-  `declare` may only use `os` and the variable names declared by those modules.
-- [ ] **It builds:** the validation firmware compiles for ESP32-C3, C6 and S3
-  (`scripts/validate.sh`, copied from any existing module repository).
-- [ ] **README** describing the module and its commands, and a **license**.
-
-Start from an existing module such as
-[xewe-os-module-pins](https://github.com/xewe-labs/xewe-os-module-pins), the
-[module guideline](https://github.com/xewe-labs/.github/blob/main/guidelines/modules.md) and the
-[XeWeOS README](https://github.com/xewe-labs/xewe-library-os) for the module API and lifecycle.
-
-### Changing or removing a module
-
-Open a pull request that edits or removes the line. A module's `slug` and `id` should not change
-once it is listed: firmware stores settings under the `id`, and other modules may depend on the
-`slug`.
-
-## Results
-
-| Metric | Value | Baseline / note |
-|---|---|---|
-| Modules listed | 6 | `repositories.txt` |
-| Contract | 11 `module.properties` keys, 8 review checks | this README |
-
-A registry has no measured results; the table lists what it holds.
-
-## Getting started
-
-Use the registry through xewe-os:
-
-```bash
-git clone https://github.com/xewe-labs/xewe-os
-cd xewe-os
-./setup.sh                                          # checklist of the modules listed here
+```sh
+$HARNESS/build/.venv/bin/python tools/validate.py --harness $HARNESS   # tools rules + repo rules
+$HARNESS/build/.venv/bin/python -m xewe --project $HARNESS modules validate "$PWD"
+$HARNESS/build/.venv/bin/python tools/validate.py --write-index        # regenerate MODULES.md
 ```
 
-To try a modified list before it is merged:
-
-```bash
-./setup.sh --modules-index path/to/repositories.txt
-```
-
-Entries in a local list may also be folders with a module checkout, which is handy while
-developing a module.
-
-## Documents
-
-- [repositories.txt](repositories.txt)
-- Firmware: [xewe-os](https://github.com/xewe-labs/xewe-os) · framework: [xewe-library-os](https://github.com/xewe-labs/xewe-library-os)
-- License: GPL-3.0. See [LICENSE.txt](LICENSE.txt).
+The gate before a change is done: the validator exits 0; for each changed module,
+`xewe modules select <slug>` and `xewe test --module <slug> --all-chips` (it compiles with only
+its dependencies); and `./setup.sh --modules all` then `xewe build --all-chips` and `xewe test`
+(no clashes between modules).
