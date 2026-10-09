@@ -92,9 +92,9 @@ board), compare `$led checksum` against the expected CRC of a pure-red frame, ch
 the mode, and check persistence across `$system restart`; the visual check is skipped (`requires hardware`).
 
 ```sh
-build/.venv/bin/python -m xewe test --module led-modes              # lock chip
-build/.venv/bin/python -m xewe test --module led-modes --all-chips  # c3, c6, s3
-build/.venv/bin/python -m xewe test --host-only
+build/tools/.venv/bin/python -m xewe test --module led-modes              # lock chip
+build/tools/.venv/bin/python -m xewe test --module led-modes --all-chips  # c3, c6, s3
+build/tools/.venv/bin/python -m xewe test --host-only
 ```
 
 ## Known gaps

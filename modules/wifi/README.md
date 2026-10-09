@@ -63,8 +63,8 @@ Metadata and dependencies are declared in [`module.properties`](module.propertie
 `tests/test_wifi.py`, run through an xewe-os harness (see the repo [README](../../README.md)):
 
 ```sh
-build/.venv/bin/python -m xewe test --module wifi              # lock chip
-build/.venv/bin/python -m xewe test --module wifi --all-chips  # c3, c6, s3
+build/tools/.venv/bin/python -m xewe test --module wifi              # lock chip
+build/tools/.venv/bin/python -m xewe test --module wifi --all-chips  # c3, c6, s3
 ```
 
 - `test_compiles` builds the harness firmware with this module selected; it runs without a board.

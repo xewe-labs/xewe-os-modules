@@ -5,8 +5,8 @@ A thin wrapper: the module.properties rules come from xewe-os-tools (`xewe.modul
 this file adds only the repo-policy rules. Run it with a Python that has xewe-os-tools
 installed, which is a harness venv:
 
-    <harness>/build/.venv/bin/python tools/validate.py [--harness DIR]
-    <harness>/build/.venv/bin/python tools/validate.py --write-index
+    <harness>/build/tools/.venv/bin/python tools/validate.py [--harness DIR]
+    <harness>/build/tools/.venv/bin/python tools/validate.py --write-index
 
 Output: one `error|warning: <where>: <message>` line per finding, then
 `N modules, E errors, W warnings`. Exit 0 no errors, 1 errors, 2 usage error, 3 tools missing.
@@ -210,7 +210,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         from xewe import modules as xm
     except ImportError:
-        print("xewe-os-tools not importable; run with <harness>/build/.venv/bin/python", file=sys.stderr)
+        print("xewe-os-tools not importable; run with <harness>/build/tools/.venv/bin/python", file=sys.stderr)
         return EXIT_NOT_SETUP
 
     core_ref, libraries = None, None

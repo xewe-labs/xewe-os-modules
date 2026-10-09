@@ -76,7 +76,7 @@ every module under `modules/<slug>/`.
 
 ## Before you call it done
 
-- [ ] `<harness>/build/.venv/bin/python tools/validate.py --harness <harness>` exits 0
+- [ ] `<harness>/build/tools/.venv/bin/python tools/validate.py --harness <harness>` exits 0
       (after `tools/validate.py --write-index` if module metadata changed).
 - [ ] In a **copy** of the xewe-os template (never the template itself), for each changed module:
       `xewe modules select <slug>` then `xewe test --module <slug> --all-chips` (every

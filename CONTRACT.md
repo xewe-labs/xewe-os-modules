@@ -41,9 +41,11 @@ What `xewe/modules.py` actually expects. A9 matches this exactly:
 - **Parsing.** `key=value` lines, split at the first `=`. The first occurrence of a key wins, and
   `#` lines are comments. No quoting, no continuation lines, no spaces around `=` (the space would
   become part of the key).
-- **Install.** Only `modules/<slug>/src/<folder>/` is copied, to `src/modules/<folder>/`, with `.git`
-  skipped. `include=src/<Folder>/<Folder>.h` becomes `#include "<Folder>/<Folder>.h"` in `Modules.h`,
-  and the `declare=` line is copied into it verbatim, in dependency order.
+- **Install.** Only `modules/<slug>/src/<folder>/` is copied, to `build/modules-lib/src/<folder>/` (the
+  generated Arduino library `XeWeModules`), with `.git` skipped. `include=src/<Folder>/<Folder>.h`
+  becomes `#include "<Folder>/<Folder>.h"` in `XeWeModules.h`, which the project's generated
+  `src/Modules.h` includes; the `declare=` line is copied into `src/Modules.h` verbatim, in
+  dependency order.
 - **Tests.** `Module.tests_dir` is `modules/<slug>/tests/`. `runner.test_roots` adds it for every
   resolved module, or only for the modules named with `--module`. Tests are not copied into the
   firmware.
@@ -70,8 +72,8 @@ Order and key names are fixed. Every key is present, even when empty.
 | `description` | One line, shown in the module checklist and `MODULES.md` | T: non-empty, ≤ 100 chars |
 | `repo` | Browse URL: `https://github.com/xewe-labs/xewe-os-modules/tree/main/modules/<slug>` | T: accepted (legacy key, not checked). R: equals that URL with this slug |
 | `folder` | The one installed folder, named like the class | T: `^[A-Z][A-Za-z0-9]*$`, unique, `src/<folder>/` exists. R: `src/<folder>/<folder>.h` and `.cpp` exist |
-| `include` | Header that `Modules.h` includes | T: starts with `src/<folder>/`, file exists. R: equals `src/<folder>/<folder>.h` |
-| `declare` | Exact line placed in `Modules.h` | T: `^(\w+)\s+(\w+)\s*\((.*)\)\s*;$`, variable unique and ≠ `os`, every identifier argument is `os` or the variable of a transitive dependency; a type ≠ folder is only a warning. R: type == folder (error), first argument is exactly `os` |
+| `include` | Header that the generated `XeWeModules.h` includes | T: starts with `src/<folder>/`, file exists. R: equals `src/<folder>/<folder>.h` |
+| `declare` | Exact line placed in `src/Modules.h` | T: `^(\w+)\s+(\w+)\s*\((.*)\)\s*;$`, variable unique and ≠ `os`, every identifier argument is `os` or the variable of a transitive dependency; a type ≠ folder is only a warning. R: type == folder (error), first argument is exactly `os` |
 | `depends_modules` | Comma-separated slugs, empty for none | T: each exists, no self-dependency, acyclic |
 | `depends_libraries` | Comma-separated Arduino library names that must come from the harness `xewe.lock` `[libraries]`. Libraries bundled with the esp32 core (WiFi, WebServer, Wire, ...) and XeWeCore are **not** listed. Empty for all six modules | T: accepted (legacy key). R: each name matches `^[A-Za-z0-9_.\- ]+$`, is not `XeWeCore`/`XeWeOS`, and with `--harness DIR` is a key of `[libraries]` |
 | `requires_core` | XeWeCore range | T: `^>=\s*X.Y.Z(\s*,\s*<\s*X.Y.Z)?$`, checked against `[core] ref` when run inside a harness |
@@ -110,7 +112,7 @@ not its slug, which is fine), `buttons`, `pins`. Declares: `Wifi wifi(os);`,
 `#include <XeWeCore.h>` as the only XeWeCore include (umbrella, steering 2026-10-08; sub-header-only
 includes do not resolve the library). esp32-core headers (`<WiFi.h>`, `<WebServer.h>`, `<Wire.h>`)
 are allowed. A required module's header is included relatively, `#include "../Wifi/Wifi.h"`, because
-installed folders sit side by side in `src/modules/`.
+installed folders sit side by side in `build/modules-lib/src/`.
 
 **Overrides.**
 
@@ -352,9 +354,9 @@ def test_<thing>_host(tmp_path):
 cp -r next/xewe-os "$SCRATCH/harness" && cd "$SCRATCH/harness"
 XEWE_TOOLS_SOURCE=…/next/xewe-os-tools XEWE_CORE_SOURCE=…/next/xewe-os-core \
   ./setup.sh --modules-source …/next/xewe-os-modules --modules wifi   # wifi + its deps
-build/.venv/bin/python -m xewe test --module wifi              # one chip (lock chip, c3)
-build/.venv/bin/python -m xewe test --module wifi --all-chips  # c3, c6, s3
-build/.venv/bin/python -m xewe test --host-only                # host tests of all selected modules
+build/tools/.venv/bin/python -m xewe test --module wifi              # one chip (lock chip, c3)
+build/tools/.venv/bin/python -m xewe test --module wifi --all-chips  # c3, c6, s3
+build/tools/.venv/bin/python -m xewe test --host-only                # host tests of all selected modules
 ```
 
 `--module` must name a selected module (exit 2 otherwise). Its dependencies are compiled in but their
@@ -371,8 +373,8 @@ implements slug, id, folder, include, declare, depends_modules, requires_core, v
 and required keys. `tools/validate.py` imports `xewe.modules`, calls
 `validate(Registry.load(repo_root), core_ref)`, and adds only the repo-policy rules below. It needs a
 Python that has `xewe-os-tools` installed, which is the harness venv
-(`<harness>/build/.venv/bin/python tools/validate.py [--harness DIR]`). Without one it exits 3 with
-`xewe-os-tools not importable; run with <harness>/build/.venv/bin/python`.
+(`<harness>/build/tools/.venv/bin/python tools/validate.py [--harness DIR]`). Without one it exits 3 with
+`xewe-os-tools not importable; run with <harness>/build/tools/.venv/bin/python`.
 
 Rules the wrapper adds (R):
 

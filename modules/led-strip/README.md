@@ -117,8 +117,8 @@ suppression, default no-ops) and check that the setters notify outside the lock 
 render task.
 
 ```sh
-build/.venv/bin/python -m xewe test --module led-strip              # lock chip
-build/.venv/bin/python -m xewe test --module led-strip --all-chips  # c3, c6, s3
+build/tools/.venv/bin/python -m xewe test --module led-strip              # lock chip
+build/tools/.venv/bin/python -m xewe test --module led-strip --all-chips  # c3, c6, s3
 ```
 
 ## Known gaps

@@ -20,8 +20,9 @@ modules/<slug>/
 ```
 
 - **Install.** `./setup.sh --modules <slug>` (or `xewe modules select <slug>`) in an xewe-os
-  project copies `src/<Folder>/` to `src/modules/<Folder>/` and writes `src/modules/Modules.h`:
-  one `#include "<Folder>/<Folder>.h"` and the module's `declare=` line (for example
+  project copies `src/<Folder>/` to `build/modules-lib/src/<Folder>/` (the generated library
+  `XeWeModules`, whose `XeWeModules.h` holds one `#include "<Folder>/<Folder>.h"` per module) and
+  writes `src/Modules.h`: `#include <XeWeModules.h>` and the module's `declare=` line (for example
   `Wifi wifi(os);`), dependencies first. Nothing else from the module goes into the firmware.
 - **Identity.** `slug` is the directory name and the `--modules` value. `id` is the CLI group
   (`$<id> ...`) and the NVS namespace: at most 15 characters, and it never changes once released.
@@ -66,9 +67,9 @@ export XEWE_TOOLS_SOURCE=/path/to/xewe-os-tools XEWE_CORE_SOURCE=/path/to/xewe-o
 export XEWE_ARDUINO_DATA=/path/to/arduino15
 
 ./setup.sh --modules wifi </dev/null                            # wifi and its dependencies
-build/.venv/bin/python -m xewe test --module wifi               # one chip (the lock's chip)
-build/.venv/bin/python -m xewe test --module wifi --all-chips   # c3, c6, s3
-build/.venv/bin/python -m xewe test --host-only                 # host tests only, no build
+build/tools/.venv/bin/python -m xewe test --module wifi               # one chip (the lock's chip)
+build/tools/.venv/bin/python -m xewe test --module wifi --all-chips   # c3, c6, s3
+build/tools/.venv/bin/python -m xewe test --host-only                 # host tests only, no build
 ```
 
 `setup.sh` copies the modules checkout, so re-run it after editing a module here. Without a
@@ -79,9 +80,9 @@ prompts answered); each test file states its preconditions.
 Repo checks, from the module repo with the harness venv:
 
 ```sh
-$HARNESS/build/.venv/bin/python tools/validate.py --harness $HARNESS   # tools rules + repo rules
-$HARNESS/build/.venv/bin/python -m xewe --project $HARNESS modules validate "$PWD"
-$HARNESS/build/.venv/bin/python tools/validate.py --write-index        # regenerate MODULES.md
+$HARNESS/build/tools/.venv/bin/python tools/validate.py --harness $HARNESS   # tools rules + repo rules
+$HARNESS/build/tools/.venv/bin/python -m xewe --project $HARNESS modules validate "$PWD"
+$HARNESS/build/tools/.venv/bin/python tools/validate.py --write-index        # regenerate MODULES.md
 ```
 
 The gate before a change is done: the validator exits 0; for each changed module,
