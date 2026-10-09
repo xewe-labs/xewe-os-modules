@@ -22,6 +22,7 @@ xewe-os-modules/
 │       ├── src/<Folder>/<Folder>.cpp
 │       ├── tests/test_<slug>.py
 │       └── README.md
+├── libraries.toml          # library catalogue: `[Name] repo = "...", ref = "..."` for every depends_libraries name; `xewe setup` installs those the selected modules need (a harness xewe.lock [libraries] pin wins)
 ├── tools/validate.py       # thin wrapper around the tools' validator plus repo rules (section 5)
 ├── MODULES.md              # generated index: `tools/validate.py --write-index`
 ├── README.md               # what a module is, how to add one, how to test through a harness
@@ -313,6 +314,37 @@ Rules: regexes are copied from strings the module really prints. No `time.sleep`
 var (`XEWE_TEST_<ID>_<WHAT>`) and calls `pytest.skip("needs ...")` when it is unset, so it never
 hangs.
 
+**Host tests (optional).** Logic that does not touch hardware (effect frames, curve maths,
+parsers) can also be tested in C++ on the host, without a board or an Arduino build. `led-modes`
+(`tests/host/test_effects.cpp`) and the cooling pad v2 (`tests/host/test_curve_math.cpp`) follow it.
+
+- **Rule.** Effect and maths logic lives in a pure header, `src/<Folder>/<Thing>.h`, which the
+  module's `.cpp` calls instead of keeping its own copy. Pure means standard headers only (`<cstdint>`,
+  `<cmath>`, `<vector>`, `<string>`, ...): no `<Arduino.h>`, `<XeWeCore.h>` or esp32-core headers.
+- **Location.** `modules/<slug>/tests/host/*.cpp`, one `main()` per file, including the header by
+  relative path (`#include "../../src/<Folder>/<Thing>.h"`). Only `src/<Folder>/` is installed, so
+  these files never reach the firmware.
+- **Output.** One line per check (`ok   <expr>` / `FAIL <expr> (line N)`), then the summary
+  `PASSED: <n> check(s), 0 failure(s)` or `FAILED: ...`; exit code non-zero on any failure.
+- **Driver.** A `@pytest.mark.host` test in `tests/test_<slug>.py` compiles it with
+  `g++ -std=c++17 -Wall -Wextra -Werror` into `tmp_path`, runs it, and asserts exit 0, `PASSED` and a
+  minimum check count, so a silently emptied test fails. When `shutil.which("g++")` is `None` it calls
+  `pytest.skip("g++ not installed")`. A second host test may assert the header's includes stay pure.
+
+```python
+@pytest.mark.host
+def test_<thing>_host(tmp_path):
+    gpp = shutil.which("g++")
+    if gpp is None:
+        pytest.skip("g++ not installed")
+    exe = tmp_path / "test_<thing>"
+    src = MODULE_DIR / "tests" / "host" / "test_<thing>.cpp"
+    subprocess.run([gpp, "-std=c++17", "-Wall", "-Wextra", "-Werror", "-o", str(exe), str(src)], check=True)
+    run = subprocess.run([str(exe)], capture_output=True, text=True, timeout=30)
+    assert run.returncode == 0, run.stdout + run.stderr
+    assert int(re.search(r"PASSED: (\d+) check", run.stdout)[1]) >= <n>
+```
+
 **Selection through the harness (D21).** The harness is a *copy* of the `xewe-os` template. Never use
 `next/xewe-os` itself, because `setup --modules` writes its `xewe.lock`.
 
@@ -353,7 +385,7 @@ Rules the wrapper adds (R):
 | `files` | `src/<folder>/<folder>.h`, `.cpp`, `README.md` and `tests/test_<slug>.py` exist; `include` == `src/<folder>/<folder>.h` |
 | `tests` | parsed with `ast`: defines `test_compiles`, `test_status` and at least one other `test_*` function |
 | `repo` | equals `https://github.com/xewe-labs/xewe-os-modules/tree/main/modules/<slug>` |
-| `depends_libraries` | names syntax, not XeWeCore/XeWeOS; with `--harness DIR`, each is in that lock's `[libraries]` |
+| `depends_libraries` | names syntax, not XeWeCore/XeWeOS; warning when a name is missing from `libraries.toml`; with `--harness DIR`, error when a name is in neither `libraries.toml` nor that lock's `[libraries]` |
 | `source` | in `src/<folder>/*`: no `\bcli\s*\(`, `<XeWeOS.h>`, `xewe::os::`, `ModuleController`, `controller`, `xewe_cli`, `this->os`, `std::span`; the header contains `#include <XeWeCore.h>` |
 | `stray` | no `*.ino`, `scripts/`, `LICENSE.txt` or `module.properties` outside `modules/<slug>/`; no `xewe-os-module-*` directories |
 | `index` | `MODULES.md` equals what `--write-index` would generate |
@@ -426,9 +458,10 @@ c3/c6/s3; `xewe test` exits 0 with every hardware test "compiled, not run" and e
 3. **The "hardware passed" label for `test_compiles`.** In no-board mode the plugin's summary counts it as
    `1 hardware passed`. *Decision:* accept. Optional, cosmetic tools change: count passed tests whose
    only hardware fixture is `compiled` as "compiled". Not required for A9.
-4. **Module C++ host-native tests.** None of the six has logic separable from Arduino APIs
-   (scheduler's day/time parsing is the closest). *Decision:* phase 1 module tests are Python only;
-   C++ host tests for modules wait until core's `extras/host` shim is reusable from outside core.
+4. **Module C++ host-native tests.** None of the six phase 1 modules has logic separable from
+   Arduino APIs (scheduler's day/time parsing is the closest). *Decision:* phase 1 module tests are
+   Python only. Superseded for pure headers by "Host tests (optional)" in section 4; tests that need
+   core's `extras/host` shim still wait until it is reusable from outside core.
 5. **Per-module `version` vs repo tag (D12).** *Decision:* both are kept. The repo tag (`v0.2.0`) is
    what `xewe.lock` pins, and the per-module `version` is informational plus the semver promise for
    that module's commands. The six ports ship as `0.2.0` under repo tag `v0.2.0`.

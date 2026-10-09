@@ -25,6 +25,7 @@ EXIT_OK, EXIT_FAIL, EXIT_USAGE, EXIT_NOT_SETUP = 0, 1, 2, 3
 
 REPO = Path(__file__).resolve().parents[1]
 INDEX = "MODULES.md"
+CATALOGUE = "libraries.toml"
 REPO_URL = "https://github.com/xewe-labs/xewe-os-modules/tree/main/modules/{slug}"
 LIBRARY_RE = re.compile(r"^[A-Za-z0-9_.\- ]+$")
 FORBIDDEN_LIBRARIES = {"XeWeCore", "XeWeOS"}
@@ -87,7 +88,13 @@ def check_tests(path: Path, err) -> None:
         err(f"tests: {path.name} needs at least one behaviour test besides test_compiles and test_status")
 
 
-def check_module(m, libraries: set[str] | None) -> list[Problem]:
+def read_catalogue() -> set[str]:
+    """Library names pinned in libraries.toml (empty when the file is missing)."""
+    path = REPO / CATALOGUE
+    return set(tomllib.loads(path.read_text(encoding="utf-8"))) if path.is_file() else set()
+
+
+def check_module(m, libraries: set[str] | None, catalogue: frozenset[str] | set[str] = frozenset()) -> list[Problem]:
     problems: list[Problem] = []
     where = m.slug or m.dir.name
 
@@ -144,8 +151,10 @@ def check_module(m, libraries: set[str] | None) -> list[Problem]:
             err(f"depends_libraries: '{lib}' must match {LIBRARY_RE.pattern}")
         elif lib in FORBIDDEN_LIBRARIES:
             err(f"depends_libraries: '{lib}' must not be listed (XeWeCore comes from the harness)")
-        elif libraries is not None and lib not in libraries:
-            err(f"depends_libraries: '{lib}' is not in the harness xewe.lock [libraries]")
+        elif libraries is not None and lib not in libraries and lib not in catalogue:
+            err(f"depends_libraries: '{lib}' is neither in {CATALOGUE} nor in the harness xewe.lock [libraries]")
+        elif lib not in catalogue:
+            err(f"depends_libraries: '{lib}' is not in {CATALOGUE} (xewe setup will not install it)", error=False)
 
     # source
     if src.is_dir():
@@ -222,10 +231,15 @@ def main(argv: list[str] | None = None) -> int:
         print(f"wrote {INDEX} ({len(registry.all)} modules)")
         return EXIT_OK
 
+    try:
+        catalogue = read_catalogue()
+    except tomllib.TOMLDecodeError as exc:
+        print(f"{CATALOGUE}: invalid TOML: {exc}", file=sys.stderr)
+        return EXIT_USAGE
     problems = list(xm.validate(registry, core_ref))
     for m in registry.all:
         if m.dir.parent == REPO / "modules":  # anything else is reported as stray by check_repo
-            problems.extend(check_module(m, libraries))
+            problems.extend(check_module(m, libraries, catalogue))
     problems.extend(check_repo(registry))
     index = REPO / INDEX
     if not index.is_file() or index.read_text(encoding="utf-8") != render_index(registry):

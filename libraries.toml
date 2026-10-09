@@ -1,0 +1,8 @@
+# Library catalogue: Arduino libraries that modules list in depends_libraries=, pinned here.
+# `xewe setup` installs the ones its selected modules need into build/libraries/<name>,
+# unless the harness xewe.lock [libraries] pins the same name (the lock wins).
+# Keep entries sorted; one table per library name, exactly repo and ref.
+
+[FastLED]
+repo = "https://github.com/FastLED/FastLED"
+ref = "3.10.3"

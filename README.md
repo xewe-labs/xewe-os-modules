@@ -42,7 +42,10 @@ modules/<slug>/
 2. Fill in `module.properties` with every key, in the order of CONTRACT.md section 2:
    `repo=https://github.com/xewe-labs/xewe-os-modules/tree/main/modules/<slug>`,
    `declare=<Folder> <var>(os[, <dep var>...]);`, `depends_libraries=` for Arduino libraries
-   pinned in the harness lock only (not esp32-core libraries, not XeWeCore).
+   (not esp32-core libraries, not XeWeCore). Pin each one in [`libraries.toml`](libraries.toml),
+   the library catalogue (`[FastLED] repo = "..." ref = "3.10.3"`): `xewe setup` installs the
+   libraries of the selected modules from it, unless the harness `xewe.lock` `[libraries]` pins
+   the same name (the lock wins).
 3. Follow the C++ rules in [AGENTS.md](AGENTS.md) (`host` parameter, `[this]` captures, no `cli(`,
    `xewe::span`, a `status()` override).
 4. Write `tests/test_<slug>.py` with `test_compiles`, `test_status` and one behaviour test
