@@ -82,7 +82,7 @@ Order and key names are fixed. Every key is present, even when empty.
 | `include` | Header that the generated `XeWeModules.h` includes | T: starts with `src/<folder>/`, file exists. R: equals `src/<folder>/<folder>.h` |
 | `declare` | Exact line placed in `src/Modules.h` | T: `^(\w+)\s+(\w+)\s*\((.*)\)\s*;$`, variable unique and ≠ `os`, every identifier argument is `os` or the variable of a transitive dependency; a type ≠ folder is only a warning. R: type == folder (error), first argument is exactly `os` |
 | `depends_modules` | Comma-separated slugs, empty for none | T: each exists, no self-dependency, acyclic |
-| `depends_libraries` | Comma-separated Arduino library names that must come from the harness `xewe.toml` `[libraries]`. Libraries bundled with the esp32 core (WiFi, WebServer, Wire, ...) and XeWeCore are **not** listed. Empty for all six modules | T: accepted (legacy key). R: each name matches `^[A-Za-z0-9_.\- ]+$`, is not `XeWeCore`/`XeWeOS`, and with `--harness DIR` is a key of `[libraries]` |
+| `depends_libraries` | Comma-separated Arduino library names that must come from the harness `xewe.toml` `[libraries]`. Libraries bundled with the esp32 core (WiFi, WebServer, Wire, ...) and XeWeCore are **not** listed. Empty for the six phase 1 modules; `led` lists `FastLED`, `fan` and `mlx90614` list `ArduinoJson` (both in `libraries.toml`) | T: accepted (legacy key). R: each name matches `^[A-Za-z0-9_.\- ]+$`, is not `XeWeCore`/`XeWeOS`, and with `--harness DIR` is a key of `[libraries]` |
 | `requires_core` | XeWeCore range | T: `^>=\s*X.Y.Z(\s*,\s*<\s*X.Y.Z)?$`, checked against `[core] ref` when run inside a harness |
 
 **`requires_core` syntax is the tools' syntax, `>=2.0.0,<3.0.0`, comma-separated with full
@@ -339,8 +339,8 @@ hangs.
 
 **Unit tests (optional).** Logic that does not touch hardware (effect frames, curve maths,
 parsers) can also be tested in C++ on the developer machine, without a board or an Arduino build.
-`led-modes` (`tests/unit/test_effects.cpp`), `led-strip` (`tests/unit/test_listeners.cpp`) and the
-cooling pad v2 (`tests/unit/test_curve_math.cpp`) follow it.
+`led` (`tests/unit/test_effects.cpp`, `tests/unit/test_listeners.cpp`) and the
+`fan` (`tests/unit/test_curve.cpp`, the curve from the cooling pad) and `mlx90614` (`tests/unit/test_convert.cpp`) follow it.
 
 - **Rule.** Effect and maths logic lives in a pure header, `src/<Folder>/<Thing>.h`, which the
   module's `.cpp` calls instead of keeping its own copy. Pure means standard headers only (`<cstdint>`,
@@ -390,9 +390,9 @@ no clashes between modules.
 
 ## 5. Validator: `tools/validate.py`
 
-**Decision: a thin wrapper, no duplication.** `xewe modules validate` (`modules.validate()`) already
+**Decision: a thin wrapper, no duplication.** `xewe modules validate` (`xewe.modules.registry.validate()`) already
 implements slug, id, folder, include, declare, depends_modules, requires_core, version, description
-and required keys. `tools/validate.py` imports `xewe.modules`, calls
+and required keys. `tools/validate.py` imports `xewe.modules.registry`, calls
 `validate(Registry.load(repo_root), core_ref)`, and adds only the repo-policy rules below. It needs a
 Python that has `xewe-os-tools` installed, which is the harness venv
 (`<harness>/build/tools/.venv/bin/python tools/validate.py [--harness DIR]`). Without one it exits 3 with

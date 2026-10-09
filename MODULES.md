@@ -4,9 +4,9 @@
 | Slug | Name | Id | Version | Description | Depends on | Requires core |
 |---|---|---|---|---|---|---|
 | [`buttons`](modules/buttons) | Buttons | `buttons` | 0.2.0 | Binds commands to physical buttons with software debouncing | - | `>=2.0.0,<3.0.0` |
-| [`led-modes`](modules/led-modes) | Led Modes | `led_modes` | 0.1.0 | LED effects for led-strip: 7 modes, clamped parameters, 900 ms cross-fade, persisted | led-strip | `>=2.0.0,<3.0.0` |
-| [`led-strip`](modules/led-strip) | Led | `led` | 0.1.0 | Drives an addressable LED strip: chip, pins, length, colour order, brightness, 50 fps render task | - | `>=2.0.0,<3.0.0` |
-| [`led-web`](modules/led-web) | Led Web | `led_web` | 0.1.0 | LED control page at /led on the web interface: 2.3.x page, JSON API, server-sent events | web-interface, led-strip, led-modes | `>=2.0.0,<3.0.0` |
+| [`fan`](modules/fan) | Fan | `fan` | 0.1.0 | 4-wire PWM fans with tachometer RPM and a temperature curve fed by any sensor | - | `>=2.0.0,<3.0.0` |
+| [`led`](modules/led) | Led | `led` | 0.2.0 | Addressable LED strip and its modes: FastLED, 50 fps render task, 7 modes (one file each), fades | - | `>=2.0.0,<3.0.0` |
+| [`mlx90614`](modules/mlx90614) | MLX90614 | `mlx90614` | 0.1.0 | MLX90614 contactless I2C temperature sensor (object and ambient) with temperature listeners | - | `>=2.0.0,<3.0.0` |
 | [`pins`](modules/pins) | Pins | `pins` | 0.2.0 | GPIO, ADC, PWM and I2C access from the command line | - | `>=2.0.0,<3.0.0` |
 | [`scheduler`](modules/scheduler) | Scheduler | `schedule` | 0.2.0 | Runs stored commands on a weekly schedule | time | `>=2.0.0,<3.0.0` |
 | [`time`](modules/time) | Time | `time` | 0.2.0 | NTP time sync and timezone handling | wifi | `>=2.0.0,<3.0.0` |

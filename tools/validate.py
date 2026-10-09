@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Validate every module of this repo (CONTRACT.md section 5).
 
-A thin wrapper: the module.properties rules come from xewe-os-tools (`xewe.modules.validate`);
+A thin wrapper: the module.properties rules come from xewe-os-tools (`xewe.modules.registry.validate`);
 this file adds only the repo-policy rules. Run it with a Python that has xewe-os-tools
 installed, which is a harness venv:
 
@@ -50,7 +50,7 @@ INDEX_HEADER = (
 
 
 class Problem:
-    """Same shape and `str()` as xewe.modules.Problem."""
+    """Same shape and `str()` as xewe.modules.registry.Problem."""
 
     def __init__(self, where: str, message: str, error: bool = True) -> None:
         self.where, self.message, self.error = where, message, error
@@ -225,7 +225,7 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
 
     try:
-        from xewe import modules as xm
+        from xewe.modules import registry as xm
     except ImportError:
         print("xewe-os-tools not importable; run with <harness>/build/tools/.venv/bin/python", file=sys.stderr)
         return EXIT_NOT_SETUP
