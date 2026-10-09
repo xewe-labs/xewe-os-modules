@@ -1,10 +1,10 @@
 // SPDX-FileCopyrightText: 2026 Maxim Dokukin (maxdokukin.com)
 // SPDX-License-Identifier: GPL-3.0-only
-// xewe-os-modules/modules/led-modes/tests/host/test_effects.cpp
+// xewe-os-modules/modules/led-modes/tests/unit/test_effects.cpp
 //
-// Host test of src/LedModes/Effects.h (no Arduino): built and run by test_led-modes.py with
+// Unit test of src/LedModes/Effects.h (no Arduino): built and run by unit/test_led-modes.py with
 // g++ -std=c++17 -Wall -Wextra -Werror. Prints one line per check, then
-// "PASSED|FAILED: <n> check(s), <f> failure(s)" (CONTRACT.md "Host tests"); exits non-zero on a failure.
+// "PASSED|FAILED: <n> check(s), <f> failure(s)" (CONTRACT.md "Unit tests"); exits non-zero on a failure.
 #include <cstdio>
 #include <cstdint>
 #include <vector>

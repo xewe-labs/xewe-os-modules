@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Maxim Dokukin (maxdokukin.com)
 // SPDX-License-Identifier: GPL-3.0-only
-// xewe-os-modules/modules/led-strip/tests/host/test_listeners.cpp
+// xewe-os-modules/modules/led-strip/tests/unit/test_listeners.cpp
 //
-// Host test of src/LedStrip/LedListener.h (standard library only): built and run by test_led-strip.py
+// Unit test of src/LedStrip/LedListener.h (standard library only): built and run by unit/test_led-strip.py
 // with g++ -std=c++17 -Wall -Wextra -Werror. Prints one line per check, then
 // "PASSED|FAILED: <n> check(s), <f> failure(s)"; exits non-zero on a failure.
 #include <cstdio>

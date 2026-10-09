@@ -50,11 +50,14 @@ Metadata and dependencies are declared in [`module.properties`](module.propertie
 
 ### Tests
 
-`tests/test_time.py`, run through an xewe-os harness (see the repo [README](../../README.md)):
+`tests/board/test_time.py` (board tests) and `tests/unit/test_time.py` (unit test: `module.properties`
+matches the C++ source; developer machine, no build), run through an xewe-os harness (see the repo
+[README](../../README.md)):
 
 ```sh
 build/tools/.venv/bin/python -m xewe test --module time              # lock chip
 build/tools/.venv/bin/python -m xewe test --module time --all-chips  # c3, c6, s3
+build/tools/.venv/bin/python -m xewe test --module time --unit-only  # unit tests only, no build
 ```
 
 - `test_compiles` builds the harness firmware with this module selected; it runs without a board.

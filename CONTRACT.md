@@ -20,9 +20,10 @@ xewe-os-modules/
 │       ├── module.properties
 │       ├── src/<Folder>/<Folder>.h
 │       ├── src/<Folder>/<Folder>.cpp
-│       ├── tests/test_<slug>.py
+│       ├── tests/board/test_<slug>.py   # pytest on the ESP32 through `xewe test` (required)
+│       ├── tests/unit/                  # optional: developer-machine tests (`unit` pytest, C++ for g++)
 │       └── README.md
-├── libraries.toml          # library catalogue: `[Name] repo = "...", ref = "..."` for every depends_libraries name; `xewe setup` installs those the selected modules need (a harness xewe.lock [libraries] pin wins)
+├── libraries.toml          # library catalogue: `[Name] repo = "...", ref = "..."` for every depends_libraries name; `xewe setup` installs those the selected modules need (a harness xewe.toml [libraries] pin wins)
 ├── tools/validate.py       # thin wrapper around the tools' validator plus repo rules (section 5)
 ├── MODULES.md              # generated index: `tools/validate.py --write-index`
 ├── README.md               # what a module is, how to add one, how to test through a harness
@@ -41,21 +42,27 @@ What `xewe/modules.py` actually expects. A9 matches this exactly:
 - **Parsing.** `key=value` lines, split at the first `=`. The first occurrence of a key wins, and
   `#` lines are comments. No quoting, no continuation lines, no spaces around `=` (the space would
   become part of the key).
-- **Install.** Only `modules/<slug>/src/<folder>/` is copied, to `build/modules-lib/src/<folder>/` (the
+- **Install.** Only `modules/<slug>/src/<folder>/` is compiled: it is copied to `build/modules/src/<folder>/` (the
   generated Arduino library `XeWeModules`), with `.git` skipped. `include=src/<Folder>/<Folder>.h`
   becomes `#include "<Folder>/<Folder>.h"` in `XeWeModules.h`, which the project's generated
   `src/Modules.h` includes; the `declare=` line is copied into `src/Modules.h` verbatim, in
   dependency order.
-- **Tests.** `Module.tests_dir` is `modules/<slug>/tests/`. `runner.test_roots` adds it for every
-  resolved module, or only for the modules named with `--module`. Tests are not copied into the
-  firmware.
+- **Tests.** `Module.tests_dir` is `modules/<slug>/tests/`. Generate copies its `board/` and `unit/`
+  to the project's `build/modules/tests/<slug>/` (beside the library; arduino-cli reads only
+  `library.properties` and `src/`, so they never reach the firmware). `runner.test_roots` adds
+  `build/modules/tests/<slug>/` for every module in `build/modules/modules.lock`, or only for the
+  modules named with `--module`; pytest collects `board/` and `unit/` below it recursively. A test
+  that reads its module's files (`module.properties`, `src/`, `README.md`, a C++ test beside it)
+  sets `MODULE_DIR = module_dir(__file__)` (`from xewe.testing import module_dir`): `modules/<slug>/`
+  in this repo, and the same folder of the project's modules checkout when it runs from the copy.
 - **Dependency order.** Depth-first over `[modules] selected`, dependencies first, error on a cycle.
   `depends_modules` is split on commas and/or whitespace.
 
 Per-module `LICENSE.txt`, `.gitignore`, `scripts/validate.sh` and `xewe-os-module-<slug>.ino`
-are dropped. `tests/` holds no `conftest.py` and no `__init__.py`. The plugin comes in through the
-`pytest11` entry point, and the runner uses `--import-mode=importlib`, which is why each test file
-needs a unique basename (`test_<slug>.py`).
+are dropped. `tests/` holds exactly `board/` and, optionally, `unit/`; neither holds a `conftest.py`
+or an `__init__.py`. The plugin comes in through the `pytest11` entry point, and the runner uses
+`--import-mode=importlib`, so `tests/board/test_<slug>.py` and `tests/unit/test_<slug>.py` may share
+a basename.
 
 `.gitignore`: `__pycache__/`, `*.pyc`, `.pytest_cache/`, `build/`, `.venv/`, `.DS_Store`.
 
@@ -75,7 +82,7 @@ Order and key names are fixed. Every key is present, even when empty.
 | `include` | Header that the generated `XeWeModules.h` includes | T: starts with `src/<folder>/`, file exists. R: equals `src/<folder>/<folder>.h` |
 | `declare` | Exact line placed in `src/Modules.h` | T: `^(\w+)\s+(\w+)\s*\((.*)\)\s*;$`, variable unique and ≠ `os`, every identifier argument is `os` or the variable of a transitive dependency; a type ≠ folder is only a warning. R: type == folder (error), first argument is exactly `os` |
 | `depends_modules` | Comma-separated slugs, empty for none | T: each exists, no self-dependency, acyclic |
-| `depends_libraries` | Comma-separated Arduino library names that must come from the harness `xewe.lock` `[libraries]`. Libraries bundled with the esp32 core (WiFi, WebServer, Wire, ...) and XeWeCore are **not** listed. Empty for all six modules | T: accepted (legacy key). R: each name matches `^[A-Za-z0-9_.\- ]+$`, is not `XeWeCore`/`XeWeOS`, and with `--harness DIR` is a key of `[libraries]` |
+| `depends_libraries` | Comma-separated Arduino library names that must come from the harness `xewe.toml` `[libraries]`. Libraries bundled with the esp32 core (WiFi, WebServer, Wire, ...) and XeWeCore are **not** listed. Empty for all six modules | T: accepted (legacy key). R: each name matches `^[A-Za-z0-9_.\- ]+$`, is not `XeWeCore`/`XeWeOS`, and with `--harness DIR` is a key of `[libraries]` |
 | `requires_core` | XeWeCore range | T: `^>=\s*X.Y.Z(\s*,\s*<\s*X.Y.Z)?$`, checked against `[core] ref` when run inside a harness |
 
 **`requires_core` syntax is the tools' syntax, `>=2.0.0,<3.0.0`, comma-separated with full
@@ -112,7 +119,7 @@ not its slug, which is fine), `buttons`, `pins`. Declares: `Wifi wifi(os);`,
 `#include <XeWeCore.h>` as the only XeWeCore include (umbrella, steering 2026-10-08; sub-header-only
 includes do not resolve the library). esp32-core headers (`<WiFi.h>`, `<WebServer.h>`, `<Wire.h>`)
 are allowed. A required module's header is included relatively, `#include "../Wifi/Wifi.h"`, because
-installed folders sit side by side in `build/modules-lib/src/`.
+installed folders sit side by side in `build/modules/src/`.
 
 **Overrides.**
 
@@ -206,8 +213,10 @@ anywhere (old API). `DBG_PRINTF`/`DBG_PRINTLN` remain available from XeWeCore.
 
 ## 4. Test contract (resolves Q1)
 
-One file per module, `modules/<slug>/tests/test_<slug>.py`, run by `xewe test` (pytest in-process)
-inside a `xewe-os` harness (D21). The fixtures come from `xewe.testing.plugin` and are never
+Every module has `modules/<slug>/tests/board/test_<slug>.py` (board tests) and may have
+`modules/<slug>/tests/unit/` (unit tests: `tests/unit/test_<slug>.py` with `unit`-marked pytest
+tests, plus any C++ files it compiles). Both are run by `xewe test` (pytest in-process) inside a
+`xewe-os` harness (D21). The fixtures come from `xewe.testing.plugin` and are never
 redefined:
 
 | Fixture | Scope | Behaviour, verified in `plugin.py` |
@@ -217,10 +226,11 @@ redefined:
 | `firmware` | session | Depends on `board` and `compiled`. Flashes once and waits ≤ 3 s for a boot line |
 | `serial` | function | A `Console` with `send`, `expect(regex, timeout=10)` (regex *search* per line), `command(cmd, expect, timeout)`, `collect`, `drain`, `lines`, `reset` |
 
-**Markers.** `host` means pure logic, never needs a board or a build, and is selected by
-`--host-only` (`-m host`). `hardware` means it needs the firmware. Any test that uses `compiled`,
-`board`, `firmware` or `serial` is auto-marked `hardware` (`HARDWARE_FIXTURES`). Module files still
-mark host tests explicitly with `@pytest.mark.host`.
+**Markers.** `unit` means pure logic that runs on the developer machine, never needs a board or a
+build, and is selected by `--unit-only` (`-m unit`). `board` means it needs the firmware. Any test
+that uses `compiled`, `board`, `firmware` or `serial` is auto-marked `board` (`BOARD_FIXTURES`).
+Unit tests live in `tests/unit/` and are marked explicitly with `@pytest.mark.unit`; `tests/board/`
+holds only board tests.
 
 **No-board behaviour (D22), checked against the code.** `firmware` → `board` → `compiled`, so the
 build happens before the skip and a compile error fails the test. **No tools change is needed.**
@@ -231,32 +241,27 @@ build happens before the skip and a compile error fails the test. **No tools cha
 |---|---|---|---|
 | `test_compiles` | `compiled` | **runs and passes or fails**: the harness firmware with this module selected builds for the session chip (`--xewe-chip`, or every chip with `--all-chips`) | same |
 | `test_status` | `serial` | "compiled, not run" | `$<id> status` → `<name> module (enabled\|disabled)` |
-| one behaviour test, `test_<what>` | `serial` (or `host`) | "compiled, not run" | exercises one of the module's own commands |
+| one behaviour test, `test_<what>` | `serial` | "compiled, not run" | exercises one of the module's own commands |
 
 `test_compiles` takes `compiled` and not `firmware`. Through `firmware` it would be skipped and add
 nothing to the other two tests, while through `compiled` it is an assertion that really executes in
-no-board mode. The cost is that the tools' summary counts it under "hardware passed" (section 7).
+no-board mode. The cost is that the tools' summary counts it under "board passed" (section 7).
 
 **CLI syntax, from `Cli.h` and `Module::register_generic_commands`:** `$<group> <command> [args]`,
 with case-insensitive group ids. Every module with CLI commands gets `$<id> status` and `$<id> reset`,
 plus `$<id> enable` and `$<id> disable` when `can_be_disabled`. `$<id> status` calls `status(true)`.
 `$help`, `$help <id>` and `$system status` also exist.
 
-Full wifi test file:
+Full wifi test files:
 
 ```python
-# modules/wifi/tests/test_wifi.py
+# modules/wifi/tests/board/test_wifi.py
 """Wifi module tests. Run through a harness: `python -m xewe test --module wifi`.
 
-Hardware tests assume a provisioned board: first boot done, WiFi credentials stored, connected.
+Board tests assume a provisioned board: first boot done, WiFi credentials stored, connected.
 """
-from pathlib import Path
-
-import pytest
-
 ID = "wifi"
 NAME = "Wifi"
-MODULE_DIR = Path(__file__).resolve().parents[1]
 
 
 def test_compiles(compiled):
@@ -271,9 +276,21 @@ def test_status(serial):
 def test_scan_lists_networks(serial):
     serial.command("$wifi scan", expect=r"Scanning WiFi networks", timeout=5)
     serial.expect(r"^\s*0\. \S", timeout=20)   # numbered, de-duplicated SSIDs
+```
+
+```python
+# modules/wifi/tests/unit/test_wifi.py
+"""Wifi module unit tests: pure logic on the developer machine, no board and no build."""
+import pytest
+
+from xewe.testing import module_dir
+
+ID = "wifi"
+NAME = "Wifi"
+MODULE_DIR = module_dir(__file__)   # modules/wifi/, also when run from build/modules/tests/wifi/unit/
 
 
-@pytest.mark.host
+@pytest.mark.unit
 def test_properties_match_source():
     props = dict(l.split("=", 1) for l in (MODULE_DIR / "module.properties").read_text().splitlines() if "=" in l)
     cpp = (MODULE_DIR / "src" / props["folder"] / f"{props['folder']}.cpp").read_text()
@@ -283,13 +300,11 @@ def test_properties_match_source():
 Template (copy and fill in):
 
 ```python
-# modules/<slug>/tests/test_<slug>.py
+# modules/<slug>/tests/board/test_<slug>.py
 """<Name> module tests. Run through a harness: `python -m xewe test --module <slug>`.
 
 Hardware preconditions: <what the board must have: provisioned, wiring, ...>.
 """
-import pytest
-
 ID = "<id>"
 NAME = "<name>"          # module.properties name == C++ name argument
 
@@ -304,43 +319,50 @@ def test_status(serial):
 
 def test_<behaviour>(serial):
     serial.command(f"${ID} <command> <args>", expect=r"<regex from the module's real output>", timeout=10)
+```
+
+```python
+# modules/<slug>/tests/unit/test_<slug>.py   (optional)
+"""<Name> module unit tests: pure logic on the developer machine, no board and no build."""
+import pytest
 
 
-@pytest.mark.host
-def test_<pure_logic>():   # optional: Python-side checks that need no build
+@pytest.mark.unit
+def test_<pure_logic>():   # Python-side checks that need no build
     ...
 ```
 
 Rules: regexes are copied from strings the module really prints. No `time.sleep`; use
-`expect(timeout=)`. No `conftest.py`. A test that needs credentials or wiring reads them from an env
+`expect(timeout=)`. No `conftest.py`. Nothing under `tests/` but `board/` and `unit/`. A test that needs credentials or wiring reads them from an env
 var (`XEWE_TEST_<ID>_<WHAT>`) and calls `pytest.skip("needs ...")` when it is unset, so it never
 hangs.
 
-**Host tests (optional).** Logic that does not touch hardware (effect frames, curve maths,
-parsers) can also be tested in C++ on the host, without a board or an Arduino build. `led-modes`
-(`tests/host/test_effects.cpp`) and the cooling pad v2 (`tests/host/test_curve_math.cpp`) follow it.
+**Unit tests (optional).** Logic that does not touch hardware (effect frames, curve maths,
+parsers) can also be tested in C++ on the developer machine, without a board or an Arduino build.
+`led-modes` (`tests/unit/test_effects.cpp`), `led-strip` (`tests/unit/test_listeners.cpp`) and the
+cooling pad v2 (`tests/unit/test_curve_math.cpp`) follow it.
 
 - **Rule.** Effect and maths logic lives in a pure header, `src/<Folder>/<Thing>.h`, which the
   module's `.cpp` calls instead of keeping its own copy. Pure means standard headers only (`<cstdint>`,
   `<cmath>`, `<vector>`, `<string>`, ...): no `<Arduino.h>`, `<XeWeCore.h>` or esp32-core headers.
-- **Location.** `modules/<slug>/tests/host/*.cpp`, one `main()` per file, including the header by
+- **Location.** `modules/<slug>/tests/unit/*.cpp`, one `main()` per file, including the header by
   relative path (`#include "../../src/<Folder>/<Thing>.h"`). Only `src/<Folder>/` is installed, so
   these files never reach the firmware.
 - **Output.** One line per check (`ok   <expr>` / `FAIL <expr> (line N)`), then the summary
   `PASSED: <n> check(s), 0 failure(s)` or `FAILED: ...`; exit code non-zero on any failure.
-- **Driver.** A `@pytest.mark.host` test in `tests/test_<slug>.py` compiles it with
+- **Driver.** A `@pytest.mark.unit` test in `tests/unit/test_<slug>.py` compiles it with
   `g++ -std=c++17 -Wall -Wextra -Werror` into `tmp_path`, runs it, and asserts exit 0, `PASSED` and a
   minimum check count, so a silently emptied test fails. When `shutil.which("g++")` is `None` it calls
-  `pytest.skip("g++ not installed")`. A second host test may assert the header's includes stay pure.
+  `pytest.skip("g++ not installed")`. A second unit test may assert the header's includes stay pure.
 
 ```python
-@pytest.mark.host
-def test_<thing>_host(tmp_path):
+@pytest.mark.unit
+def test_<thing>_unit_gpp(tmp_path):
     gpp = shutil.which("g++")
     if gpp is None:
         pytest.skip("g++ not installed")
     exe = tmp_path / "test_<thing>"
-    src = MODULE_DIR / "tests" / "host" / "test_<thing>.cpp"
+    src = MODULE_DIR / "tests" / "unit" / "test_<thing>.cpp"   # MODULE_DIR = module_dir(__file__)
     subprocess.run([gpp, "-std=c++17", "-Wall", "-Wextra", "-Werror", "-o", str(exe), str(src)], check=True)
     run = subprocess.run([str(exe)], capture_output=True, text=True, timeout=30)
     assert run.returncode == 0, run.stdout + run.stderr
@@ -348,15 +370,15 @@ def test_<thing>_host(tmp_path):
 ```
 
 **Selection through the harness (D21).** The harness is a *copy* of the `xewe-os` template. Never use
-`next/xewe-os` itself, because `setup --modules` writes its `xewe.lock`.
+`next/xewe-os` itself, because `setup --modules` writes its `xewe.toml`.
 
 ```sh
 cp -r next/xewe-os "$SCRATCH/harness" && cd "$SCRATCH/harness"
 XEWE_TOOLS_SOURCE=…/next/xewe-os-tools XEWE_CORE_SOURCE=…/next/xewe-os-core \
   ./setup.sh --modules-source …/next/xewe-os-modules --modules wifi   # wifi + its deps
-build/tools/.venv/bin/python -m xewe test --module wifi              # one chip (lock chip, c3)
+build/tools/.venv/bin/python -m xewe test --module wifi              # one chip (manifest chip, c3)
 build/tools/.venv/bin/python -m xewe test --module wifi --all-chips  # c3, c6, s3
-build/tools/.venv/bin/python -m xewe test --host-only                # host tests of all selected modules
+build/tools/.venv/bin/python -m xewe test --unit-only                # unit tests of all selected modules
 ```
 
 `--module` must name a selected module (exit 2 otherwise). Its dependencies are compiled in but their
@@ -384,15 +406,15 @@ Rules the wrapper adds (R):
 | `declare-os` | first `declare` argument is exactly `os` |
 | `name` | `module.properties` `name` appears as a string literal in `src/<folder>/<folder>.cpp` |
 | `id-source` | `"<id>"` appears as a string literal in the `.cpp` |
-| `files` | `src/<folder>/<folder>.h`, `.cpp`, `README.md` and `tests/test_<slug>.py` exist; `include` == `src/<folder>/<folder>.h` |
-| `tests` | parsed with `ast`: defines `test_compiles`, `test_status` and at least one other `test_*` function |
+| `files` | `src/<folder>/<folder>.h`, `.cpp`, `README.md` and `tests/board/test_<slug>.py` exist; `include` == `src/<folder>/<folder>.h`; `tests/` holds only `board/` and (optionally) `unit/`, any other entry is an error; no `conftest.py` or `__init__.py` in either (the tools' `xewe modules validate` applies the same layout rule) |
+| `tests` | `tests/board/test_<slug>.py` parsed with `ast`: defines `test_compiles`, `test_status` and at least one other `test_*` function |
 | `repo` | equals `https://github.com/xewe-labs/xewe-os-modules/tree/main/modules/<slug>` |
-| `depends_libraries` | names syntax, not XeWeCore/XeWeOS; warning when a name is missing from `libraries.toml`; with `--harness DIR`, error when a name is in neither `libraries.toml` nor that lock's `[libraries]` |
+| `depends_libraries` | names syntax, not XeWeCore/XeWeOS; warning when a name is missing from `libraries.toml`; with `--harness DIR`, error when a name is in neither `libraries.toml` nor that manifest's `[libraries]` |
 | `source` | in `src/<folder>/*`: no `\bcli\s*\(`, `<XeWeOS.h>`, `xewe::os::`, `ModuleController`, `controller`, `xewe_cli`, `this->os`, `std::span`; the header contains `#include <XeWeCore.h>` |
 | `stray` | no `*.ino`, `scripts/`, `LICENSE.txt` or `module.properties` outside `modules/<slug>/`; no `xewe-os-module-*` directories |
 | `index` | `MODULES.md` equals what `--write-index` would generate |
 
-`--harness DIR` reads `DIR/xewe.lock` for the `[core] ref` (passed to the tools' `requires_core`
+`--harness DIR` reads `DIR/xewe.toml` (the harness manifest) for the `[core] ref` (passed to the tools' `requires_core`
 check) and for `[libraries]`. `--write-index` rewrites `MODULES.md` (a header comment saying it is
 generated, then one table row per module: slug, name, id, version, description, depends_modules,
 requires_core) and exits.
@@ -427,7 +449,7 @@ Per module (wifi, web-interface, time, scheduler, buttons, pins):
    `requires_core=>=2.0.0,<3.0.0`.
 10. Delete the `.ino` validation sketch, `scripts/validate.sh`, the per-module `LICENSE.txt` and
     `.gitignore`. The test replaces them.
-11. Write `tests/test_<slug>.py` (section 4). The behaviour test uses one command from the module's
+11. Write `tests/board/test_<slug>.py` (section 4; pure-logic checks go to `tests/unit/test_<slug>.py`). The behaviour test uses one command from the module's
     own `register_command` list and a regex copied from what that command prints. Prefer read-only
     commands: wifi `$wifi scan`, time `$time fetch`, pins `$pins gpio_read <pin>` or `adc_read`.
     Scheduler (`$schedule add/remove`) and buttons (`$buttons add/remove`) have only mutating
@@ -443,7 +465,7 @@ Repo level: write `tools/validate.py` (section 5), `MODULES.md` via `--write-ind
 bullets, test rules, "run `tools/validate.py` and `xewe test --module <slug> --all-chips` before
 done"), `LICENSE.txt` (copy one module's), `.gitignore` (section 1). Gate for A9: validator exit 0;
 each module in isolation compiles for c3/c6/s3 through the harness; `--modules all` compiles for
-c3/c6/s3; `xewe test` exits 0 with every hardware test "compiled, not run" and every
+c3/c6/s3; `xewe test` exits 0 with every board test "compiled, not run" and every
 `test_compiles` passed.
 
 ## 7. Open points (each decided)
@@ -452,20 +474,20 @@ c3/c6/s3; `xewe test` exits 0 with every hardware test "compiled, not run" and e
    breaks the "loop must not block" rule and stalls the CLI while it is disconnected. *Decision:* A9
    ports it unchanged and records it under "Known issues" in the wifi README. The fix (a
    non-blocking reconnect state machine) waits for step 5, when a board can verify it.
-2. **First-boot prompts block hardware tests.** `get_yn` defaults to `timeout_ms = 0`, so a freshly
-   erased board waits forever at "Would you like to enable …?". *Decision:* hardware tests assume a
+2. **First-boot prompts block board tests.** `get_yn` defaults to `timeout_ms = 0`, so a freshly
+   erased board waits forever at "Would you like to enable …?". *Decision:* board tests assume a
    provisioned board, and each test file states its preconditions in the docstring. A
    `provision` helper (answering first-boot prompts over serial) is deferred to step 5, when tests
    first run on a board.
-3. **The "hardware passed" label for `test_compiles`.** In no-board mode the plugin's summary counts it as
-   `1 hardware passed`. *Decision:* accept. Optional, cosmetic tools change: count passed tests whose
-   only hardware fixture is `compiled` as "compiled". Not required for A9.
-4. **Module C++ host-native tests.** None of the six phase 1 modules has logic separable from
+3. **The "board passed" label for `test_compiles`.** In no-board mode the plugin's summary counts it as
+   `1 board passed`. *Decision:* accept. Optional, cosmetic tools change: count passed tests whose
+   only board fixture is `compiled` as "compiled". Not required for A9.
+4. **Module C++ unit tests (developer machine).** None of the six phase 1 modules has logic separable from
    Arduino APIs (scheduler's day/time parsing is the closest). *Decision:* phase 1 module tests are
-   Python only. Superseded for pure headers by "Host tests (optional)" in section 4; tests that need
-   core's `extras/host` shim still wait until it is reusable from outside core.
+   Python only. Superseded for pure headers by "Unit tests (optional)" in section 4; tests that need
+   core's `tests/unit` shim still wait until it is reusable from outside core.
 5. **Per-module `version` vs repo tag (D12).** *Decision:* both are kept. The repo tag (`v0.2.0`) is
-   what `xewe.lock` pins, and the per-module `version` is informational plus the semver promise for
+   what `xewe.toml` pins, and the per-module `version` is informational plus the semver promise for
    that module's commands. The six ports ship as `0.2.0` under repo tag `v0.2.0`.
 6. **Time's class name `Time`** is a generic global, which is the risk Q2 accepts. *Decision:* keep it
    (renaming the folder changes the install path for existing firmware). The validator's uniqueness

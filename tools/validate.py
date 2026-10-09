@@ -88,6 +88,25 @@ def check_tests(path: Path, err) -> None:
         err(f"tests: {path.name} needs at least one behaviour test besides test_compiles and test_status")
 
 
+TEST_FOLDERS = ("board", "unit")
+"""The only entries allowed under a module's tests/: board/ (required) and unit/ (optional)."""
+
+
+def check_tests_layout(tests: Path, err) -> None:
+    """tests/ holds exactly board/ and optionally unit/; no conftest.py or __init__.py in either."""
+    if not tests.is_dir():
+        return
+    for entry in sorted(tests.iterdir()):
+        if entry.name == "__pycache__":
+            continue
+        if entry.name not in TEST_FOLDERS or not entry.is_dir():
+            err(f"files: tests/{entry.name} not allowed (tests/ holds only board/ and unit/)")
+    for sub in TEST_FOLDERS:
+        for name in ("conftest.py", "__init__.py"):
+            if (tests / sub / name).exists():
+                err(f"files: tests/{sub}/{name} not allowed (the plugin provides the fixtures)")
+
+
 def read_catalogue() -> set[str]:
     """Library names pinned in libraries.toml (empty when the file is missing)."""
     path = REPO / CATALOGUE
@@ -107,14 +126,12 @@ def check_module(m, libraries: set[str] | None, catalogue: frozenset[str] | set[
     header, cpp = src / f"{folder}.h", src / f"{folder}.cpp"
 
     # files
-    for f in (header, cpp, m.dir / "README.md", m.dir / "tests" / f"test_{m.slug}.py"):
+    for f in (header, cpp, m.dir / "README.md", m.dir / "tests" / "board" / f"test_{m.slug}.py"):
         if not f.is_file():
             err(f"files: {f.relative_to(m.dir)} missing")
     if p.get("include", "") != f"src/{folder}/{folder}.h":
         err(f"files: include '{p.get('include', '')}' must be src/{folder}/{folder}.h")
-    for name in ("conftest.py", "__init__.py"):
-        if (m.dir / "tests" / name).exists():
-            err(f"files: tests/{name} not allowed (the plugin provides the fixtures)")
+    check_tests_layout(m.dir / "tests", err)
 
     # class, declare-os
     decl = m.declared()
@@ -134,7 +151,7 @@ def check_module(m, libraries: set[str] | None, catalogue: frozenset[str] | set[
             err(f"id-source: '\"{p.get('id', '')}\"' not found in {cpp.name}")
 
     # tests
-    test_file = m.dir / "tests" / f"test_{m.slug}.py"
+    test_file = m.dir / "tests" / "board" / f"test_{m.slug}.py"
     if test_file.is_file():
         check_tests(test_file, err)
 
@@ -152,7 +169,7 @@ def check_module(m, libraries: set[str] | None, catalogue: frozenset[str] | set[
         elif lib in FORBIDDEN_LIBRARIES:
             err(f"depends_libraries: '{lib}' must not be listed (XeWeCore comes from the harness)")
         elif libraries is not None and lib not in libraries and lib not in catalogue:
-            err(f"depends_libraries: '{lib}' is neither in {CATALOGUE} nor in the harness xewe.lock [libraries]")
+            err(f"depends_libraries: '{lib}' is neither in {CATALOGUE} nor in the harness xewe.toml [libraries]")
         elif lib not in catalogue:
             err(f"depends_libraries: '{lib}' is not in {CATALOGUE} (xewe setup will not install it)", error=False)
 
@@ -193,17 +210,17 @@ def check_repo(registry) -> list[Problem]:
 
 
 def read_harness(path: Path) -> tuple[str | None, set[str]]:
-    lock = path / "xewe.lock"
-    if not lock.is_file():
-        raise SystemExit(f"usage: --harness {path}: no xewe.lock there")
-    data = tomllib.loads(lock.read_text(encoding="utf-8"))
+    manifest = path / "xewe.toml"
+    if not manifest.is_file():
+        raise SystemExit(f"usage: --harness {path}: no xewe.toml there")
+    data = tomllib.loads(manifest.read_text(encoding="utf-8"))
     return data.get("core", {}).get("ref"), set(data.get("libraries", {}))
 
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="Validate the modules of this repo (CONTRACT.md section 5).")
     ap.add_argument("--harness", type=Path, metavar="DIR",
-                    help="xewe-os harness: its xewe.lock gives [core] ref and [libraries]")
+                    help="xewe-os harness: its xewe.toml gives [core] ref and [libraries]")
     ap.add_argument("--write-index", action="store_true", help=f"rewrite {INDEX} and exit")
     args = ap.parse_args(argv)
 

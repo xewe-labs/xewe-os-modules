@@ -52,7 +52,7 @@ needs them: APA102HD, APA104, APA106, DOTSTAR, DOTSTARHD, GE8822, GS1903, GW6205
 HD107HD, LPD1886, LPD1886_8BIT, LPD6803, LPD8806, NEOPIXEL, P9813, PL9823, SK6822, SK9822, SK9822HD,
 SM16703, SM16716, SM16824E, TM1803, TM1804, TM1809, TM1812, TM1829, UCS1903, UCS1903B, UCS1904,
 UCS1912, UCS2903, WS2801, WS2803, WS2811_400KHZ, WS2813, WS2815, WS2816, WS2852. Adding one is a row in
-`Chipsets.h` and a `case` in `LedStrip::add_leds()`; the host test checks the two agree.
+`Chipsets.h` and a `case` in `LedStrip::add_leds()`; the unit test checks the two agree.
 
 ### Commands
 
@@ -98,7 +98,7 @@ led_strip.set_brightness(200, &my_listener);       // origin: my_listener skips 
 | | |
 |---|---|
 | Modules | none |
-| Libraries | XeWeCore >=2.0.0,<3.0.0; FastLED 3.10.3 (must be in the project's `xewe.lock` `[libraries]`: `FastLED = { repo = "https://github.com/FastLED/FastLED", ref = "3.10.3" }`) |
+| Libraries | XeWeCore >=2.0.0,<3.0.0; FastLED 3.10.3 (must be in the project's `xewe.toml` `[libraries]`: `FastLED = { repo = "https://github.com/FastLED/FastLED", ref = "3.10.3" }`) |
 | Boards | ESP32-C3, ESP32-C6, ESP32-S3 (arduino-esp32 3.3.12) |
 
 FastLED 3.10.3 compiles on all three chips with core 3.3.12; on the S3 its I2S parallel driver adds 6
@@ -109,16 +109,17 @@ Metadata and dependencies are declared in [`module.properties`](module.propertie
 
 ### Tests
 
-`tests/test_led-strip.py`, run through an xewe-os harness whose lock lists FastLED (see the repo
-[README](../../README.md)). No strip is needed: settings, fps and the frame checksum are read back over
-serial; the visual check is skipped (`requires hardware`). Host tests (`--host-only`) build
-`tests/host/test_listeners.cpp` with g++ (listener set: capacity 4, no duplicates, order, echo
+`tests/board/test_led-strip.py` (board tests) and `tests/unit/` (unit tests), run through an xewe-os
+harness whose lock lists FastLED (see the repo [README](../../README.md)). No strip is needed: settings,
+fps and the frame checksum are read back over serial; the visual check is skipped (`requires hardware`).
+Unit tests (`tests/unit/test_led-strip.py`, `--unit-only`) build `tests/unit/test_listeners.cpp` with g++ (listener set: capacity 4, no duplicates, order, echo
 suppression, default no-ops) and check that the setters notify outside the lock and never from the
 render task.
 
 ```sh
 build/tools/.venv/bin/python -m xewe test --module led-strip              # lock chip
 build/tools/.venv/bin/python -m xewe test --module led-strip --all-chips  # c3, c6, s3
+build/tools/.venv/bin/python -m xewe test --module led-strip --unit-only  # unit tests only, no build
 ```
 
 ## Known gaps

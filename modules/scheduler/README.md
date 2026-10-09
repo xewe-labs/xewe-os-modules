@@ -51,11 +51,14 @@ Metadata and dependencies are declared in [`module.properties`](module.propertie
 
 ### Tests
 
-`tests/test_scheduler.py`, run through an xewe-os harness (see the repo [README](../../README.md)):
+`tests/board/test_scheduler.py` (board tests) and `tests/unit/test_scheduler.py` (unit test: `module.properties`
+matches the C++ source; developer machine, no build), run through an xewe-os harness (see the repo
+[README](../../README.md)):
 
 ```sh
 build/tools/.venv/bin/python -m xewe test --module scheduler              # lock chip
 build/tools/.venv/bin/python -m xewe test --module scheduler --all-chips  # c3, c6, s3
+build/tools/.venv/bin/python -m xewe test --module scheduler --unit-only  # unit tests only, no build
 ```
 
 - `test_compiles` builds the harness firmware with this module selected; it runs without a board.

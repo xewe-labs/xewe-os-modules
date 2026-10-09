@@ -3,13 +3,11 @@
 Hardware preconditions: provisioned board (first boot done); led-strip is compiled in as the
 dependency (harness lock lists FastLED). No LED strip is needed: modes and parameters are read back
 through `$led_modes status`, frames through `$led checksum`. Tests restore the mode they found.
-Host tests parse src/LedModes/Effects.h and, when g++ is installed, build and run tests/host.
+Unit tests (tests/unit/test_led-modes.py) parse src/LedModes/Effects.h and, when g++ is installed,
+build and run tests/unit/test_effects.cpp.
 """
 import re
-import shutil
-import subprocess
 import zlib
-from pathlib import Path
 
 import pytest
 
@@ -17,12 +15,6 @@ from xewe.serialio import BOOT_READY, wait_for_banner
 
 ID = "led_modes"
 NAME = "Led Modes"    # module.properties name == C++ name argument
-MODULE_DIR = Path(__file__).resolve().parents[1]
-EFFECTS_H = MODULE_DIR / "src" / "LedModes" / "Effects.h"
-
-PARAM_RX = re.compile(r"\{\"(\w+)\", \"([^\"]+)\", (\d+), (\d+), (\d+), (\d+), '([ab])'\},")
-TABLE_RX = re.compile(r"constexpr ParamDef (\w+)\[\] = \{\n(.*?)\n\};", re.S)
-MODE_RX = re.compile(r"\{(\d+), \"([^\"]+)\", (\w+), LED_FX_COUNT_OF\((\w+)\)\},")
 
 
 def _status(serial) -> str:
@@ -121,7 +113,7 @@ def test_checksum_changes_with_mode(serial):
         serial.collect(silence=1.5, limit=5)        # past the 900 ms cross-fade
         solid = _checksum(serial)
         assert _checksum(serial) == solid, "Solid is static: its checksum must be stable"
-        # the frame is pre-brightness RGB: pure red on every pixel (Effects.h maths, see tests/host)
+        # the frame is pre-brightness RGB: pure red on every pixel (Effects.h maths, see tests/unit)
         assert solid == "%08x" % zlib.crc32(b"\xff\x00\x00" * length)
         serial.command(f"${ID} set 5", expect=r"mode \[5\] Rainbow", timeout=5)
         serial.collect(silence=1.5, limit=5)
@@ -148,67 +140,3 @@ def test_settings_survive_restart(serial):
 
 def test_effects_look_right(serial):
     pytest.skip("requires hardware: an LED strip to judge the effects and the cross-fade visually")
-
-
-@pytest.mark.host
-def test_properties_match_source():
-    props = dict(l.split("=", 1) for l in (MODULE_DIR / "module.properties").read_text().splitlines() if "=" in l)
-    cpp = (MODULE_DIR / "src" / props["folder"] / f"{props['folder']}.cpp").read_text()
-    assert props["id"] == ID and f'"{ID}"' in cpp and f'"{NAME}"' in cpp
-    assert props["depends_modules"] == "led-strip"
-
-
-@pytest.mark.host
-def test_param_tables_consistent():
-    src = EFFECTS_H.read_text()
-    tables = {name: PARAM_RX.findall(body) for name, body in TABLE_RX.findall(src)}
-    modes = MODE_RX.findall(src)
-    assert [int(m[0]) for m in modes] == list(range(7)), "mode ids unique and contiguous 0..6"
-    assert len({m[1] for m in modes}) == 7, "mode names unique"
-    max_params = int(re.search(r"MAX_PARAMS\s*=\s*(\d+)", src)[1])
-    for mode_id, name, table, counted in modes:
-        assert table == counted and table in tables, name
-        params = tables[table]
-        body = re.search(rf"constexpr ParamDef {table}\[\] = \{{\n(.*?)\n\}};", src, re.S)[1]
-        assert len(params) == len([l for l in body.splitlines() if l.strip()]), f"{table}: unparsed row"
-        assert 0 < len(params) <= max_params, name
-        assert len({p[0] for p in params}) == len(params), f"{name}: duplicate key"
-        for key, _display, lo, hi, default, step, _type in params:
-            lo, hi, default, step = int(lo), int(hi), int(default), int(step)
-            assert lo <= default <= hi <= 65535, f"{name}.{key}"
-            assert step >= 1, f"{name}.{key}"
-            assert len(f"m:{mode_id}:{key}") <= 15, f"NVS key m:{mode_id}:{key} longer than 15"
-
-
-@pytest.mark.host
-def test_effects_host_gpp(tmp_path):
-    gpp = shutil.which("g++")
-    if gpp is None:
-        pytest.skip("g++ not installed")
-    exe = tmp_path / "test_effects"
-    src = MODULE_DIR / "tests" / "host" / "test_effects.cpp"
-    subprocess.run([gpp, "-std=c++17", "-Wall", "-Wextra", "-Werror", "-o", str(exe), str(src)], check=True)
-    run = subprocess.run([str(exe)], capture_output=True, text=True)
-    assert run.returncode == 0, run.stdout + run.stderr
-    summary = re.search(r"PASSED: (\d+) check\(s\), 0 failure\(s\)", run.stdout)
-    assert summary, run.stdout
-    assert int(summary[1]) >= 40, f"only {summary[1]} checks ran (44 when written); was the test emptied?"
-
-
-@pytest.mark.host
-def test_listener_forwarding_and_reset_api():
-    # LH1: setters take an origin and forward on_mode/on_color/on_param through led-strip's listeners;
-    # reset_params writes the defaults in one pass with one activate() (one cross-fade)
-    h = (MODULE_DIR / "src" / "LedModes" / "LedModes.h").read_text()
-    cpp = (MODULE_DIR / "src" / "LedModes" / "LedModes.cpp").read_text()
-    for decl in ("set_mode", "set_param", "set_color", "set_speed", "reset_params"):
-        assert re.search(rf"\b{decl}\s*\([^;]*const void\* origin = nullptr\);", h, re.S), decl
-    assert re.search(r"uint32_t\s+get_color\s*\(\) const;", h)
-    body = re.search(r"bool LedModes::reset_params\(int mode_id, const void\* origin\) \{(.*?)\n\}", cpp, re.S)[1]
-    assert body.count("activate(") == 1 and body.count("persist_params(") == 1 and "set_param(" not in body
-    assert "default_params(" in body and "notify_params(" in body
-    assert "l.on_mode(" in cpp and "l.on_color(" in cpp and "l.on_param(" in cpp
-    assert "notify" not in re.search(r"void LedModes::render\(.*?\n\}", cpp, re.S)[0], "render task must not notify"
-    assert re.search(r'register_command\(\{"color", [^}]*, 0,', cpp), "`color` without argument"
-    assert re.search(r'register_command\(\{"reset_params", [^}]*, 0,', cpp)
-    assert re.search(r'register_command\(\{"reset_params", [^}]*, 1,', cpp)

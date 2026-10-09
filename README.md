@@ -15,15 +15,19 @@ modules/<slug>/
 ├── module.properties          # metadata; read by xewe setup / modules select / validate
 ├── src/<Folder>/<Folder>.h    # class <Folder> : public xewe::Module, includes <XeWeCore.h>
 ├── src/<Folder>/<Folder>.cpp
-├── tests/test_<slug>.py       # pytest, run by `xewe test` inside an xewe-os harness
+├── tests/board/test_<slug>.py # board tests (pytest on the ESP32), run by `xewe test` inside an xewe-os harness
+├── tests/unit/                # optional unit tests (developer machine: `unit` pytest, C++ built with g++)
 └── README.md
 ```
 
 - **Install.** `./setup.sh --modules <slug>` (or `xewe modules select <slug>`) in an xewe-os
-  project copies `src/<Folder>/` to `build/modules-lib/src/<Folder>/` (the generated library
+  project copies `src/<Folder>/` to `build/modules/src/<Folder>/` (the generated library
   `XeWeModules`, whose `XeWeModules.h` holds one `#include "<Folder>/<Folder>.h"` per module) and
   writes `src/Modules.h`: `#include <XeWeModules.h>` and the module's `declare=` line (for example
-  `Wifi wifi(os);`), dependencies first. Nothing else from the module goes into the firmware.
+  `Wifi wifi(os);`), dependencies first. Nothing else from the module goes into the firmware; its
+  `tests/board/` and `tests/unit/` are copied beside the library to `build/modules/tests/<slug>/`,
+  where `xewe test` collects them. Without `XEWE_MODULES_SOURCE` the project reads this repo from a
+  shared checkout, `~/.xewe-os/build-tools/sources/xewe-os-modules/<ref>/`.
 - **Identity.** `slug` is the directory name and the `--modules` value. `id` is the CLI group
   (`$<id> ...`) and the NVS namespace: at most 15 characters, and it never changes once released.
   `name` equals the name the C++ class passes to `xewe::Module` (`$<id> status` prints
@@ -33,7 +37,7 @@ modules/<slug>/
   (`#include "../Wifi/Wifi.h"`).
 - **Versions.** `version` is the module's own semver (informational, plus the promise for its
   commands); `requires_core` is the XeWeCore range in the tools' syntax, `>=2.0.0,<3.0.0`. The
-  repo tag (`v0.2.0`) is what an xewe-os `xewe.lock` pins.
+  repo tag (`v0.2.0`) is what an xewe-os `xewe.toml` pins.
 
 ## Adding a module
 
@@ -45,18 +49,18 @@ modules/<slug>/
    `declare=<Folder> <var>(os[, <dep var>...]);`, `depends_libraries=` for Arduino libraries
    (not esp32-core libraries, not XeWeCore). Pin each one in [`libraries.toml`](libraries.toml),
    the library catalogue (`[FastLED] repo = "..." ref = "3.10.3"`): `xewe setup` installs the
-   libraries of the selected modules from it, unless the harness `xewe.lock` `[libraries]` pins
-   the same name (the lock wins).
+   libraries of the selected modules from it, unless the harness `xewe.toml` `[libraries]` pins
+   the same name (the manifest wins).
 3. Follow the C++ rules in [AGENTS.md](AGENTS.md) (`host` parameter, `[this]` captures, no `cli(`,
    `xewe::span`, a `status()` override).
-4. Write `tests/test_<slug>.py` with `test_compiles`, `test_status` and one behaviour test
-   (template in CONTRACT.md section 4).
+4. Write `tests/board/test_<slug>.py` with `test_compiles`, `test_status` and one behaviour test,
+   and pure-logic checks in `tests/unit/test_<slug>.py` (templates in CONTRACT.md section 4).
 5. `tools/validate.py --write-index`, then run the checks below.
 
 ## Testing a module through an xewe-os harness
 
 Modules are tested inside a **copy** of the [xewe-os](https://github.com/xewe-labs/xewe-os)
-template, never the template itself (`setup --modules` rewrites its `xewe.lock`). Phase 1 takes
+template, never the template itself (`setup --modules` rewrites its `xewe.toml`). Phase 1 takes
 the local checkouts through environment variables:
 
 ```sh
@@ -67,14 +71,15 @@ export XEWE_TOOLS_SOURCE=/path/to/xewe-os-tools XEWE_CORE_SOURCE=/path/to/xewe-o
 export XEWE_ARDUINO_DATA=/path/to/arduino15
 
 ./setup.sh --modules wifi </dev/null                            # wifi and its dependencies
-build/tools/.venv/bin/python -m xewe test --module wifi               # one chip (the lock's chip)
+build/tools/.venv/bin/python -m xewe test --module wifi               # one chip (the manifest's chip)
 build/tools/.venv/bin/python -m xewe test --module wifi --all-chips   # c3, c6, s3
-build/tools/.venv/bin/python -m xewe test --host-only                 # host tests only, no build
+build/tools/.venv/bin/python -m xewe test --unit-only                 # unit tests only, no build
 ```
 
-`setup.sh` copies the modules checkout, so re-run it after editing a module here. Without a
+`XEWE_MODULES_SOURCE` is read in place, but `build/modules/` holds copies of the selected modules'
+`src/` and tests, so re-run `setup.sh` (or `xewe modules generate`) after editing a module here. Without a
 board, `test_compiles` really builds and passes or fails, and the serial tests report
-`compiled, not run`; the run exits 0. Hardware tests assume a provisioned board (first-boot
+`compiled, not run`; the run exits 0. Board tests assume a provisioned board (first-boot
 prompts answered); each test file states its preconditions.
 
 Repo checks, from the module repo with the harness venv:

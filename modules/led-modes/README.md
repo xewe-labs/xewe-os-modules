@@ -12,8 +12,8 @@ A module for [XeWe OS](https://github.com/xewe-labs/xewe-os), built on
 
 ## Highlights
 
-- Effects are pure functions in `src/LedModes/Effects.h` over an RGB buffer, with a small local colour maths (no Arduino, no FastLED), so they compile and run on the host (`tests/host/test_effects.cpp`)
-- Parameter tables (key, range, default, step, basic/advanced) are data; the host test parses them and checks ranges, unique keys and NVS key lengths
+- Effects are pure functions in `src/LedModes/Effects.h` over an RGB buffer, with a small local colour maths (no Arduino, no FastLED), so they compile and run on the developer machine (`tests/unit/test_effects.cpp`)
+- Parameter tables (key, range, default, step, basic/advanced) are data; the unit test parses them and checks ranges, unique keys and NVS key lengths
 - NVS namespace `led_modes`: `mode_id` and `m:<mode id>:<key>` (uint16, ≤ 15 chars), the 2.3.x key shape
 - Mode ids, names, parameter keys, ranges and defaults are those of 2.3.x
 
@@ -30,7 +30,7 @@ render (strip task, 50 fps): fading? render previous + current, blend by elapsed
 - **Speed** — `speed <n>` sets the current mode's `speed` parameter (clamped to its range).
 - Frames are close to, not bit-identical with, 2.3.x: noise is value noise instead of FastLED's Perlin `inoise8/16`.
 - Hue → colour is the 2.3.x mapping per mode: Color Fade, Brightness Fade and Rainbow use `hsv_rainbow()`, a local re-implementation of FastLED 3.10.3 `hsv2rgb_rainbow` (2.3.x `CHSV`/`fill_rainbow`, bit-exact for all 2²⁴ inputs); Solid, Pulse and the status colour use `hsv_spectrum()`, the same float code as core `xewe::color::hsv_to_rgb` (bit-exact); Color Fade Two Zone keeps its six-sector `hsv()`. As in 2.3.x, `color <rrggbb>` is converted with spectrum HSV, so in the three rainbow modes the drawn hue is FastLED's rainbow hue for that value.
-- Christmas Lights' flicker offsets are seeded from `esp_random() ^ millis()` at every mode start (2.3.x `random16()`); `led_fx::prepare(mode, state, n, seed)` takes the seed explicitly, and seed 0 keeps a fixed default so the host test stays deterministic.
+- Christmas Lights' flicker offsets are seeded from `esp_random() ^ millis()` at every mode start (2.3.x `random16()`); `led_fx::prepare(mode, state, n, seed)` takes the seed explicitly, and seed 0 keeps a fixed default so the unit test stays deterministic.
 
 ### Modes
 
@@ -84,9 +84,10 @@ Metadata and dependencies are declared in [`module.properties`](module.propertie
 
 ### Tests
 
-`tests/test_led-modes.py`, run through an xewe-os harness whose lock lists FastLED (see the repo
-[README](../../README.md)). Host tests (`--host-only`) parse the parameter tables and build
-`tests/host/test_effects.cpp` with g++ (skipped without g++). Board tests read modes and parameters
+`tests/board/test_led-modes.py` (board tests) and `tests/unit/` (unit tests), run through an xewe-os
+harness whose lock lists FastLED (see the repo [README](../../README.md)). Unit tests
+(`tests/unit/test_led-modes.py`, `--unit-only`) parse the parameter tables and build
+`tests/unit/test_effects.cpp` with g++ (skipped without g++). Board tests read modes and parameters
 back, `color` with no argument against status, `reset_params` (both forms; **unverified**, written without a
 board), compare `$led checksum` against the expected CRC of a pure-red frame, check that it changes with
 the mode, and check persistence across `$system restart`; the visual check is skipped (`requires hardware`).
@@ -94,7 +95,7 @@ the mode, and check persistence across `$system restart`; the visual check is sk
 ```sh
 build/tools/.venv/bin/python -m xewe test --module led-modes              # lock chip
 build/tools/.venv/bin/python -m xewe test --module led-modes --all-chips  # c3, c6, s3
-build/tools/.venv/bin/python -m xewe test --host-only
+build/tools/.venv/bin/python -m xewe test --module led-modes --unit-only
 ```
 
 ## Known gaps

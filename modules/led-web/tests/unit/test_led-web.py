@@ -1,12 +1,5 @@
-"""Led Web module tests. Run through a harness: `python -m xewe test --module led-web`.
-
-Hardware preconditions: provisioned board (first boot done), WiFi connected (web-interface needs it).
-led-strip and led-modes are compiled in as dependencies (the harness lock lists FastLED).
-
-What these tests cannot cover: the tools have no HTTP client and the CLI cannot issue a GET, so the
-routes are checked on the host by parsing the route table from LedWeb.cpp and the URLs the page's
-JavaScript requests. The page itself (sliders, polling, mode switching) needs a browser on the same
-network and is not tested here.
+"""Led Web module unit tests: pure logic on the developer machine, no board and no build.
+Run through a harness: `python -m xewe test --module led-web --unit-only`.
 """
 import re
 import shutil
@@ -15,9 +8,11 @@ from pathlib import Path
 
 import pytest
 
+from xewe.testing import module_dir
+
 ID = "led_web"
 NAME = "Led Web"      # module.properties name == C++ name argument
-MODULE_DIR = Path(__file__).resolve().parents[1]
+MODULE_DIR = module_dir(__file__)  # modules/<slug>/, also when run from build/modules/tests/<slug>/unit/
 SRC = MODULE_DIR / "src" / "LedWeb"
 CPP = SRC / "LedWeb.cpp"
 
@@ -44,29 +39,14 @@ def _routes() -> set[tuple[str, str]]:
     return {(m.removeprefix("HTTP_"), p) for p, m in ROUTE_RX.findall(CPP.read_text())}
 
 
-def test_compiles(compiled):
-    # build of the harness firmware (web-interface, led-strip, led-modes, led-web) for the session chip
-    assert compiled.is_file()
-
-
-def test_status(serial):
-    serial.command(f"${ID} status", expect=rf"{NAME} module (enabled|disabled)", timeout=5)
-    serial.expect(r"Page:\s+http://[\d.]+/led", timeout=5)
-
-
-def test_url_command(serial):
-    # unverified: written without a board (2026-10-09 night run); regex copied from the `url` handler
-    serial.command(f"${ID} url", expect=r"Led Web: http://\d+\.\d+\.\d+\.\d+/led", timeout=5)
-
-
-@pytest.mark.host
+@pytest.mark.unit
 def test_properties_match_source():
     props = dict(l.split("=", 1) for l in (MODULE_DIR / "module.properties").read_text().splitlines() if "=" in l)
     cpp = CPP.read_text()
     assert props["id"] == ID and f'"{ID}"' in cpp and f'"{NAME}"' in cpp
 
 
-@pytest.mark.host
+@pytest.mark.unit
 def test_no_first_boot_prompt():
     # LM5: no first-boot questions; Module::begin prompts when requires_init_setup or can_be_disabled
     cpp = CPP.read_text()
@@ -74,7 +54,7 @@ def test_no_first_boot_prompt():
     assert re.search(r"/\* can_be_disabled\s+\*/ false", cpp)
 
 
-@pytest.mark.host
+@pytest.mark.unit
 def test_routes_compile_table():
     # every route is registered once, with the expected method
     found = ROUTE_RX.findall(CPP.read_text())
@@ -82,7 +62,7 @@ def test_routes_compile_table():
     assert _routes() == EXPECTED_ROUTES
 
 
-@pytest.mark.host
+@pytest.mark.unit
 def test_page_requests_only_registered_routes():
     js = (SRC / "index_js.h").read_text()
     html = (SRC / "index_html.h").read_text()
@@ -113,7 +93,7 @@ def test_page_requests_only_registered_routes():
         assert old not in code, f"2.3.x reference {old} left in index_js.h"
 
 
-@pytest.mark.host
+@pytest.mark.unit
 def test_post_handlers_call_module_setters():
     # each write route ends in the public setter its CLI command uses (no duplicated logic)
     cpp = CPP.read_text()
@@ -134,7 +114,7 @@ def test_post_handlers_call_module_setters():
         assert "push_to_others();" in body[1], f"{handler} does not push to the other event streams"
 
 
-@pytest.mark.host
+@pytest.mark.unit
 def test_assets_are_raw_string_headers():
     for name, var in (("index_html.h", "LED_WEB_INDEX_HTML"), ("index_css.h", "LED_WEB_INDEX_CSS"),
                       ("index_js.h", "LED_WEB_INDEX_JS")):
@@ -145,14 +125,14 @@ def test_assets_are_raw_string_headers():
         assert ')rawliteral"' not in body[:-len(')rawliteral";') - 1], f"{name}: delimiter inside the asset"
 
 
-@pytest.mark.host
+@pytest.mark.unit
 def test_readme_lists_every_route():
     readme = (MODULE_DIR / "README.md").read_text()
     for method, path in _routes():
         assert re.search(rf"\|\s*`{method}`\s*\|\s*`{re.escape(path)}`", readme), f"README misses {method} {path}"
 
 
-@pytest.mark.host
+@pytest.mark.unit
 def test_poll_interval_matches():
     js = (SRC / "index_js.h").read_text()
     cpp = CPP.read_text()
@@ -161,7 +141,7 @@ def test_poll_interval_matches():
     assert ms == s * 1000
 
 
-@pytest.mark.host
+@pytest.mark.unit
 def test_sse_contract():
     # LH1: /led/api/events is a text/event-stream held by a copy of the server's client (not setSSE,
     # which would park WebServer::handleClient on that socket), at most LED_WEB_SSE_CLIENTS (2),
@@ -181,7 +161,7 @@ def test_sse_contract():
     assert re.search(r"if \(origin == static_cast<const void\*>\(this\)\) return;", cpp)
 
 
-@pytest.mark.host
+@pytest.mark.unit
 def test_page_falls_back_to_polling():
     js = (SRC / "index_js.h").read_text()
     assert "new EventSource(" in js and "addEventListener('state'" in js
@@ -191,7 +171,7 @@ def test_page_falls_back_to_polling():
     assert "body.set('client', CLIENT_ID)" in js and "events?client=' + CLIENT_ID" in js
 
 
-@pytest.mark.host
+@pytest.mark.unit
 def test_js_syntax_node():
     node = shutil.which("node")
     if node is None:

@@ -6,13 +6,11 @@ XEWE_TEST_BUTTONS_PIN (skipped when unset).
 """
 import os
 import re
-from pathlib import Path
 
 import pytest
 
 ID = "buttons"
 NAME = "Buttons"          # module.properties name == C++ name argument
-MODULE_DIR = Path(__file__).resolve().parents[1]
 
 
 def test_compiles(compiled):
@@ -35,10 +33,3 @@ def test_add_then_remove(serial):
     ids = [int(m[1]) for line in serial.collect() if (m := re.match(r"^\|\s*(\d+)\s*\|", line.strip()))]
     assert ids, "no button id in status table"
     serial.command(f"$buttons remove {max(ids)}", expect=r"Successfully removed button mapping\.", timeout=5)
-
-
-@pytest.mark.host
-def test_properties_match_source():
-    props = dict(l.split("=", 1) for l in (MODULE_DIR / "module.properties").read_text().splitlines() if "=" in l)
-    cpp = (MODULE_DIR / "src" / props["folder"] / f"{props['folder']}.cpp").read_text()
-    assert props["id"] == ID and f'"{ID}"' in cpp and f'"{NAME}"' in cpp

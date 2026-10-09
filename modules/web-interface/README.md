@@ -61,11 +61,14 @@ Metadata and dependencies are declared in [`module.properties`](module.propertie
 
 ### Tests
 
-`tests/test_web-interface.py`, run through an xewe-os harness (see the repo [README](../../README.md)):
+`tests/board/test_web-interface.py` (board tests) and `tests/unit/test_web-interface.py` (unit test: `module.properties`
+matches the C++ source; developer machine, no build), run through an xewe-os harness (see the repo
+[README](../../README.md)):
 
 ```sh
 build/tools/.venv/bin/python -m xewe test --module web-interface              # lock chip
 build/tools/.venv/bin/python -m xewe test --module web-interface --all-chips  # c3, c6, s3
+build/tools/.venv/bin/python -m xewe test --module web-interface --unit-only  # unit tests only, no build
 ```
 
 - `test_compiles` builds the harness firmware with this module selected; it runs without a board.

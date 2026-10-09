@@ -6,10 +6,11 @@ every module under `modules/<slug>/`.
 ## Layout
 
 - [ ] `modules/<slug>/` holds exactly `module.properties`, `src/<Folder>/<Folder>.h`,
-      `src/<Folder>/<Folder>.cpp`, `tests/test_<slug>.py`, `README.md`.
-- [ ] No `*.ino`, `scripts/`, per-module `LICENSE.txt` or `.gitignore`, no `conftest.py` or
-      `__init__.py` in `tests/`, no `xewe-os-module-*` directories, no `module.properties`
-      outside `modules/<slug>/`.
+      `src/<Folder>/<Folder>.cpp`, `tests/board/test_<slug>.py`, `README.md`, and optionally
+      `tests/unit/` (developer-machine tests).
+- [ ] `tests/` holds only `board/` and `unit/`. No `*.ino`, `scripts/`, per-module `LICENSE.txt`
+      or `.gitignore`, no `conftest.py` or `__init__.py` in `tests/board/` or `tests/unit/`, no
+      `xewe-os-module-*` directories, no `module.properties` outside `modules/<slug>/`.
 
 ## module.properties
 
@@ -26,7 +27,7 @@ every module under `modules/<slug>/`.
       `os`, the other arguments are `declare` variables of modules in `depends_modules`, variable
       unique and never `os`.
 - [ ] `requires_core=>=2.0.0,<3.0.0` (comma form; `>=2.0.0 <3` does not parse).
-- [ ] `depends_libraries` lists only Arduino libraries pinned in the harness `xewe.lock`
+- [ ] `depends_libraries` lists only Arduino libraries pinned in the harness `xewe.toml`
       `[libraries]`; never XeWeCore/XeWeOS or esp32-core libraries (WiFi, WebServer, Wire, ...).
 - [ ] Bump `version`: MINOR for added commands, MAJOR for removed or changed ones (pre-1.0: MINOR
       for breaking).
@@ -63,16 +64,18 @@ every module under `modules/<slug>/`.
 
 ## Tests
 
-- [ ] `tests/test_<slug>.py` defines `test_compiles(compiled)`, `test_status(serial)` and at least
+- [ ] `tests/board/test_<slug>.py` defines `test_compiles(compiled)`, `test_status(serial)` and at least
       one behaviour test that runs one of the module's own commands (or reads its output) with a
       regex copied from what the module really prints.
 - [ ] Use only the plugin's fixtures (`compiled`, `board`, `firmware`, `serial`); never redefine
-      them. Mark pure-Python tests `@pytest.mark.host`.
+      them. Pure-Python tests go to `tests/unit/test_<slug>.py`, marked `@pytest.mark.unit`
+      (`MODULE_DIR = module_dir(__file__)`, `from xewe.testing import module_dir`: the tests run from a
+      copy in the project's `build/modules/tests/<slug>/`); C++ unit tests sit next to it.
 - [ ] No `time.sleep`; use `serial.expect(..., timeout=)`. Mutating tests undo what they do
       (add, then remove).
 - [ ] Credentials or wiring come from `XEWE_TEST_<ID>_<WHAT>` env vars; skip with
       `pytest.skip("needs ...")` when unset, never hang.
-- [ ] The docstring states the hardware preconditions (hardware tests assume a provisioned board).
+- [ ] The docstring states the hardware preconditions (board tests assume a provisioned board).
 
 ## Before you call it done
 

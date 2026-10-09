@@ -95,7 +95,7 @@ stops reading without closing could stall the main loop for up to ~10 s (lwIP se
 The page (`index_js.h`) opens `EventSource('/led/api/events?client=<id>')` and feeds each `state`
 event to the unchanged 2.3.x message handler as `F`/`P` wire messages. When the stream errors or
 closes (restart, WiFi drop, `503`), it polls `GET /led/api/state` every 2 s (`POLL_MS`, equal to
-`POLL_INTERVAL_S` in `LedWeb.cpp`, host-tested) and tries the stream again after 30 s. An open stream
+`POLL_INTERVAL_S` in `LedWeb.cpp`, unit-tested) and tries the stream again after 30 s. An open stream
 counts as the heartbeat for the online dot (keep-alive comments are not visible to JavaScript). A
 pushed or polled state is ignored for 1.5 s after a local change so it does not jump a slider the
 user is moving.
@@ -103,13 +103,13 @@ user is moving.
 ## Add it to a project
 
 ```toml
-# xewe.lock
+# xewe.toml
 [modules]
 selected = [..., "web-interface", "led-strip", "led-modes", "led-web"]
 ```
 
 Then `./setup.sh` (or `xewe modules select led-web`), build and flash. `depends_modules` pulls in
-web-interface (and wifi), led-strip and led-modes; the lock must list FastLED for led-strip. The
+web-interface (and wifi), led-strip and led-modes; the manifest (`xewe.toml`) or `libraries.toml` must provide FastLED for led-strip. The
 generated `Modules.h` line is `LedWeb led_web(os, web_interface, led_strip, led_modes);`. Open
 `$led_web url` in a browser on the same network.
 
@@ -121,13 +121,14 @@ generated `Modules.h` line is `LedWeb led_web(os, web_interface, led_strip, led_
 
 ## Testing
 
-`tests/test_led-web.py`. The tools have no HTTP client and the CLI cannot issue a GET, so the routes
-are tested on the host: the route table is parsed from `LedWeb.cpp` and compared with the expected
-set, with every URL the page's HTML and JS request, with this README, and each POST handler is
-checked to call its module setter with `origin = this` and to push to the other streams;
-`test_sse_contract` checks the stream (content type, client copy instead of `setSSE`, 2 streams,
-15 s keep-alive, one `state` event, listener registration), `test_page_falls_back_to_polling` the
-page side and `test_js_syntax_node` runs `node --check` on the page JS. On a board: `test_status` and
+`tests/unit/test_led-web.py` and `tests/board/test_led-web.py`. The tools have no HTTP client and
+the CLI cannot issue a GET, so the routes are covered by unit tests on the developer machine: the
+route table is parsed from `LedWeb.cpp` and compared with the expected set, with every URL the
+page's HTML and JS request, with this README, and each POST handler is checked to call its module
+setter with `origin = this` and to push to the other streams; `test_sse_contract` checks the stream
+(content type, client copy instead of `setSSE`, 2 streams, 15 s keep-alive, one `state` event,
+listener registration), `test_page_falls_back_to_polling` the page side and `test_js_syntax_node`
+runs `node --check` on the page JS. On a board (`tests/board/`): `test_status` and
 `test_url_command` (serial). The page's behaviour (sliders, mode switch, events, fallback polling,
 colour) needs a browser and is not automated.
 
@@ -137,4 +138,5 @@ colour) needs a browser and is not automated.
 |---|---|
 | `src/LedWeb/LedWeb.h`, `LedWeb.cpp` | module, routes, JSON, event streams (listener) |
 | `src/LedWeb/index_html.h`, `index_css.h`, `index_js.h` | 2.3.x page assets |
-| `tests/test_led-web.py` | contract tests + host route checks |
+| `tests/board/test_led-web.py` | contract tests (`test_compiles`, `test_status`, `test_url_command`) |
+| `tests/unit/test_led-web.py` | route, page and SSE checks (developer machine, `unit`) |
