@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // xewe-os-modules/modules/led/src/Led/LedListener.h
 //
-// Change notifications of the led module (MIGRATION-SURVEY 2.4). Standard library only, so the
-// fan-out is host-tested (led/tests/unit/test_listeners.cpp).
+// Change notifications of the led module (MIGRATION-SURVEY 2.4). Standard library plus the core's
+// host-includable Utils/Listeners.h, so the fan-out is host-tested (led/tests/unit/test_listeners.cpp).
 //
 //   led.add_listener(&my_listener);     // up to LED_LISTENERS_MAX, no heap
 //
@@ -20,8 +20,10 @@
 #include <cstddef>
 #include <cstdint>
 
+#include <XeWeCore/Utils/Listeners.h>
+
 #ifndef LED_LISTENERS_MAX
-#define LED_LISTENERS_MAX 4
+#define LED_LISTENERS_MAX 6              // led-os uses 4 (web, homekit, alexa, home_assistant)
 #endif
 
 struct LedListener {
@@ -38,47 +40,9 @@ struct LedListener {
     }
 };
 
-// Fixed-size listener set: add (no duplicates, false when full or null), remove, and fan-out in
-// registration order. A slot freed by remove() is reused by the next add().
-template <typename Listener, std::size_t N>
-class LedListenerSet {
-public:
-    bool add(Listener* listener) {
-        if (listener == nullptr) return false;
-        for (Listener* l : items) if (l == listener) return true;   // already registered
-        for (Listener*& l : items) {
-            if (l == nullptr) { l = listener; return true; }
-        }
-        return false;
-    }
-
-    bool remove(Listener* listener) {
-        for (Listener*& l : items) {
-            if (l != nullptr && l == listener) { l = nullptr; return true; }
-        }
-        return false;
-    }
-
-    std::size_t size() const {
-        std::size_t n = 0;
-        for (Listener* l : items) n += (l != nullptr);
-        return n;
-    }
-
-    static constexpr std::size_t capacity() { return N; }
-
-    template <typename F>
-    void notify(F&& call) const {
-        for (Listener* l : items) {
-            if (l != nullptr) call(*l);
-        }
-    }
-
-private:
-    Listener* items[N] = {};
-};
-
-using LedListeners = LedListenerSet<LedListener, LED_LISTENERS_MAX>;
+// the core's fixed-size set (core >= 2.1): add (no duplicates, false when full or null), remove, fan-out
+// in slot order; a slot freed by remove() is reused by the next add()
+using LedListeners = xewe::ListenerSet<LedListener, LED_LISTENERS_MAX>;
 
 // rrggbb as LedListener::on_color and Led::get_color() report it
 constexpr uint32_t led_pack_rgb(uint8_t r, uint8_t g, uint8_t b) {

@@ -33,15 +33,22 @@ public:
                                                    bool do_restart   = true,
                                                    bool keep_enabled = true) override;
     std::string           status                  (bool verbose = false)     const override;
+    // core 2.1 table: `tz_gmt_str` (str <= 9, "GMT+00:00"), the same NVS key as 0.2
+    xewe::Settings        settings                ()                         const override;
 
     tm                    get_current_time        ()                         const;
     std::string           get_current_time_str    ()                         const;
     void                  print_current_time      ();
 
+protected:
+    // `tz_gmt_str` changed: normalise (GMT-8 -> GMT-08:00) and apply; an unparsable value is put back
+    void                  on_setting_changed      (const xewe::SettingDef& def) override;
+
 private:
     Wifi&                 wifi;
     bool                  time_set                {false};
     std::string           active_tz_string        {"GMT+00:00"};
+    std::string           tz_gmt_str              {"GMT+00:00"};     // table row
 
     void                  get_time_from_web_init  (const bool verbose = true);
     bool                  get_time_from_web_wait  (const bool verbose = true);

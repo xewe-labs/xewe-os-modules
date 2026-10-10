@@ -6,8 +6,9 @@
 // tests/unit/test_curve.cpp builds them with the host g++ (-Wall -Wextra -Werror).
 // The point type is a template parameter: anything with `float temp` and `uint8_t speed` (0-100 %),
 // i.e. the FlexData-backed FanCurvePoint on the device, a plain struct in the host test.
-// The colour helpers at the end (leds_on, led_colour, hex colours) map a temperature along the same
-// curve to a colour, for integrations that light LEDs from the curve (the cooling pad project).
+// The colour helpers (leds_on, led_colour) map a temperature along the same curve to a colour, for
+// integrations that light LEDs from the curve (the cooling pad project). Hex colours: the core's
+// xewe::str::parse_hex_color / to_hex_color (Utils/String.h, core 2.1).
 #pragma once
 
 #include <cctype>
@@ -121,32 +122,6 @@ bool leds_on(const std::vector<P>& points, float temp, bool was_on) {
     if (temp >= first) return true;
     if (temp < first - LED_HYSTERESIS) return false;
     return was_on;
-}
-
-// "#RRGGBB" (case-insensitive) -> true and r, g, b
-inline bool parse_hex_color(const std::string& hex, uint8_t& r, uint8_t& g, uint8_t& b) {
-    if (hex.size() != 7 || hex[0] != '#') return false;
-    unsigned v = 0;
-    for (size_t i = 1; i < 7; ++i) {
-        const char c = hex[i];
-        if (!std::isxdigit(static_cast<unsigned char>(c))) return false;
-        const unsigned d = (c <= '9') ? unsigned(c - '0') : unsigned(std::tolower(static_cast<unsigned char>(c)) - 'a' + 10);
-        v = (v << 4) | d;
-    }
-    r = static_cast<uint8_t>((v >> 16) & 0xFF);
-    g = static_cast<uint8_t>((v >> 8) & 0xFF);
-    b = static_cast<uint8_t>(v & 0xFF);
-    return true;
-}
-
-// "#RRGGBB" or "RRGGBB" (any case) -> true and out = "#RRGGBB" (upper case), the stored form.
-inline bool normalize_hex_color(const std::string& hex, std::string& out) {
-    std::string s = (!hex.empty() && hex[0] == '#') ? hex : "#" + hex;
-    uint8_t r, g, b;
-    if (!parse_hex_color(s, r, g, b)) return false;
-    for (size_t i = 1; i < s.size(); ++i) s[i] = static_cast<char>(std::toupper(static_cast<unsigned char>(s[i])));
-    out = s;
-    return true;
 }
 
 // `$fan curve set` argument: "T:P,T:P,..." (temperature in °C, speed 0-100 %; any order) or "none"

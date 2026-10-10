@@ -22,3 +22,9 @@ def test_status_reports_server(serial):
     serial.command(f"${ID} status", expect=r"--- Web Server Status ---", timeout=5)
     serial.expect(r"- Uptime:\s+\d+d \d\d:\d\d:\d\d", timeout=5)
     serial.expect(r"- Memory Usage:\s+[\d.]+% \(\d+ / \d+ bytes\)", timeout=5)
+
+
+def test_settings_table(serial):
+    # core 2.1: port (restart) + root rows
+    serial.command("$web_interface get port", expect=r"port=\d+", timeout=5)
+    serial.command("$web_interface schema", expect=r'\{"end":"web_interface","count":2\}', timeout=5)

@@ -1,9 +1,11 @@
 """Led module unit tests: pure logic on the developer machine, no board and no build.
 Run through a harness: `python -m xewe test --module led --unit-only`.
 """
+import os
 import re
 import shutil
 import subprocess
+from pathlib import Path
 
 import pytest
 
@@ -21,6 +23,21 @@ TABLE_RX = re.compile(r"inline constexpr ParamDef PARAMS\[\] = \{\n(.*?)\n\};", 
 MODEDEF_RX = re.compile(
     r"inline constexpr ModeDef (MODE_\w+) = \{(\d+), \"([^\"]+)\", (\w+)::PARAMS, LED_FX_COUNT_OF\((\w+)::PARAMS\),")
 STD_HEADERS = {"cmath", "cstddef", "cstdint", "cstring", "vector", "string", "array", "algorithm"}
+# core headers that are host-includable (standard library only; core >= 2.1, CC4 + CC2)
+CORE_HEADERS = {"XeWeCore/Utils/Color.h", "XeWeCore/Utils/Listeners.h"}
+
+
+def _core_src() -> Path:
+    # XeWeCore's src/ for the host builds: XEWE_CORE_SOURCE (a core checkout), the core repo next to the
+    # modules repo (xewe-labs/done/), or a project's build/libraries/XeWeCore
+    env = os.environ.get("XEWE_CORE_SOURCE")
+    candidates = [Path(env) / "src"] if env else []
+    for parent in [*MODULE_DIR.parents, *Path(__file__).resolve().parents]:
+        candidates += [parent / "xewe-os-core" / "src", parent / "build" / "libraries" / "XeWeCore" / "src"]
+    for c in candidates:
+        if (c / "XeWeCore" / "Utils" / "Listeners.h").is_file():
+            return c
+    pytest.skip("XeWeCore >= 2.1 source not found (set XEWE_CORE_SOURCE to a core checkout)")
 
 
 def _run_gpp(tmp_path, name: str) -> int:
@@ -28,8 +45,8 @@ def _run_gpp(tmp_path, name: str) -> int:
     if gpp is None:
         pytest.skip("g++ not installed")
     exe = tmp_path / name
-    subprocess.run([gpp, "-std=c++17", "-Wall", "-Wextra", "-Werror", "-o", str(exe), str(UNIT / f"{name}.cpp")],
-                   check=True)
+    subprocess.run([gpp, "-std=c++17", "-Wall", "-Wextra", "-Werror", "-I", str(_core_src()), "-o", str(exe),
+                    str(UNIT / f"{name}.cpp")], check=True)
     run = subprocess.run([str(exe)], capture_output=True, text=True)
     assert run.returncode == 0, run.stdout + run.stderr
     summary = re.search(r"PASSED: (\d+) check\(s\), 0 failure\(s\)", run.stdout)
@@ -56,11 +73,12 @@ def test_chipset_table_matches_add_leds():
     ids = [int(i) for i, _, _ in table]
     assert ids and len(ids) == len(set(ids)) and all(0 <= i <= 45 for i in ids)   # 2.3.x id range
     cpp = (SRC / "Led.cpp").read_text()
-    cases = re.findall(r"case (\d+):\s+c = &FastLED\.addLeds<(\w+),", cpp)
+    cases = re.findall(r"case (\d+):\s+c = (?:&FastLED\.addLeds|add_clockless)<(\w+)[,>]", cpp)
     assert sorted((int(i), n) for i, n in cases) == sorted((int(i), n) for i, n, _ in table)
-    for _, name, clocked in table:   # a clocked chip gets the clock pin template argument
-        line = next(l for l in cpp.splitlines() if f"addLeds<{name}," in l)
+    for _, name, clocked in table:   # clocked: FastLED's template pins incl. the clock; clockless: run-time data pin
+        line = next(l for l in cpp.splitlines() if re.search(rf"c = (&FastLED\.addLeds|add_clockless)<{name}[,>]", l))
         assert ("LED_PIN_CLOCK" in line) == (clocked == "true"), name
+        assert ("add_clockless" in line) == (clocked == "false"), name
 
 
 @pytest.mark.unit
@@ -72,8 +90,8 @@ def test_effects_unit_gpp(tmp_path):
 
 @pytest.mark.unit
 def test_listener_fanout_unit_gpp(tmp_path):
-    # LedListener.h: fixed 4-slot set, no duplicates, registration order, origin echo suppression,
-    # default no-op bodies
+    # LedListener.h: core xewe::ListenerSet with 6 slots, no duplicates, slot order, origin echo
+    # suppression, default no-op bodies
     count = _run_gpp(tmp_path, "test_listeners")
     assert count >= 28, f"only {count} checks ran (28 when written); was the test emptied?"
 
@@ -131,12 +149,13 @@ def test_no_positional_mode_lookup():
 
 @pytest.mark.unit
 def test_mode_headers_pure():
-    # fx/, modes/, Pixel.h and LedListener.h compile on the host: standard headers and each other only
+    # fx/, modes/, Pixel.h and LedListener.h compile on the host: standard headers, the core's
+    # host-includable Color.h / Listeners.h and each other only
     pure = [*sorted((SRC / "fx").glob("*.h")), *sorted(MODES_DIR.glob("*.h")), SRC / "Pixel.h", SRC / "LedListener.h"]
     for f in pure:
         for inc in re.findall(r'^#include\s+([<"][^>"]+[>"])', f.read_text(), re.M):
             if inc.startswith("<"):
-                assert inc[1:-1] in STD_HEADERS, f"{f.name}: {inc} is not a standard header"
+                assert inc[1:-1] in STD_HEADERS | CORE_HEADERS, f"{f.name}: {inc} is not a standard header"
             else:
                 target = (f.parent / inc[1:-1]).resolve()
                 assert target in {p.resolve() for p in pure}, f"{f.name}: {inc} is not a pure header"
@@ -147,7 +166,7 @@ def test_setters_notify_listeners():
     # listeners are told after the change, outside the render mutex, and never from the render task
     cpp = (SRC / "Led.cpp").read_text()
     for name, cb in (("set_brightness", "on_brightness"), ("set_state", "on_state")):
-        body = re.search(rf"void Led::{name}\([^)]*const void\* origin\) \{{(.*?)\n\}}", cpp, re.S)
+        body = re.search(rf"void Led::{name}\([^)]*const void\* origin[^)]*\) \{{(.*?)\n\}}", cpp, re.S)
         assert body, f"{name} has no origin parameter"
         text = body[1]
         assert f"l.{cb}(" in text, f"{name} does not call {cb}"
@@ -158,7 +177,9 @@ def test_setters_notify_listeners():
     assert "nvs" not in render and "serial" not in render, "render task must not touch NVS or serial"
     header = (SRC / "Led.h").read_text()
     assert '#include "LedListener.h"' in header and '#include "modes/Registry.h"' in header
-    assert re.search(r"LED_LISTENERS_MAX 4\b", (SRC / "LedListener.h").read_text())
+    listener_h = (SRC / "LedListener.h").read_text()
+    assert re.search(r"LED_LISTENERS_MAX 6\b", listener_h)
+    assert "xewe::ListenerSet<LedListener, LED_LISTENERS_MAX>" in listener_h and "class LedListenerSet" not in listener_h
 
 
 @pytest.mark.unit
@@ -166,7 +187,11 @@ def test_mode_api_for_led_web():
     # LM17/LM18: the names the project-local LedWeb calls (led.<name>); setters take an origin
     h = (SRC / "Led.h").read_text()
     for decl in ("set_mode", "set_param", "set_color", "set_speed", "reset_params", "set_brightness", "set_state"):
-        assert re.search(rf"\b{decl}\s*\([^;]*const void\* origin = nullptr\);", h, re.S), decl
+        assert re.search(rf"\b{decl}\s*\([^;]*const void\* origin = nullptr[^;]*\);", h, re.S), decl
+    # led gaps closed in 0.3.0: a transient on/off and brightness (no NVS write), fill with a fade
+    for decl in ("set_state", "set_brightness"):
+        assert re.search(rf"\b{decl}\s*\([^;]*bool persist = true\);", h, re.S), decl
+    assert re.search(r"\bfill\s*\(LedRgb color, uint16_t fade_ms = 0\);", h)
     for getter in ("get_brightness", "get_state", "get_length", "get_fps", "get_mode", "get_param", "get_color",
                    "add_listener", "remove_listener", "fill", "clear_fill", "get_frame_checksum", "notify_listeners"):
         public = h.split("public:", 1)[1].split("private:", 1)[0]
@@ -188,7 +213,7 @@ def test_command_table():
     cmds = {(n, int(a)) for n, _, a in table}
     assert len(cmds) == len(table), "a (name, arg count) pair registered twice"
     assert all(len(n) <= 15 for n, _ in cmds)
-    assert {("on", 0), ("off", 0), ("brightness", 1), ("set", 2), ("fill", 1), ("checksum", 0)} <= cmds
+    assert {("on", 0), ("off", 0), ("brightness", 1), ("set", 2), ("fill", 1), ("fill", 2), ("checksum", 0)} <= cmds
     assert {("mode", 1), ("mode", 2), ("mode", 4)} <= cmds
     assert {("set_mode", 1), ("set_mode_param", 3)} <= cmds
     assert {("set_brightness", 1), ("set_state", 1), ("toggle_state", 0), ("turn_on", 0), ("turn_off", 0),
@@ -201,3 +226,59 @@ def test_command_table():
         case = re.search(rf"case {argc}:(.*?)break;\n", dispatch, re.S)[1]
         for sub in subs:
             assert f'sub == "{sub}"' in case, f"`$led mode {sub}` with {argc} argument(s) not dispatched"
+
+
+
+@pytest.mark.unit
+def test_settings_table():
+    # core 2.1 table (Led::settings): the 2.3.x NVS keys and types, read and written nowhere else by
+    # hand except the two runtime setters; RESTART where a restart applies it; README lists every key
+    cpp, h = (SRC / "Led.cpp").read_text(), (SRC / "Led.h").read_text()
+    body = re.search(r"xewe::Settings Led::settings\(\) const \{(.*?)\n\}", cpp, re.S)[1]
+    rows = re.findall(r'xewe::setting<&Led::(\w+)>\s*\("(\w+)"', body)
+    keys = [k for _, k in rows]
+    assert keys == ["chip", "num_led", "colorder", "voltage", "brightness", "state", "pin_data", "pin_clock"]
+    assert len(set(keys)) == len(keys) and all(len(k) <= 15 for k in keys)
+    types = {"uint8_t": "u8", "uint16_t": "u16", "bool": "bool"}
+    expected = {"chip": "u8", "num_led": "u16", "colorder": "u8", "voltage": "u8", "brightness": "u8",
+                "state": "bool", "pin_data": "u8", "pin_clock": "u8"}
+    for member, key in rows:   # the member's type is the stored type: never retype a published key
+        decl = re.search(rf"^\s+(\w+)\s+{member}\s*=", h, re.M)
+        assert decl and types.get(decl[1]) == expected[key], f"{key}: member {member} is {decl and decl[1]}"
+    for key in ("chip", "pin_data", "pin_clock"):
+        row = re.search(rf'\("{key}",.*?\)(,\n|\n)', body, re.S)[0]
+        assert "RESTART" in row, f"{key} applies after a restart"
+    assert "RESTART" not in re.search(r'\("num_led",[^\n]*', body)[0], "num_led applies live"
+    assert re.search(r'\("pin_data", 0, 48, LED_PIN_DATA,', body) and re.search(r'\("pin_clock", 0, 48, LED_PIN_CLOCK,', body)
+    # loaded by the core: no hand-written read of a table key; writes only in set_brightness / set_state
+    for key in keys:
+        assert not re.search(rf'nvs\.read<[^>]+>\(id, "{key}"', cpp), f"hand-written NVS read of {key}"
+    writes = re.findall(r'nvs\.write<[^>]+>\(id, "(\w+)"', cpp)
+    assert sorted(w for w in writes if w in keys) == ["brightness", "state"]
+    # `$led set` is the table path; the change hook drives the strip
+    setter = re.search(r"bool Led::set_setting\(.*?\n\}", cpp, re.S)[0]
+    assert "apply_setting(" in setter and "nvs" not in setter
+    hook = re.search(r"void Led::on_setting_changed\(.*?\n\}", cpp, re.S)[0]
+    assert '"brightness"' in hook and '"state"' in hook and "persist" not in hook and ", false)" in hook
+    # schema_extra: one row per mode parameter, grouped and with the command that sets it
+    extra = re.search(r"void Led::schema_extra\(.*?\n\}", cpp, re.S)[0]
+    assert 'group\\":\\"mode:%s' in extra and "$led mode param %u %s <v>" in extra
+    readme = (MODULE_DIR / "README.md").read_text()
+    for key in keys:
+        assert f"| `{key}` |" in readme, f"README NVS table lacks {key}"
+    props = dict(l.split("=", 1) for l in (MODULE_DIR / "module.properties").read_text().splitlines() if "=" in l)
+    assert props["requires_core"] == ">=2.1.0,<3.0.0"
+
+
+@pytest.mark.unit
+def test_pins_claimed_and_hex_from_core():
+    # CC5 pin registry: claim at begin (data, clock for clocked chips), release on reset; CC3 hex parser
+    cpp = (SRC / "Led.cpp").read_text()
+    claim = re.search(r"void Led::claim_pins\(.*?\n\}", cpp, re.S)[0]
+    assert "xewe::pins::claim(data" in claim and "xewe::pins::claim(clock" in claim
+    assert "release_pins();" in re.search(r"void Led::reset\(.*?\n\}", cpp, re.S)[0]
+    begin = re.search(r"void Led::begin_routines_regular\(.*?\n\}", cpp, re.S)[0]
+    assert begin.find("claim_pins(") < begin.find("add_leds(")
+    assert "bool parse_hex_color" not in cpp and cpp.count("xewe::str::parse_hex_color(") == 2
+    assert "inline Rgb hsv_spectrum" in (SRC / "fx" / "Math.h").read_text()
+    assert "xewe::color::hsv_to_rgb(" in (SRC / "fx" / "Math.h").read_text()

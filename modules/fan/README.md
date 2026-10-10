@@ -1,6 +1,6 @@
 # fan — 4-wire PWM fans, tachometer RPM and a temperature curve
 
-XeWe OS module · extracted 2026-10-09 from the XeWe laptop cooling pad (its `Fan` and `FanCurve` modules, consolidated; MIGRATION.md CP1/CP10) · Solo: Max Dokukin · Status: Draft (0.1.0)
+XeWe OS module · extracted 2026-10-09 from the XeWe laptop cooling pad (its `Fan` and `FanCurve` modules, consolidated; MIGRATION.md CP1/CP10) · Solo: Max Dokukin · Status: Draft (0.2.0)
 
 ## Overview
 
@@ -19,10 +19,15 @@ sensor. A module for [XeWe OS](https://github.com/xewe-labs/xewe-os), built on
   10 000 RPM dropped as noise
 - A pin is never shared: `add` refuses a PWM pin that is another fan's tach and a tach pin that is
   another fan's PWM or tach (shared ISRs and re-routed LEDC outputs otherwise)
-- Curve maths in `src/Fan/Curve.h`, pure C++ (no Arduino), host-tested with g++ (87 checks):
+- Curve maths in `src/Fan/Curve.h`, pure C++ (no Arduino), host-tested with g++ (≥ 72 checks):
   interpolation, clamps, validation (sorted, no duplicates, -40..200 °C, ≤ 100 %), schema check,
-  `curve set` parsing, and colour helpers for projects that light LEDs along the curve
-- Fail-safe: an unreadable temperature (NaN) or a source silent for 10 s counts as hot → every fan at
+  `curve set` parsing, and colour helpers for projects that light LEDs along the curve (hex colours:
+  the core's `xewe::str::parse_hex_color` / `to_hex_color`)
+- Core 2.1: settings table (`curve_ms` u16 100-60000, default 1000; `stale_ms` u32 1000-600000,
+  default 10000) with `$fan get|schema`; fans and curve points appear in `$fan schema` as extra rows
+  (`"group":"fans"|"curve"`, `"set"` hint); PWM and tach pins are claimed in the core pin registry
+  (`xewe::pins`, released on `remove`); curve events via `fan.listeners` (`FanListener`)
+- Fail-safe: an unreadable temperature (NaN) or a source silent for `stale_ms` (10 s) counts as hot → every fan at
   the last point's speed
 - NVS: one FlexData blob per item, one write per change (`fan/data` the fans, `fan/curve` the curve);
   the curve loop writes RAM only. A blob with another `schema` is never reinterpreted and never
@@ -66,7 +71,8 @@ pins there. No default fans: `--define FAN1_PWM=255 --define FAN2_PWM=255`.
 | :--- | :--- | :--- |
 | **`add`** | Add a fan without a tachometer. | `$fan add <pwm_pin>` |
 | **`add_w_tach`** | Add a fan with a tachometer. | `$fan add_w_tach <pwm_pin> <tach_pin>` |
-| **`set`** | Set one fan's speed (0-255); persisted. | `$fan set <pwm_pin> <speed>` |
+| **`set`** | Set one fan's speed (0-255); persisted. A non-numeric first argument sets a table row. | `$fan set <pwm_pin> <speed>`, `$fan set curve_ms 500` |
+| **`get`** / **`schema`** | A table setting; every row as JSON Lines (core 2.1). | `$fan get stale_ms`, `$fan schema` |
 | **`set_all`** | Set every fan's speed (0-255); persisted. | `$fan set_all <speed>` |
 | **`remove`** | Remove a fan (PWM off, pin detached). | `$fan remove <pwm_pin>` |
 | **`temp`** | Feed a temperature to the curve (as a sensor would) and apply it now. | `$fan temp 30.5` |
@@ -87,8 +93,10 @@ fan.add(pwm, tach /* 255 = none */);  fan.remove(pwm);  fan.set(pwm, 0..255, per
 fan.get_rpm(pwm);  fan.count();  fan.get_json();
 fan.set_temperature(31.2f, origin);    // NaN = source offline (fail-safe hot); origin shown in status
 fan.curve_active();  fan.get_curve_target();  fan.get_curve();  fan.get_curve_json();
-fan.curve_add(40.5f, 50);  fan.curve_remove(40.5f);
-fan.set_curve(points, /* persist */ false);  fan.save_curve();   // several changes, one NVS write
+fan.curve_add(40.5f, 50, origin);  fan.curve_remove(40.5f, origin);
+fan.set_curve(points, /* persist */ false, origin);  fan.save_curve();   // several changes, one NVS write
+fan.apply_setting("curve_ms", "500");                                // a table row without the CLI
+fan.listeners.add(&l);   // FanListener: on_curve_target(pct, celsius, origin), on_curve_changed(origin)
 ```
 
 Wiring a sensor (project code, e.g. the cooling pad's `PadWeb`):
@@ -97,7 +105,7 @@ Wiring a sensor (project code, e.g. the cooling pad's `PadWeb`):
 struct Link : Mlx90614Listener {
     void on_temperature(float object_c, float, bool online) override { fan.set_temperature(online ? object_c : NAN, this); }
 } link;
-mlx90614.add_listener(&link);
+mlx90614.listeners.add(&link);
 ```
 
 ### Requirements
@@ -105,7 +113,7 @@ mlx90614.add_listener(&link);
 | | |
 |---|---|
 | Modules | none |
-| Libraries | XeWeCore >=2.0.0,<3.0.0; ArduinoJson (`depends_libraries`, pinned in `libraries.toml`; a project lists it in its `xewe.toml` `[libraries]`) |
+| Libraries | XeWeCore >=2.1.0,<3.0.0; ArduinoJson (`depends_libraries`, pinned in `libraries.toml`; a project lists it in its `xewe.toml` `[libraries]`) |
 | Boards | ESP32-C3, ESP32-C6, ESP32-S3 (arduino-esp32 3.3.12) |
 
 Metadata and dependencies are declared in [`module.properties`](module.properties).
@@ -113,7 +121,7 @@ Metadata and dependencies are declared in [`module.properties`](module.propertie
 ### Tests
 
 `python -m xewe test --module fan` in a harness (repo [README](../../README.md)).
-Unit (`tests/unit/test_fan.py`, `--unit-only`): builds `test_curve.cpp` with g++ (≥ 87 checks), checks
+Unit (`tests/unit/test_fan.py`, `--unit-only`): builds `test_curve.cpp` with g++ (≥ 72 checks), checks
 `Curve.h` stays pure, the properties against the source, and that the R1 fixes stay in place.
 Board (`tests/board/test_fan.py`): `test_compiles` runs without a board; on a provisioned bare board
 `test_status`, `test_set_rejects_out_of_range`, `test_argc_error`, `test_curve_add_remove`,

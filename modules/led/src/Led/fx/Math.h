@@ -3,16 +3,19 @@
 // xewe-os-modules/modules/led/src/Led/fx/Math.h
 //
 // Shared pure maths of the LED modes: colour conversions, noise, blending, cross-fade. Host-compilable
-// on purpose: standard library only, no Arduino, no FastLED, no XeWeCore (tests/unit/test_effects.cpp
-// builds it with g++). The conversions are small local re-implementations of the 2.3.x ones: FastLED's
-// rainbow HSV (bit-exact, see hsv_rainbow), core's float HSV (same code as XeWeCore Utils/Color.h) and
-// the six-sector HSV of Color Fade Two Zone. Frames are close to, not bit-identical with, 2.3.x because
-// the noise is value noise, not FastLED's Perlin inoise8/16.
+// on purpose: standard library plus core's host-includable Utils/Color.h, no Arduino, no FastLED
+// (tests/unit/test_effects.cpp builds it with g++ -I <core>/src). The conversions are the 2.3.x ones:
+// FastLED's rainbow HSV (a bit-exact local re-implementation, see hsv_rainbow), core's float HSV
+// (xewe::color::hsv_to_rgb, called) and the six-sector HSV of Color Fade Two Zone. Frames are close to,
+// not bit-identical with, 2.3.x because the noise is value noise, not FastLED's Perlin inoise8/16.
 #pragma once
 
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+
+#include <XeWeCore/Utils/Color.h>
 
 #include "../Pixel.h"
 
@@ -110,28 +113,11 @@ inline Rgb hsv_rainbow(uint8_t hue, uint8_t sat, uint8_t val) {
     return {r, g, b};
 }
 
-// Core's float HSV to RGB, the same code as XeWeCore Utils/Color.h xewe::color::hsv_to_rgb (2.3.x Solid,
-// Pulse and every mode's base colour). Copied rather than included so the header stays host-buildable;
-// tests/unit checks it against the core function for all 65,536 hue x sat inputs at every value tested.
+// Core's float HSV to RGB, XeWeCore Utils/Color.h xewe::color::hsv_to_rgb (2.3.x Solid, Pulse and every
+// mode's base colour). The core header is host-includable (CC4, core >= 2.1), so this is no copy.
 inline Rgb hsv_spectrum(uint8_t hue, uint8_t sat, uint8_t val) {
-    const float h_f = hue / 255.0f;
-    const float s_f = sat / 255.0f;
-    const float v_f = val / 255.0f;
-    float       r_f = 0.0f, g_f = 0.0f, b_f = 0.0f;
-    const int   i = static_cast<int>(h_f * 6.0f);
-    const float f = h_f * 6.0f - i;
-    const float p = v_f * (1.0f - s_f);
-    const float q = v_f * (1.0f - f * s_f);
-    const float t = v_f * (1.0f - (1.0f - f) * s_f);
-    switch (i % 6) {
-        case 0: r_f = v_f; g_f = t;   b_f = p;   break;
-        case 1: r_f = q;   g_f = v_f; b_f = p;   break;
-        case 2: r_f = p;   g_f = v_f; b_f = t;   break;
-        case 3: r_f = p;   g_f = q;   b_f = v_f; break;
-        case 4: r_f = t;   g_f = p;   b_f = v_f; break;
-        case 5: r_f = v_f; g_f = p;   b_f = q;   break;
-    }
-    return {static_cast<uint8_t>(r_f * 255.0f), static_cast<uint8_t>(g_f * 255.0f), static_cast<uint8_t>(b_f * 255.0f)};
+    const std::array<uint8_t, 3> c = xewe::color::hsv_to_rgb({hue, sat, val});
+    return {c[0], c[1], c[2]};
 }
 
 // a + (b - a) * amount / 255, per channel

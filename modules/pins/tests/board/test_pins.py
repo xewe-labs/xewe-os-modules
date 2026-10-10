@@ -21,3 +21,8 @@ def test_status(serial):
 def test_adc_read(serial):
     pin = os.environ.get("XEWE_TEST_PINS_ADC_PIN", "1")
     serial.command(f"$pins adc_read {pin}", expect=r"^\s*\d+\s*$", timeout=5)
+
+
+def test_claims_listing(serial):
+    # core 2.1 pin registry listing (owned by the pins module)
+    serial.command("$pins claims", expect=r"GPIO \d+: \w+|No GPIO claimed", timeout=5)

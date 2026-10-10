@@ -8,6 +8,7 @@
 #include <driver/gpio.h>
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <utility>
@@ -54,9 +55,10 @@ Fan::Fan(xewe::Os& host, FanConfig config)
         [this](xewe::span<const std::string> args){ add_w_tach_cmd(args); }
     });
 
+    // `set` stays ours (speed per pin); a non-numeric first argument is a table setting (curve_ms, ...)
     register_command({
         "set",
-        "Set the speed of one fan (0-255): <pwm_pin> <speed>",
+        "Set the speed of one fan (0-255): <pwm_pin> <speed>, or a setting: <key> <value>",
         "$fan set 9 255",
         2,
         [this](xewe::span<const std::string> args){ set_cmd(args); }
@@ -177,6 +179,7 @@ void Fan::loop() {
 void Fan::reset(const bool verbose, const bool do_restart, const bool keep_enabled) {
     clear_fans();
     default_curve();
+    curve_changed(nullptr);
     temperature_seen = false;
     temperature      = NAN;
     // wipes the "fan" namespace: the next boot sets up the default fans (FAN* defines) and curve again
@@ -200,6 +203,34 @@ std::string Fan::status(const bool verbose) const {
     s += curve_lines();
     if (verbose) os.serial.print(s);
     return s;
+}
+
+xewe::Settings Fan::settings() const {
+    static constexpr xewe::SettingDef table[] = {
+        xewe::setting<&Fan::curve_ms>("curve_ms", 100, 60000, 1000, "Curve -> fans period, ms"),
+        xewe::setting<&Fan::stale_ms>("stale_ms", 1000, 600000, 10000,
+                                      "No temperature for this long: offline (fans at the last point), ms"),
+    };
+    return {table, this};
+}
+
+void Fan::schema_extra(xewe::SchemaOut& out) const {
+    std::string pins;
+    for (const auto* f : fans) {
+        if (!pins.empty()) pins += ',';
+        pins += std::to_string(f->pin_pwm);
+        if (f->has_tach) pins += '/' + std::to_string(f->pin_tach);
+    }
+    out.row(R"("key":"fans","group":"fans","type":"pins","value":")" + pins +
+            R"(","doc":"PWM[/tach] pin per fan","set":"$fan add <pwm> | add_w_tach <pwm> <tach> | remove <pwm>")");
+    std::string spec;
+    char buf[24];
+    for (const auto& p : curve.points) {
+        snprintf(buf, sizeof(buf), "%s%.2f:%u", spec.empty() ? "" : ",", p.temp, static_cast<unsigned>(p.speed));
+        spec += buf;
+    }
+    out.row(R"("key":"points","group":"curve","type":"curve","value":")" + (spec.empty() ? std::string("none") : spec) +
+            R"(","doc":"T:P,... temperature C -> speed %","set":"$fan curve set <T:P,T:P,...|none>")");
 }
 
 std::string Fan::get_json() const {
@@ -294,9 +325,13 @@ Fan::FanData* Fan::get_fan(uint8_t pwm_pin) const {
 }
 
 void Fan::free_fan(FanData* f) {
-    if (f->has_tach) detachInterrupt(digitalPinToInterrupt(f->pin_tach));
+    if (f->has_tach) {
+        detachInterrupt(digitalPinToInterrupt(f->pin_tach));
+        xewe::pins::release(f->pin_tach, id.c_str());
+    }
     ledcWrite(f->pin_pwm, 0);
     ledcDetach(f->pin_pwm);
+    xewe::pins::release(f->pin_pwm, id.c_str());
     delete f;
 }
 
@@ -306,7 +341,17 @@ void Fan::clear_fans() {
 }
 
 Fan::FanData* Fan::create_fan(uint8_t pwm, uint8_t tach, uint8_t speed) {
-    if (!ledcAttach(pwm, PWM_FREQ, PWM_RES)) return nullptr;
+    // core pin registry: a pin another module holds is refused (and reported); ours are released in free_fan
+    if (!xewe::pins::claim(pwm, id.c_str())) return nullptr;
+    if (tach != NO_PIN && !xewe::pins::claim(tach, id.c_str())) {
+        xewe::pins::release(pwm, id.c_str());
+        return nullptr;
+    }
+    if (!ledcAttach(pwm, PWM_FREQ, PWM_RES)) {
+        xewe::pins::release(pwm, id.c_str());
+        if (tach != NO_PIN) xewe::pins::release(tach, id.c_str());
+        return nullptr;
+    }
 
     auto* f           = new FanData();
     f->pin_pwm        = pwm;
@@ -329,7 +374,8 @@ void Fan::load() {
 
     FanStore store;
     const bool stored  = os.nvs.read_flex(id, "data", store);
-    const bool foreign = stored && store.schema != FanStore::SCHEMA;
+    // has(): a missing `schema` field is foreign, not the struct default (CC7)
+    const bool foreign = stored && (!store.has("schema") || store.schema != FanStore::SCHEMA);
     if (stored && !foreign) {
         for (const auto& e : store.fans) create_fan(e.pwm, e.tach, e.speed);
         return;
@@ -378,15 +424,24 @@ bool Fan::curve_active() const {
 }
 
 void Fan::run_curve(uint32_t now, bool force) {
-    if (!curve_active() || (!force && now - last_curve_ms < config.curve_interval_ms)) return;
+    if (!curve_active() || (!force && now - last_curve_ms < curve_ms)) return;
     last_curve_ms = now;
     // a source that stopped reporting counts as offline: NaN -> last point (fail-safe hot)
-    const float t = (now - temperature_ms > config.temperature_stale_ms) ? NAN : temperature;
+    const float   t      = (now - temperature_ms > stale_ms) ? NAN : temperature;
+    const uint8_t before = curve_target_pct;
     curve_target_pct = curve_math::target_speed(curve.points, t);
     set_all(curve_math::speed_to_pwm(curve_target_pct), false);    // RAM only: no NVS write per second
+    if (curve_target_pct != before) {
+        const uint8_t pct = curve_target_pct;
+        listeners.notify([&](FanListener& l) { l.on_curve_target(pct, t, temperature_origin); });
+    }
 }
 
-bool Fan::curve_add(float temp, uint8_t speed_pct) {
+void Fan::curve_changed(const void* origin) {
+    listeners.notify([&](FanListener& l) { l.on_curve_changed(origin); });
+}
+
+bool Fan::curve_add(float temp, uint8_t speed_pct, const void* origin) {
     if (is_disabled() || !curve_math::temp_ok(temp) || speed_pct > 100) return false;
     auto& pts = curve.points;
     auto same = [temp](const FanCurvePoint& p) { return std::fabs(p.temp - temp) < curve_math::SAME_TEMP; };
@@ -399,10 +454,11 @@ bool Fan::curve_add(float temp, uint8_t speed_pct) {
     pts.push_back(p);
     std::sort(pts.begin(), pts.end(), by_temp);
     save_curve();
+    curve_changed(origin);
     return true;
 }
 
-bool Fan::curve_remove(float temp) {
+bool Fan::curve_remove(float temp, const void* origin) {
     if (is_disabled()) return false;
     auto& pts = curve.points;
     auto it = std::remove_if(pts.begin(), pts.end(), [temp](const FanCurvePoint& p) {
@@ -411,10 +467,11 @@ bool Fan::curve_remove(float temp) {
     if (it == pts.end()) return false;
     pts.erase(it, pts.end());
     save_curve();
+    curve_changed(origin);
     return true;
 }
 
-bool Fan::set_curve(std::vector<FanCurvePoint> points, bool persist) {
+bool Fan::set_curve(std::vector<FanCurvePoint> points, bool persist, const void* origin) {
     if (is_disabled()) return false;
     for (auto& p : points) p.speed = curve_math::clamp_speed(p.speed);     // > 100 % counts as 100 %
     std::sort(points.begin(), points.end(), by_temp);
@@ -422,6 +479,7 @@ bool Fan::set_curve(std::vector<FanCurvePoint> points, bool persist) {
     if (curve_math::validate_points(points) != curve_math::CurveError::ok) return false;
     curve.points = std::move(points);
     if (persist) save_curve();
+    curve_changed(origin);
     return true;
 }
 
@@ -447,7 +505,8 @@ void Fan::load_curve() {
     if (!os.nvs.read_flex(id, "curve", stored)) {
         default_curve();                                    // first boot: store the default curve
         save_curve();
-    } else if (!curve_math::schema_ok(stored.schema)) {
+    } else if (!stored.has("schema") || !curve_math::schema_ok(stored.schema)) {
+        // has(): a blob without a readable `schema` field is foreign too (CC7), not "schema 1 by default"
         // another firmware's layout: never reinterpret it, never overwrite it at boot
         os.serial.print("Fan: curve: " + curve_math::schema_message(stored.schema));
         default_curve();
@@ -521,8 +580,12 @@ void Fan::add_w_tach_cmd(xewe::span<const std::string> args) {
 }
 
 void Fan::set_cmd(xewe::span<const std::string> args) {
-    if (is_disabled(true)) return;
     uint8_t pwm, speed;
+    if (!args[0].empty() && !std::isdigit(static_cast<unsigned char>(args[0][0]))) {
+        apply_setting(args[0], args[1], true);      // `$fan set curve_ms 500`: the core's table set
+        return;
+    }
+    if (is_disabled(true)) return;
     if (xewe::str::parse_int(args[0], pwm) && xewe::str::parse_int(args[1], speed) && set(pwm, speed))
         os.serial.print("Speed updated.");
     else
@@ -568,7 +631,7 @@ void Fan::curve_cmd(xewe::span<const std::string> args) {
     }
     if (args.size() == 2 && sub == "remove") {
         float temp;
-        if (xewe::str::parse_float(args[1], temp) && curve_remove(temp)) os.serial.print("Curve point removed.");
+        if (xewe::str::parse_float(args[1], temp) && curve_remove(temp, nullptr)) os.serial.print("Curve point removed.");
         else                                                             os.serial.print("Failed to remove curve point.");
         return;
     }

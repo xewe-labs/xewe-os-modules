@@ -28,6 +28,27 @@ Time::Time(xewe::Os& host,
     });
 }
 
+xewe::Settings Time::settings() const {
+    static constexpr xewe::SettingDef table[] = {
+        xewe::setting<&Time::tz_gmt_str>("tz_gmt_str", 9, "GMT+00:00", "Timezone offset, GMT+HH:MM"),
+    };
+    return {table, this};
+}
+
+void Time::on_setting_changed(const xewe::SettingDef&) {
+    std::string normalized_gmt;
+    if (!xewe::str::parse_gmt_offset(tz_gmt_str, normalized_gmt)) {
+        os.serial.print("! $time: invalid timezone, use GMT+HH:MM (e.g. GMT-08:00); kept " + active_tz_string);
+        apply_setting("tz_gmt_str", active_tz_string);             // put the last good value back
+        return;
+    }
+    if (normalized_gmt != tz_gmt_str) {
+        apply_setting("tz_gmt_str", normalized_gmt);               // store the normal form; applies there
+        return;
+    }
+    apply_timezone(tz_gmt_str);
+}
+
 void Time::begin_routines_required() {
     get_time_from_web_init();
 }
@@ -81,7 +102,7 @@ void Time::begin_routines_init() {
         );
 
         if (os.serial.get_yn(prompt)) {
-            os.nvs.write<std::string>(id, "tz_gmt_str", gmt_str);
+            apply_setting("tz_gmt_str", gmt_str);
             os.serial.print("Timezone set");
             return;
         }
@@ -94,8 +115,7 @@ void Time::begin_routines_init() {
         std::string tz_input = os.serial.get_string("Enter your timezone offset (e.g. GMT-08:00)\nFor support visit:\nhttps://webbrowsertools.com/timezone/");
 
         if (xewe::str::parse_gmt_offset(tz_input, normalized_gmt)) {
-            apply_timezone(normalized_gmt);
-            os.nvs.write<std::string>(id, "tz_gmt_str", normalized_gmt);
+            apply_setting("tz_gmt_str", normalized_gmt);           // saves and applies
             os.serial.printf("Timezone set to %s\n", normalized_gmt.c_str());
             return;
         }
@@ -103,7 +123,7 @@ void Time::begin_routines_init() {
 }
 
 void Time::begin_routines_regular() {
-    apply_timezone(os.nvs.read<std::string>(id, "tz_gmt_str", "GMT+00:00"));
+    apply_timezone(tz_gmt_str);             // loaded by the core (table default GMT+00:00)
     if (get_time_from_web_wait(true)) {
         print_current_time();
     } else {
@@ -115,8 +135,7 @@ void Time::begin_routines_regular() {
 void Time::reset(bool verbose,
                  bool do_restart,
                  bool keep_enabled) {
-    os.nvs.remove(id, "tz_gmt_str");
-    Module::reset(verbose, do_restart, keep_enabled);
+    Module::reset(verbose, do_restart, keep_enabled);   // wipes the namespace, reloads tz_gmt_str
 }
 
 std::string Time::status(bool verbose) const {
@@ -190,9 +209,8 @@ void Time::apply_timezone(std::string_view gmt_offset_str) {
 
 void Time::cli_set_timezone(xewe::span<const std::string> args) {
     std::string normalized_gmt;
-    if (xewe::str::parse_gmt_offset(args[0], normalized_gmt)) {
-        apply_timezone(normalized_gmt);
-        os.nvs.write<std::string>(id, "tz_gmt_str", normalized_gmt);
+    // alias of `$time set tz_gmt_str <offset>`, kept with its own messages
+    if (xewe::str::parse_gmt_offset(args[0], normalized_gmt) && apply_setting("tz_gmt_str", normalized_gmt)) {
         os.serial.print("Timezone updated.");
     } else {
         os.serial.print("Invalid format. Use GMT±HH:MM (e.g., GMT-08:00).");

@@ -39,7 +39,7 @@ def test_curve_unit_gpp(tmp_path):
     assert run.returncode == 0, run.stdout + run.stderr
     summary = re.search(r"PASSED: (\d+) check\(s\), 0 failure\(s\)", run.stdout)
     assert summary, run.stdout
-    assert int(summary[1]) >= 87      # 73 from the cooling pad's curve test + 14 `curve set` parsing
+    assert int(summary[1]) >= 72      # 73 from the pad + 14 `curve set` parsing - 15 hex checks (now core CC3)
 
 
 @pytest.mark.unit

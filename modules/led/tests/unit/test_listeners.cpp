@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // xewe-os-modules/modules/led/tests/unit/test_listeners.cpp
 //
-// Unit test of src/Led/LedListener.h (standard library only): built and run by unit/test_led.py
-// with g++ -std=c++17 -Wall -Wextra -Werror. Prints one line per check, then
+// Unit test of src/Led/LedListener.h (the core's xewe::ListenerSet, standard library only): built and
+// run by unit/test_led.py with g++ -std=c++17 -Wall -Wextra -Werror -I <core>/src. Prints one line per check, then
 // "PASSED|FAILED: <n> check(s), <f> failure(s)"; exits non-zero on a failure.
 #include <cstdio>
 #include <cstring>
@@ -56,25 +56,25 @@ int main() {
     // capacity and registration
     {
         LedListeners set;
-        Recorder a, b, c, d, e;
-        CHECK(LedListeners::capacity() == 4);
+        Recorder a, b, c, d, f, g, e;
+        CHECK(LedListeners::capacity() == 6);   // led-os: web, homekit, alexa, home_assistant + 2 spare
         CHECK(set.size() == 0);
         CHECK(!set.add(nullptr));
-        CHECK(set.add(&a) && set.add(&b) && set.add(&c) && set.add(&d));
-        CHECK(set.size() == 4);
+        CHECK(set.add(&a) && set.add(&b) && set.add(&c) && set.add(&d) && set.add(&f) && set.add(&g));
+        CHECK(set.size() == 6);
         CHECK(!set.add(&e));                    // full: no heap, no growth
         CHECK(set.add(&a));                     // already registered: true, no duplicate
-        CHECK(set.size() == 4);
+        CHECK(set.size() == 6);
         CHECK(set.remove(&b));
         CHECK(!set.remove(&b));
         CHECK(!set.remove(&e));
-        CHECK(set.size() == 3);
+        CHECK(set.size() == 5);
         CHECK(set.add(&e));                     // reuses the freed slot
-        CHECK(set.size() == 4);
+        CHECK(set.size() == 6);
     }
     // fan-out reaches every listener exactly once, in registration order
     {
-        LedListenerSet<LedListener, 4> set;
+        xewe::ListenerSet<LedListener, 4> set;
         Ordered one(1), two(2), three(3);
         set.add(&one); set.add(&two); set.add(&three);
         order.clear();

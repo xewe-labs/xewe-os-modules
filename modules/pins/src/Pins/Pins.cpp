@@ -86,6 +86,51 @@ Pins::Pins(xewe::Os& host)
         2,
         [this](xewe::span<const std::string> args){ i2c_scan_cmd(args); }
     });
+
+    register_command({
+        "claims",
+        "List the GPIOs claimed in the core pin registry and their owners (strapping pins marked).",
+        "$pins claims",
+        0,
+        [this](xewe::span<const std::string> args){ claims_cmd(args); }
+    });
+
+    register_command({
+        "release",
+        "Release a GPIO that $pins claimed (pins of other modules are freed by their own remove).",
+        "$pins release 9",
+        1,
+        [this](xewe::span<const std::string> args){ release_cmd(args); }
+    });
+}
+
+bool Pins::take(int pin) {
+    return xewe::pins::claim(pin, id.c_str());      // false: out of range or held by another module (reported)
+}
+
+void Pins::claims_cmd(xewe::span<const std::string>) {
+    int n = 0;
+    for (int gpio = 0; gpio < xewe::pins::kMaxGpio; ++gpio) {
+        const char* owner = xewe::pins::owner_of(gpio);
+        if (!owner) continue;
+        os.serial.printf("GPIO %d: %s%s", gpio, owner, xewe::pins::is_strapping(gpio) ? " (strapping)" : "");
+        ++n;
+    }
+    if (n == 0) os.serial.print("No GPIO claimed");
+}
+
+void Pins::release_cmd(xewe::span<const std::string> args) {
+    int pin;
+    if (!xewe::str::parse_int(args[0], pin)) {
+        os.serial.print("Error: invalid <pin>");
+        return;
+    }
+    if (xewe::pins::release(pin, id.c_str())) {
+        os.serial.print("ok");
+    } else {
+        const char* owner = xewe::pins::owner_of(pin);
+        os.serial.printf("Error: GPIO %d is %s", pin, owner ? (std::string("held by ") + owner).c_str() : "not claimed");
+    }
 }
 
 std::string Pins::status(const bool verbose) const {
@@ -103,6 +148,7 @@ void Pins::gpio_read_cmd(xewe::span<const std::string> args) {
         os.serial.print("Error: invalid <pin>");
         return;
     }
+    if (!take(pin)) return;
     pinMode(pin, INPUT);
     os.serial.print(std::to_string(static_cast<int>(digitalRead(pin))));
 }
@@ -115,6 +161,7 @@ void Pins::gpio_write_cmd(xewe::span<const std::string> args) {
         os.serial.print("Error: invalid <pin> or <level>");
         return;
     }
+    if (!take(pin)) return;
     pinMode(pin, OUTPUT);
     digitalWrite(pin, lvl ? HIGH : LOW);
     os.serial.print("ok");
@@ -128,6 +175,7 @@ void Pins::gpio_toggle_cmd(xewe::span<const std::string> args) {
         os.serial.print("Error: invalid <pin>");
         return;
     }
+    if (!take(pin)) return;
     pinMode(pin, OUTPUT);
     int new_state = !digitalRead(pin);
     digitalWrite(pin, new_state);
@@ -142,6 +190,7 @@ void Pins::gpio_mode_cmd(xewe::span<const std::string> args) {
         os.serial.print("Error: invalid <pin>");
         return;
     }
+    if (!take(pin)) return;
     const std::string& m = args[1];
 
     if      (m == "out") pinMode(pin, OUTPUT);
@@ -165,6 +214,7 @@ void Pins::adc_read_cmd(xewe::span<const std::string> args) {
         os.serial.print("Error: invalid <pin>");
         return;
     }
+    if (!take(pin)) return;
     os.serial.print(std::to_string(analogRead(pin)));
 }
 
@@ -179,6 +229,7 @@ void Pins::pwm_setup_cmd(xewe::span<const std::string> args) {
         os.serial.print("Error: required <pin> <freq_hz> <res_bits>");
         return;
     }
+    if (!take(pin)) return;
 
     // Core v3: ledcAttach(pin, freq, resolution)
     if (!ledcAttach(pin, freq, bits)) {
@@ -197,6 +248,7 @@ void Pins::pwm_write_cmd(xewe::span<const std::string> args) {
         os.serial.print("Error: required <pin> <duty_value>");
         return;
     }
+    if (!take(pin)) return;
     // Core v3: ledcWrite(pin, duty)
     ledcWrite(pin, duty);
     os.serial.print("ok");
@@ -210,8 +262,13 @@ void Pins::pwm_stop_cmd(xewe::span<const std::string> args) {
         os.serial.print("Error: required <pin>");
         return;
     }
+    if (xewe::pins::owner_of(pin) && id != xewe::pins::owner_of(pin)) {
+        os.serial.printf("Error: GPIO %u is held by %s", static_cast<unsigned>(pin), xewe::pins::owner_of(pin));
+        return;
+    }
     ledcWrite(pin, 0);
     ledcDetach(pin);
+    xewe::pins::release(pin, id.c_str());
     os.serial.print("ok");
 }
 
@@ -224,6 +281,8 @@ void Pins::i2c_scan_cmd(xewe::span<const std::string> args) {
         return;
     }
 
+    if (!take(sda)) return;
+    if (!take(scl)) { xewe::pins::release(sda, id.c_str()); return; }
     Wire.begin(sda, scl);
     int found = 0;
     for (uint8_t addr = 1; addr < 0x78; ++addr) {
@@ -236,4 +295,6 @@ void Pins::i2c_scan_cmd(xewe::span<const std::string> args) {
         }
     }
     if (found == 0) os.serial.print("No I2C devices found");
+    xewe::pins::release(sda, id.c_str());
+    xewe::pins::release(scl, id.c_str());
 }

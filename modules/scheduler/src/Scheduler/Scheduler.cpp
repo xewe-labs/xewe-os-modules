@@ -34,6 +34,26 @@ Scheduler::Scheduler(xewe::Os& host,
         1,
         [this](xewe::span<const std::string> args) { cli_remove(args); }
     });
+
+    // no settings table, so the core registers no `schema`: ours prints the extra rows
+    register_command({
+        "schema",
+        "Print the schedules as schema rows (JSON Lines)",
+        "$schedule schema",
+        0,
+        [this](xewe::span<const std::string>) {
+            xewe::SchemaOut out(os.serial);
+            print_schema(out);
+            os.serial.printf("{\"end\":\"%s\",\"count\":%u}", id.c_str(), static_cast<unsigned>(out.count()));
+        }
+    });
+}
+
+void Scheduler::schema_extra(xewe::SchemaOut& out) const {
+    for (const ScheduleBlock& b : data.schedules) {
+        out.row("\"key\":\"" + std::to_string(b.id) + "\",\"group\":\"schedule\",\"type\":\"schedule\",\"value\":" +
+                b.as_json_str() + ",\"set\":\"$schedule add <start> <end> <day> <RRGGBB> \\\"<cmds>\\\" | remove <id>\"");
+    }
 }
 void Scheduler::begin_routines_init() {
     os.serial.print("Will be available after auto-reboot.");

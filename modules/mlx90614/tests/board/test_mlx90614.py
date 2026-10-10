@@ -34,6 +34,13 @@ def test_status(serial):
     serial.command(f"${ID} status", expect=rf"{NAME} module (enabled|disabled)", timeout=5)
 
 
+def test_settings_table(serial):
+    # core 2.1: addr/sda/scl rows; out-of-range refused by the core
+    serial.command("$mlx90614 get addr", expect=r"addr=\d+", timeout=5)
+    serial.command("$mlx90614 set addr 200", expect=r"! \$mlx90614 set addr: expected u8 in \[1, 127\]", timeout=5)
+    serial.command("$mlx90614 schema", expect=r'\{"end":"mlx90614","count":3\}', timeout=5)
+
+
 def test_set_addr_validation(serial):
     addr, _, _ = _current(serial)
     # 0x00 and anything above 0x7F are rejected; so is a non-hex token

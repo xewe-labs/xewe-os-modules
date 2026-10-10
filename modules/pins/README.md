@@ -1,6 +1,6 @@
 # pins — GPIO, ADC, PWM and I2C from the command line
 
-XeWe OS module · created 2026-09-15 (split out of xewe-os, where it was developed from 2026-01) · Solo: Max Dokukin · Status: Active (0.2.0)
+XeWe OS module · created 2026-09-15 (split out of xewe-os, where it was developed from 2026-01) · Solo: Max Dokukin · Status: Active (0.3.0)
 
 ## Overview
 
@@ -43,13 +43,17 @@ Direct hardware access without writing code.
 | **`pwm_write`** | Set the duty cycle (max `2^bits - 1`). | `$pins pwm_write <pin> <duty>` |
 | **`pwm_stop`** | Stop PWM (duty 0) and detach the timer. | `$pins pwm_stop <pin>` |
 | **`i2c_scan`** | Init I2C on the given pins and scan 0x01-0x77. | `$pins i2c_scan <sda> <scl>` |
+| **`claims`** | Every GPIO in the core pin registry with its owner (`GPIO 3: fan`), strapping pins marked. | `$pins claims` |
+| **`release`** | Free a GPIO that `$pins` claimed. | `$pins release 9` |
+
+Core 2.1 pin registry: every command claims its pin for `pins` on first use and refuses a pin another module holds (`! GPIO 3 already claimed by fan, refused for pins`), so `$pins` cannot reconfigure a fan, sensor or button pin. `pwm_stop` and `release` free it; `i2c_scan` frees its two pins after the scan.
 
 ### Requirements
 
 | | |
 |---|---|
 | Modules | none |
-| Libraries | XeWeCore >=2.0.0,<3.0.0 (Arduino libraries bundled with the esp32 core are not listed) |
+| Libraries | XeWeCore >=2.1.0,<3.0.0 (Arduino libraries bundled with the esp32 core are not listed) |
 | Boards | ESP32-C3, ESP32-C6, ESP32-S3 (arduino-esp32 3.x) |
 
 Metadata and dependencies are declared in [`module.properties`](module.properties).

@@ -1,6 +1,6 @@
 # mlx90614 — MLX90614 contactless I2C temperature sensor
 
-XeWe OS module · extracted 2026-10-09 from the XeWe laptop cooling pad (MIGRATION.md CP1/CP10) · Solo: Max Dokukin · Status: Draft (0.1.0)
+XeWe OS module · extracted 2026-10-09 from the XeWe laptop cooling pad (MIGRATION.md CP1/CP10) · Solo: Max Dokukin · Status: Draft (0.2.0)
 
 ## Overview
 
@@ -19,15 +19,18 @@ for [XeWe OS](https://github.com/xewe-labs/xewe-os), built on
 - `scan` is bounded: 10 ms per probe, 1.5 s in total, and it stops after 3 bus errors/timeouts in a row
   (a bare bus without pull-ups used to block the console for tens of seconds)
 - Value mapping in `src/Mlx90614/Convert.h`, pure C++ (no Arduino), host-tested with g++
-- Settings in one FlexData blob (`mlx90614/data`, schema 1); a blob with another schema is never
-  overwritten at boot
-- First boot: pins and address from the `MLX90614_*` build defines
+- Settings table (core 2.1): `addr` u8 1-127, `sda`/`scl` u8 (255 = none), each its own NVS key;
+  `$mlx90614 set|get|schema`. The 0.1 blob (`mlx90614/data`) is copied to them once and removed (only
+  when it has a `schema` field of 1, FlexData `has()`); any other blob is left untouched
+- First boot and `reset`: pins and address from the `MLX90614_*` build defines (the table defaults)
+- SDA/SCL are claimed in the core pin registry (`xewe::pins`) while the bus runs; a pin another
+  module holds is refused
 
 ## How it works
 
 ```
 loop(): every 500 ms (5 s offline) → read RAM 0x07 (object), 0x06 (ambient) → raw_to_celsius → listeners
-$mlx90614 set_pins 4 5 → validate → NVS → Wire.end/begin → poll → "Pins updated to SDA=4 SCL=5."
+$mlx90614 set_pins 4 5 → validate → apply_setting sda, scl (NVS) → release/claim → Wire.end/begin → poll → "Pins updated to SDA=4 SCL=5."
 ```
 
 - **`Mlx90614` class** (`src/Mlx90614/`): a `xewe::Module` with id `mlx90614`, name `MLX90614`
@@ -59,6 +62,7 @@ pull-ups unless a JTAG-select eFuse is burnt). 255 = not configured.
 | **`scan`** | Scan the I2C bus (bounded, see above). | `$mlx90614 scan` |
 | **`set_addr`** | Set the sensor address (hex, 0x01-0x7F); persisted. | `$mlx90614 set_addr 0x5A` |
 | **`set_pins`** | Set SDA/SCL (two different output-capable GPIOs), restart the bus; persisted. | `$mlx90614 set_pins 4 5` |
+| **`set`** / **`get`** / **`schema`** | Table rows `addr` (decimal), `sda`, `scl` (core 2.1); `set sda`/`set scl` restart the bus. | `$mlx90614 set addr 91` |
 | **`print_json`** | `{"module","online","object_temp","ambient_temp","i2c_address","sda_pin","scl_pin","read_errors"}` (temperatures `null` while offline) | `$mlx90614 print_json` |
 | `status` / `reset` / `enable` / `disable` | generic module commands | `$mlx90614 status` |
 
@@ -71,7 +75,8 @@ mlx90614.is_online();  mlx90614.get_error_count();  mlx90614.set_i2c_address(0x5
 struct MyListener : Mlx90614Listener {
     void on_temperature(float object_c, float ambient_c, bool online) override { /* main loop; keep it short */ }
 } my_listener;
-mlx90614.add_listener(&my_listener);   // false when all MLX90614_LISTENERS_MAX (4) slots are taken
+mlx90614.listeners.add(&my_listener);  // xewe::ListenerSet; false when all MLX90614_LISTENERS_MAX (4) slots are taken
+                                       // (add_listener/remove_listener: 0.1 names, kept)
 ```
 
 Listeners are called after every poll (also offline: `online = false`, both temperatures NaN), from
@@ -82,7 +87,7 @@ the main loop.
 | | |
 |---|---|
 | Modules | none |
-| Libraries | XeWeCore >=2.0.0,<3.0.0; ArduinoJson (`depends_libraries`, pinned in `libraries.toml`); Wire (esp32 core) |
+| Libraries | XeWeCore >=2.1.0,<3.0.0; ArduinoJson (`depends_libraries`, pinned in `libraries.toml`); Wire (esp32 core) |
 | Boards | ESP32-C3, ESP32-C6, ESP32-S3 (arduino-esp32 3.3.12) |
 
 Metadata and dependencies are declared in [`module.properties`](module.properties).

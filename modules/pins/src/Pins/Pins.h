@@ -15,6 +15,12 @@ public:
     std::string                 status                      (const bool verbose = false) const override;
 
 private:
+    // core pin registry (core 2.1): a pin is claimed for `pins` on first use; refused (and reported)
+    // when another module holds it, so `$pins` never reconfigures a fan, sensor or button pin
+    bool                        take                        (int pin);
+
+    void                        claims_cmd                  (xewe::span<const std::string> args);
+    void                        release_cmd                 (xewe::span<const std::string> args);
     void                        gpio_read_cmd               (xewe::span<const std::string> args);
     void                        gpio_write_cmd              (xewe::span<const std::string> args);
     void                        gpio_toggle_cmd             (xewe::span<const std::string> args);

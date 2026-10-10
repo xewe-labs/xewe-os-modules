@@ -1,6 +1,6 @@
 # time — network time and automatic timezone detection
 
-XeWe OS module · created 2026-09-15 (split out of xewe-os, where it was developed from 2026-07) · Solo: Max Dokukin · Status: Active (0.2.0)
+XeWe OS module · created 2026-09-15 (split out of xewe-os, where it was developed from 2026-07) · Solo: Max Dokukin · Status: Active (0.3.0)
 
 ## Overview
 
@@ -36,6 +36,7 @@ later boots: apply stored offset → SNTP sync wait (≤ 50 × 200 ms) → print
 | Command | Description | Sample Usage |
 | :--- | :--- | :--- |
 | **`set_zone`** | Set the timezone offset. | `$time set_zone GMT-08:00` |
+| **`set`** / **`get`** / **`schema`** | Settings table (core 2.1): `tz_gmt_str` (normalised, applied at once; an invalid value is put back). `set_zone` is its alias. | `$time set tz_gmt_str GMT-8` |
 | **`fetch`** | Sync the current time from the network. | `$time fetch` |
 
 ### Requirements
@@ -43,7 +44,7 @@ later boots: apply stored offset → SNTP sync wait (≤ 50 × 200 ms) → print
 | | |
 |---|---|
 | Modules | [wifi](../wifi) |
-| Libraries | XeWeCore >=2.0.0,<3.0.0 (Arduino libraries bundled with the esp32 core are not listed) |
+| Libraries | XeWeCore >=2.1.0,<3.0.0 (Arduino libraries bundled with the esp32 core are not listed) |
 | Boards | ESP32-C3, ESP32-C6, ESP32-S3 (arduino-esp32 3.x) |
 
 Metadata and dependencies are declared in [`module.properties`](module.properties).

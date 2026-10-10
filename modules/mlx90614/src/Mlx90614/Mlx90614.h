@@ -5,7 +5,8 @@
 // The mlx90614 module: an MLX90614 contactless I2C temperature sensor (object and ambient), polled
 // every 500 ms (5 s while it does not answer). Error reads (short read, the sensor's error flag) are
 // reported as offline, never as a temperature. Listeners (Mlx90614Listener) get every poll result,
-// e.g. to feed the fan module's curve. NVS namespace `mlx90614`, key `data`.
+// e.g. to feed the fan module's curve (`mlx90614.listeners.add(&l)`). NVS namespace `mlx90614`: the
+// settings table rows `addr`, `sda`, `scl` (core 2.1); the 0.1 blob `data` is migrated once and removed.
 #pragma once
 
 #include <XeWeCore.h>
@@ -19,7 +20,8 @@
 
 #include "Convert.h"
 
-// ---- Build-time defaults, used on the module's first boot only (then NVS, `$mlx90614 set_pins/set_addr`)
+// ---- Build-time defaults = the table defaults (first boot, `reset`); then NVS (`$mlx90614 set_pins/set_addr`,
+// `$mlx90614 set sda|scl|addr <value>`). Must be constants: the table is checked at compile time.
 // 255 = pin not configured. C3/C6: the XeWe cooling pad's wiring; S3: free, non-strapping GPIOs.
 #if defined(CONFIG_IDF_TARGET_ESP32S3)
 #  ifndef MLX90614_SDA
@@ -45,22 +47,22 @@
 
 // Poll results. Called from the main loop after every poll (500 ms online, 5 s offline) and after
 // `read`/`set_pins`/`set_addr`. Offline: online = false and both temperatures NaN. Keep it short.
+// A reading has no origin (nobody but the sensor causes it), so the core's origin argument is omitted.
 struct Mlx90614Listener {
     virtual ~Mlx90614Listener() = default;
     virtual void on_temperature(float object_c, float ambient_c, bool online) = 0;
 };
 
+// Pins and address left this struct in 0.2.0: they are table rows (defaults MLX90614_SDA/SCL/ADDR).
 struct Mlx90614Config {
-    uint8_t                     sda_pin                     = MLX90614_SDA;
-    uint8_t                     scl_pin                     = MLX90614_SCL;
-    uint8_t                     i2c_address                 = MLX90614_ADDR;
     uint32_t                    poll_interval_ms            = 500;
     uint32_t                    offline_poll_interval_ms    = 5000;     // back off while no sensor answers
     uint16_t                    scan_budget_ms              = 1500;     // `scan` stops after this long
     uint16_t                    scan_probe_timeout_ms       = 10;       // Wire timeout per probe during `scan`
 };
 
-// Stored settings (NVS namespace "mlx90614", key "data"). Append only; bump `schema` on a change.
+// 0.1.x stored settings (NVS namespace "mlx90614", key "data"): read once at boot to migrate them to
+// the table keys, then removed. Never written again.
 struct Mlx90614Store : xewe::FlexData<Mlx90614Store> {
     static constexpr uint8_t    SCHEMA                      = 1;
     uint8_t                     schema                      = SCHEMA;
@@ -87,6 +89,7 @@ public:
                                                              const bool do_restart   = true,
                                                              const bool keep_enabled = true) override;
     std::string                 status                      (const bool verbose = false)    const override;
+    xewe::Settings              settings                    ()                              const override;
 
     // object temperature in °C; NaN while disabled or offline (never an error value such as 1037 C)
     float                       get_temp                    ()                              const;
@@ -98,9 +101,15 @@ public:
     // {"module","online","object_temp"|null,"ambient_temp"|null,"i2c_address","sda_pin","scl_pin","read_errors"}
     std::string                 get_json                    ()                              const;
 
-    // up to MLX90614_LISTENERS_MAX, no heap; false when full or null
-    bool                        add_listener                (Mlx90614Listener* listener);
-    bool                        remove_listener             (Mlx90614Listener* listener);
+    // up to MLX90614_LISTENERS_MAX, no heap (core 2.1 ListenerSet): listeners.add(&l) / remove(&l)
+    xewe::ListenerSet<Mlx90614Listener, MLX90614_LISTENERS_MAX> listeners;
+    // 0.1 names, kept: listeners.add / listeners.remove
+    bool                        add_listener                (Mlx90614Listener* l)           { return listeners.add(l); }
+    bool                        remove_listener             (Mlx90614Listener* l)           { return listeners.remove(l); }
+
+protected:
+    // `addr`: re-poll; `sda`/`scl`: restart the bus on the new pins (claims follow)
+    void                        on_setting_changed          (const xewe::SettingDef& def)   override;
 
 private:
     bool                        pins_configured             ()                              const;
@@ -108,7 +117,8 @@ private:
     float                       read_i2c_temp               (uint8_t register_address);
     void                        poll                        ();
     void                        notify                      ();
-    void                        save                        ()                              const;
+    void                        migrate_blob                ();
+    void                        release_pins                ();
     int                         scan                        ();
 
     void                        read_cmd                    (xewe::span<const std::string> args);
@@ -125,11 +135,12 @@ private:
     uint32_t                    last_read_time              {0};
     uint32_t                    read_errors                 {0};        // error flag or short read (not a missing sensor)
 
-    uint8_t                     sda_pin                     {255};
+    uint8_t                     sda_pin                     {255};      // table rows `sda`, `scl`, `addr`
     uint8_t                     scl_pin                     {255};
     uint8_t                     i2c_address                 {0x5A};
-
-    Mlx90614Listener*           listeners[MLX90614_LISTENERS_MAX] = {};
+    uint8_t                     bus_sda                     {255};      // the pins claimed for the running bus
+    uint8_t                     bus_scl                     {255};
+    bool                        batch                       {false};    // set_pins/migration: one bus restart
 
     static constexpr uint8_t    MLX_RAM_TA                  = 0x06;
     static constexpr uint8_t    MLX_RAM_TOBJ1               = 0x07;

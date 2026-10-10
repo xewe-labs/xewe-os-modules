@@ -135,28 +135,7 @@ int main() {
         CHECK(state && flips == 2);                          // on again only at 22.0 C
     }
 
-    // ---- colours: parse and cold/hot selection ----
-    {
-        uint8_t r = 1, g = 1, b = 1;
-        CHECK(parse_hex_color("#12abEF", r, g, b) && r == 0x12 && g == 0xAB && b == 0xEF);
-        CHECK(!parse_hex_color("red", r, g, b));
-        CHECK(!parse_hex_color("#12345", r, g, b));
-        CHECK(!parse_hex_color("#12345G", r, g, b));
-        CHECK(!parse_hex_color("123456#", r, g, b));
-        // normalize_hex_color: with or without '#', stored as upper-case "#RRGGBB" (R1 review)
-        std::string n;
-        CHECK(normalize_hex_color("#00ffff", n) && n == "#00FFFF");
-        CHECK(normalize_hex_color("ff8000", n) && n == "#FF8000");
-        CHECK(normalize_hex_color("AbCdEf", n) && n == "#ABCDEF");
-        n = "keep";
-        CHECK(!normalize_hex_color("", n) && n == "keep");
-        CHECK(!normalize_hex_color("#", n) && n == "keep");
-        CHECK(!normalize_hex_color("##00ffff", n) && n == "keep");
-        CHECK(!normalize_hex_color("0x1234", n) && n == "keep");
-        CHECK(!normalize_hex_color("-12345", n) && n == "keep");
-        CHECK(!normalize_hex_color("fff", n) && n == "keep");
-        CHECK(r == 0x12 && g == 0xAB && b == 0xEF);          // failed parses leave the outputs alone
-    }
+    // ---- colours: cold/hot selection (hex parsing moved to the core, xewe::str::parse_hex_color) ----
     {
         const Rgb cold{0, 255, 255}, hot{255, 0, 0};
         CHECK(same(led_colour(def, 10.0f, cold, hot), cold));

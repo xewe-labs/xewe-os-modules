@@ -37,6 +37,7 @@ struct ButtonData : xewe::FlexData<ButtonData> {
     uint32_t                last_debounce_time = 0;
     int                     last_steady_state  = 0;
     int                     last_flicker_state = 0;
+    bool                    claimed            = false;   // pin held in the core registry (else ignored)
 
     static constexpr auto fields() {
         return std::make_tuple(
@@ -72,8 +73,11 @@ public:
                                                     const bool keep_enabled = true) override;
 
     std::string             status                 (const bool verbose = false)     const override;
+    // core 2.1: no plain settings (no table); every mapping is an extra schema row ("group":"button")
+    void                    schema_extra           (xewe::SchemaOut& out)           const override;
 
-    void                    add                    (uint8_t            pin,
+    // false when the pin is held by another module (core pin registry, xewe::pins)
+    bool                    add                    (uint8_t            pin,
                                                     std::string        command,
                                                     ButtonInputMode    type,
                                                     ButtonTriggerEvent event,

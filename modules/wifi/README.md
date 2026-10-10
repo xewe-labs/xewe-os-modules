@@ -1,6 +1,6 @@
 # wifi — joins a WiFi network and keeps it connected
 
-XeWe OS module · created 2026-09-15 (split out of xewe-os, where it was developed from 2026-01) · Solo: Max Dokukin · Status: Active (0.2.0)
+XeWe OS module · created 2026-09-15 (split out of xewe-os, where it was developed from 2026-01) · Solo: Max Dokukin · Status: Active (0.3.0)
 
 ## Overview
 
@@ -37,13 +37,14 @@ loop:        while not connected → 5 s "disable and reset?" prompt → reconne
 | **`connect`** | Connect or reconnect; prompts for a network if needed. | `$wifi connect` |
 | **`disconnect`** | Disconnect from WiFi. | `$wifi disconnect` |
 | **`scan`** | List available networks. | `$wifi scan` |
+| **`set`** / **`get`** / **`schema`** | Settings table (core 2.1): `ssid` (str ≤ 32), `psw` (str ≤ 63, secret: shown as `********`). Same NVS keys as before; `$wifi connect` uses them. | `$wifi set ssid "My Net"` |
 
 ### Requirements
 
 | | |
 |---|---|
 | Modules | none |
-| Libraries | XeWeCore >=2.0.0,<3.0.0 (Arduino libraries bundled with the esp32 core are not listed) |
+| Libraries | XeWeCore >=2.1.0,<3.0.0 (Arduino libraries bundled with the esp32 core are not listed) |
 | Boards | ESP32-C3, ESP32-C6, ESP32-S3 (arduino-esp32 3.x) |
 
 Metadata and dependencies are declared in [`module.properties`](module.properties).

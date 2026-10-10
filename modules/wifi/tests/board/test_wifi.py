@@ -20,3 +20,9 @@ def test_status(serial):
 def test_scan_lists_networks(serial):
     serial.command("$wifi scan", expect=r"Scanning WiFi networks", timeout=5)
     serial.expect(r"^\s*0\. \S", timeout=20)   # numbered, de-duplicated SSIDs
+
+
+def test_settings_table_masks_password(serial):
+    # core 2.1: ssid + psw (SECRET: never printed)
+    serial.command("$wifi get psw", expect=r"psw=\*{8}", timeout=5)
+    serial.command("$wifi schema", expect=r'\{"end":"wifi","count":2\}', timeout=5)

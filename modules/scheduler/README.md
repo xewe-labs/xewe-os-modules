@@ -1,6 +1,6 @@
 # scheduler — run stored commands on a weekly schedule
 
-XeWe OS module · created 2026-09-15 (split out of xewe-os, where it was developed from 2026-07) · Solo: Max Dokukin · Status: Active (0.2.0)
+XeWe OS module · created 2026-09-15 (split out of xewe-os, where it was developed from 2026-07) · Solo: Max Dokukin · Status: Active (0.3.0)
 
 ## Overview
 
@@ -38,13 +38,14 @@ Times are minutes from midnight (0-1439), days are 0 (Monday) to 6 (Sunday); sev
 | :--- | :--- | :--- |
 | **`add`** | Add a schedule: `<start> <end> <day> <RRGGBB> "<cmd1\|cmd2>"`. | `$schedule add 480 1020 1 FF0000 "$pins gpio_write 8 1"` |
 | **`remove`** | Remove a schedule by id. | `$schedule remove 1` |
+| **`schema`** | Every schedule as a JSON Lines row (`"group":"schedule"`), then `{"end":"schedule","count":N}` (core 2.1; also in `$system schema`). | `$schedule schema` |
 
 ### Requirements
 
 | | |
 |---|---|
 | Modules | [time](../time) (and, through it, [wifi](../wifi)) |
-| Libraries | XeWeCore >=2.0.0,<3.0.0 (Arduino libraries bundled with the esp32 core are not listed) |
+| Libraries | XeWeCore >=2.1.0,<3.0.0 (Arduino libraries bundled with the esp32 core are not listed) |
 | Boards | ESP32-C3, ESP32-C6, ESP32-S3 (arduino-esp32 3.x) |
 
 Metadata and dependencies are declared in [`module.properties`](module.properties).

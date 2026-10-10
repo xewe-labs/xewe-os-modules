@@ -1,6 +1,6 @@
 # buttons — bind CLI commands to physical buttons
 
-XeWe OS module · created 2026-09-15 (split out of xewe-os, where it was developed from 2026-01) · Solo: Max Dokukin · Status: Active (0.2.0)
+XeWe OS module · created 2026-09-15 (split out of xewe-os, where it was developed from 2026-01) · Solo: Max Dokukin · Status: Active (0.3.0)
 
 ## Overview
 
@@ -36,13 +36,16 @@ loop: digitalRead → stable for debounce_ms? → state changed? → event match
 | :--- | :--- | :--- |
 | **`add`** | Add a mapping: `<pin> "<cmd>" <pullup\|pulldown> <on_press\|on_release\|on_change> <debounce_ms>`. | `$buttons add 9 "$system reboot" pullup on_press 50` |
 | **`remove`** | Remove a mapping by its id (see `$buttons status`). | `$buttons remove 0` |
+| **`schema`** | Every mapping as a JSON Lines row (`"group":"button"`), then the end line (core 2.1; also in `$system schema`). | `$buttons schema` |
+
+Pins are claimed in the core pin registry (`xewe::pins`, core 2.1): `add` refuses a pin another module holds; a stored mapping whose pin is taken is reported at boot and ignored; `remove` releases the pin once no mapping uses it.
 
 ### Requirements
 
 | | |
 |---|---|
 | Modules | none |
-| Libraries | XeWeCore >=2.0.0,<3.0.0 (Arduino libraries bundled with the esp32 core are not listed) |
+| Libraries | XeWeCore >=2.1.0,<3.0.0 (Arduino libraries bundled with the esp32 core are not listed) |
 | Boards | ESP32-C3, ESP32-C6, ESP32-S3 (arduino-esp32 3.x) |
 
 Metadata and dependencies are declared in [`module.properties`](module.properties).

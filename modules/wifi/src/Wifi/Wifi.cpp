@@ -38,6 +38,14 @@ Wifi::Wifi(xewe::Os& host)
     });
 }
 
+xewe::Settings Wifi::settings() const {
+    static constexpr xewe::SettingDef table[] = {
+        xewe::setting<&Wifi::stored_ssid>("ssid", 32, "", "Network name; used by $wifi connect"),
+        xewe::setting<&Wifi::stored_psw> ("psw", 63, "", "Network password", xewe::SettingDef::SECRET),
+    };
+    return {table, this};
+}
+
 void Wifi::begin_routines_required() {
     WiFi.mode(WIFI_STA);
     WiFi.setHostname(os.system.get_device_name().c_str());
@@ -144,8 +152,9 @@ bool Wifi::connect(bool prompt_for_credentials) {
                 DBG_PRINTLN(Wifi, "connect(): attempting join() with user credentials");
                 if (join(ssid, pwd, 10000, 1)) {
                     DBG_PRINTLN(Wifi, "connect(): join() succeeded with user credentials");
-                    os.nvs.write<std::string>(id, "ssid", ssid);
-                    os.nvs.write<std::string>(id, "psw", pwd);
+                    // validated + saved by the table (an over-long value is refused and not stored)
+                    apply_setting("ssid", ssid);
+                    apply_setting("psw", pwd);
                     return true;
                 }
             }
@@ -214,7 +223,7 @@ std::string Wifi::get_ssid() const {
     DBG_PRINTLN(Wifi, "get_ssid()");
     if (is_disabled(true)) return {};
     if (is_disconnected(true)) return {};
-    return os.nvs.read<std::string>(id, "ssid");
+    return stored_ssid;
 }
 
 std::string Wifi::get_mac_address() const {
@@ -326,9 +335,8 @@ bool Wifi::read_stored_credentials(std::string& ssid,
                                    std::string& password) {
     DBG_PRINTLN(Wifi, "read_stored_credentials()");
     if (is_disabled(true)) return false;
-    DBG_PRINTLN(Wifi, "read_stored_credentials(): reading NVS");
-    ssid     = os.nvs.read<std::string>(id, "ssid");
-    password = os.nvs.read<std::string>(id, "psw");
+    ssid     = stored_ssid;                 // loaded by the core from NVS at begin
+    password = stored_psw;
     DBG_PRINTF(Wifi, "read_stored_credentials(): %s\n", ssid.length() > 0 ? "found" : "none");
     return ssid.length() > 0;
 }

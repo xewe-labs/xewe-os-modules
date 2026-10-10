@@ -30,6 +30,10 @@ public:
 
     std::string              status                  (const bool verbose = false)     const override;
 
+    // core 2.1 table: `ssid` (str 32) and `psw` (str 63, SECRET: never printed). Same NVS keys as
+    // 0.2, so stored credentials load unchanged. `$wifi set ssid "My Net"` + `$wifi connect`.
+    xewe::Settings           settings                ()                               const override;
+
     // other methods
     bool                     connect                 (bool prompt_for_credentials);
     bool                     disconnect              (bool verbose = false);
@@ -51,4 +55,7 @@ private:
                                                       std::string& password);
     uint8_t                  prompt_credentials      (std::string& ssid,
                                                       std::string& password);
+
+    std::string              stored_ssid;            // table rows (loaded by the core at begin)
+    std::string              stored_psw;
 };

@@ -64,28 +64,19 @@ Mlx90614::Mlx90614(xewe::Os& host, Mlx90614Config config)
     });
 }
 
+xewe::Settings Mlx90614::settings() const {
+    // keys are new in 0.2.0 (the 0.1 blob `data` is migrated by migrate_blob); 255 = pin not configured
+    static constexpr xewe::SettingDef table[] = {
+        xewe::setting<&Mlx90614::i2c_address>("addr", 0x01, 0x7F, MLX90614_ADDR, "I2C address (decimal; set_addr takes hex)"),
+        xewe::setting<&Mlx90614::sda_pin>    ("sda", 0, 255, MLX90614_SDA, "I2C SDA GPIO, 255 = none"),
+        xewe::setting<&Mlx90614::scl_pin>    ("scl", 0, 255, MLX90614_SCL, "I2C SCL GPIO, 255 = none"),
+    };
+    return {table, this};
+}
+
 void Mlx90614::begin_routines_required() {
-    Mlx90614Store store;
-    const bool stored = os.nvs.read_flex(id, "data", store);
-    if (stored && store.schema == Mlx90614Store::SCHEMA) {
-        i2c_address = store.i2c_address;
-        sda_pin     = store.sda_pin;
-        scl_pin     = store.scl_pin;
-    } else {
-        // first boot: the defaults (MLX90614_* defines), then store them. Another firmware's layout
-        // (schema mismatch): the defaults from RAM only, the stored blob is left untouched until the
-        // next change.
-        i2c_address = mlx90614_fx::valid_address(config.i2c_address) ? config.i2c_address : mlx90614_fx::DEFAULT_ADDR;
-        sda_pin     = config.sda_pin;
-        scl_pin     = config.scl_pin;
-        if (stored) {
-            os.serial.print("MLX90614: stored settings have schema " + std::to_string(store.schema) +
-                            ", this firmware reads schema " + std::to_string(Mlx90614Store::SCHEMA) +
-                            "; using the defaults (the stored blob is left untouched until the next change)");
-        } else {
-            save();
-        }
-    }
+    // the core loaded addr/sda/scl (table default, then NVS) before this routine
+    migrate_blob();
 
     if (!pins_configured()) {
         os.serial.print("MLX90614: I2C pins not configured; use $mlx90614 set_pins <sda> <scl>");
@@ -115,9 +106,8 @@ void Mlx90614::reset(const bool verbose, const bool do_restart, const bool keep_
     sensor_online       = false;
     if (bus_started) Wire.end();
     bus_started         = false;
-    sda_pin             = NO_PIN;
-    scl_pin             = NO_PIN;
-    // wipes the "mlx90614" namespace: the next boot uses the MLX90614_* defaults again
+    release_pins();
+    // wipes the "mlx90614" namespace and reloads the table defaults (MLX90614_* defines)
     Module::reset(verbose, do_restart, keep_enabled);
 }
 
@@ -152,46 +142,44 @@ float Mlx90614::get_ambient_temp() const {
     return (!is_disabled() && sensor_online) ? cached_ambient_temp : NAN;
 }
 
-bool Mlx90614::add_listener(Mlx90614Listener* listener) {
-    if (listener == nullptr) return false;
-    for (auto* l : listeners) if (l == listener) return true;
-    for (auto*& l : listeners) {
-        if (l == nullptr) { l = listener; return true; }
-    }
-    return false;
-}
-
-bool Mlx90614::remove_listener(Mlx90614Listener* listener) {
-    for (auto*& l : listeners) {
-        if (l != nullptr && l == listener) { l = nullptr; return true; }
-    }
-    return false;
-}
-
 void Mlx90614::notify() {
     const float obj = sensor_online ? cached_object_temp : NAN;
     const float amb = sensor_online ? cached_ambient_temp : NAN;
-    for (auto* l : listeners) if (l != nullptr) l->on_temperature(obj, amb, sensor_online);
+    listeners.notify([&](Mlx90614Listener& l) { l.on_temperature(obj, amb, sensor_online); });
 }
 
 bool Mlx90614::is_online() const { return sensor_online; }
 
 bool Mlx90614::set_i2c_address(uint8_t new_address) {
     if (is_disabled() || !mlx90614_fx::valid_address(new_address)) return false;
-    i2c_address = new_address;
-    save();
-    if (bus_started) poll();
-    return true;
+    return apply_setting("addr", std::to_string(new_address));     // saves, then on_setting_changed polls
 }
 
 bool Mlx90614::set_pins(uint8_t sda, uint8_t scl) {
     if (is_disabled() || sda == scl || !GPIO_IS_VALID_OUTPUT_GPIO(sda) || !GPIO_IS_VALID_OUTPUT_GPIO(scl)) return false;
-    sda_pin = sda;
-    scl_pin = scl;
-    save();
+    // a pin another module holds is refused before anything changes (start_bus claims them)
+    const char* sda_owner = xewe::pins::owner_of(sda);
+    const char* scl_owner = xewe::pins::owner_of(scl);
+    if ((sda_owner && id != sda_owner) || (scl_owner && id != scl_owner)) return false;
+    batch = true;                                   // both rows, then one bus restart
+    apply_setting("sda", std::to_string(sda));
+    apply_setting("scl", std::to_string(scl));
+    batch = false;
     start_bus();
     poll();
     return true;
+}
+
+void Mlx90614::on_setting_changed(const xewe::SettingDef& def) {
+    if (batch || is_disabled()) return;
+    const std::string_view key = def.key;
+    if (key == "addr") {
+        if (bus_started) poll();
+    } else if (key == "sda" || key == "scl") {
+        start_bus();                                // releases the old pins, claims the new ones
+        if (bus_started) poll();
+        else os.serial.print("MLX90614: bus not started (pins not configured, equal, or claimed elsewhere)");
+    }
 }
 
 std::string Mlx90614::get_json() const {
@@ -222,9 +210,25 @@ bool Mlx90614::pins_configured() const {
     return sda_pin != NO_PIN && scl_pin != NO_PIN;
 }
 
+void Mlx90614::release_pins() {
+    xewe::pins::release(bus_sda, id.c_str());
+    xewe::pins::release(bus_scl, id.c_str());
+    bus_sda = bus_scl = NO_PIN;
+}
+
 void Mlx90614::start_bus() {
-    if (!pins_configured()) return;
     if (bus_started) Wire.end();
+    bus_started = false;
+    release_pins();
+    if (!pins_configured() || sda_pin == scl_pin) return;
+    // core pin registry: refused (and reported) when another module holds a pin
+    if (!xewe::pins::claim(sda_pin, id.c_str())) return;
+    if (!xewe::pins::claim(scl_pin, id.c_str())) {
+        xewe::pins::release(sda_pin, id.c_str());
+        return;
+    }
+    bus_sda = sda_pin;
+    bus_scl = scl_pin;
     bus_started = Wire.begin(sda_pin, scl_pin);
 }
 
@@ -265,12 +269,23 @@ float Mlx90614::read_i2c_temp(uint8_t register_address) {
     return celsius;
 }
 
-void Mlx90614::save() const {
+// 0.1.x kept addr/pins in one FlexData blob (`data`). Copy it to the table keys once, then remove it.
+// has("schema") tells a stored schema from the struct default (CC7): a blob without one is foreign.
+void Mlx90614::migrate_blob() {
     Mlx90614Store store;
-    store.i2c_address = i2c_address;
-    store.sda_pin     = sda_pin;
-    store.scl_pin     = scl_pin;
-    os.nvs.write_flex(id, "data", store);
+    if (!os.nvs.read_flex(id, "data", store)) return;          // nothing stored by 0.1.x
+    if (!store.has("schema") || store.schema != Mlx90614Store::SCHEMA) {
+        os.serial.print("MLX90614: stored 0.1 settings have an unknown schema; using the table values "
+                        "(the blob is left untouched)");
+        return;
+    }
+    batch = true;                                               // begin starts the bus below
+    if (store.has("i2c_address") && mlx90614_fx::valid_address(store.i2c_address))
+        apply_setting("addr", std::to_string(store.i2c_address));
+    if (store.has("sda_pin")) apply_setting("sda", std::to_string(store.sda_pin));
+    if (store.has("scl_pin")) apply_setting("scl", std::to_string(store.scl_pin));
+    batch = false;
+    os.nvs.remove(id, "data");
 }
 
 int Mlx90614::scan() {

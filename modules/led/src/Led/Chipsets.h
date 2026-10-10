@@ -3,9 +3,8 @@
 // xewe-os-modules/modules/led/src/Led/Chipsets.h
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
-#include <cstring>
-#include <strings.h>
 
 // Supported chipsets. Ids are the ids of xewe-led-os 2.3.x (LED_CHIPSET_TABLE, NVS key led/chip), so a
 // device keeps its stored chip. The old table had 46 entries; only the chips the release matrix ships
@@ -27,20 +26,31 @@ inline constexpr LedChipset LED_CHIPSETS[] = {
 };
 inline constexpr std::size_t LED_CHIPSET_COUNT = sizeof(LED_CHIPSETS) / sizeof(LED_CHIPSETS[0]);
 
-inline const LedChipset* led_chipset_by_id(int id) {
+// ASCII case-insensitive equality; constexpr so the settings table can take its defaults from the
+// LED_CHIPSET / LED_COLOR_ORDER strings at compile time
+constexpr bool led_name_equal(const char* a, const char* b) {
+    for (; *a && *b; ++a, ++b) {
+        const char x = (*a >= 'A' && *a <= 'Z') ? char(*a + 32) : *a;
+        const char y = (*b >= 'A' && *b <= 'Z') ? char(*b + 32) : *b;
+        if (x != y) return false;
+    }
+    return *a == *b;
+}
+
+constexpr const LedChipset* led_chipset_by_id(int id) {
     for (const LedChipset& c : LED_CHIPSETS) if (c.id == id) return &c;
     return nullptr;
 }
 
-inline const LedChipset* led_chipset_by_name(const char* name) {
-    for (const LedChipset& c : LED_CHIPSETS) if (strcasecmp(c.name, name) == 0) return &c;
+constexpr const LedChipset* led_chipset_by_name(const char* name) {
+    for (const LedChipset& c : LED_CHIPSETS) if (led_name_equal(c.name, name)) return &c;
     return nullptr;
 }
 
 // Colour orders, indexed like NVS key led/colorder (same order as 2.3.x).
 inline constexpr const char* LED_COLOR_ORDERS[6] = {"RGB", "RBG", "GRB", "GBR", "BRG", "BGR"};
 
-inline int led_color_order_index(const char* name) {
-    for (int i = 0; i < 6; ++i) if (strcasecmp(LED_COLOR_ORDERS[i], name) == 0) return i;
+constexpr int led_color_order_index(const char* name) {
+    for (int i = 0; i < 6; ++i) if (led_name_equal(LED_COLOR_ORDERS[i], name)) return i;
     return -1;
 }

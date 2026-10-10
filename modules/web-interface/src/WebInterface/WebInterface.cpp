@@ -19,11 +19,26 @@ WebInterface::WebInterface(xewe::Os& host,
     add_requirement(wifi);
 }
 
+xewe::Settings WebInterface::settings() const {
+    static constexpr xewe::SettingDef table[] = {
+        xewe::setting<&WebInterface::port>("port", 1, 65535, 80, "HTTP port", xewe::SettingDef::RESTART),
+        xewe::setting<&WebInterface::root>("root", 31, "", "GET / redirects here (e.g. /pad); empty = the console"),
+    };
+    return {table, this};
+}
+
+bool WebInterface::redirect_root(const std::string& path) {
+    if (!path.empty() && path[0] != '/') return false;
+    return apply_setting("root", path);
+}
+
 void WebInterface::begin_routines_regular () {
-    http_server.on("/", HTTP_GET, std::bind(&WebInterface::serve_main_page, this));
+    http_server.on("/", HTTP_GET, std::bind(&WebInterface::serve_root, this));
+    http_server.on("/console", HTTP_GET, std::bind(&WebInterface::serve_main_page, this));
     http_server.on("/cmd", HTTP_GET, std::bind(&WebInterface::handle_command_request, this));
-    http_server.begin();
-    os.serial.print("Web Interface now available at:\nhttp://" + wifi.get_local_ip());
+    http_server.begin(port);
+    os.serial.print("Web Interface now available at:\nhttp://" + wifi.get_local_ip() +
+                    (port == 80 ? std::string() : ":" + std::to_string(port)));
 }
 void WebInterface::loop () {
     http_server.handleClient();
@@ -62,6 +77,18 @@ std::string WebInterface::status (const bool verbose) const {
     }
 
     return out.str();
+}
+
+void WebInterface::serve_root() {
+    if (is_disabled()) return;
+    if (root_handler) {
+        root_handler();
+    } else if (!root.empty() && root[0] == '/' && root != "/") {
+        http_server.sendHeader("Location", root.c_str());
+        http_server.send(302, "text/plain", "");
+    } else {
+        serve_main_page();
+    }
 }
 
 void WebInterface::serve_main_page() {

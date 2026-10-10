@@ -1,6 +1,6 @@
 # led — addressable LED strip and its modes
 
-XeWe OS module · created 2026-10-09 (led-strip + led-modes merged, LM12–LM19; ported from xewe-led-os 2.3.x `LedStrip`, `Brightness`, `ModeController` + `Modes`) · Solo: Max Dokukin · Status: Draft (0.2.0)
+XeWe OS module · created 2026-10-09 (led-strip + led-modes merged, LM12–LM19; ported from xewe-led-os 2.3.x `LedStrip`, `Brightness`, `ModeController` + `Modes`) · Solo: Max Dokukin · Status: Draft (0.3.0, core 2.1 settings table)
 
 ## Overview
 
@@ -14,7 +14,8 @@ one file and one line. A module for [XeWe OS](https://github.com/xewe-labs/xewe-
 
 ## Highlights
 
-- No first-boot questions: defaults come from build defines, `$led set <key> <value>` changes them; one NVS namespace `led` holds the strip settings (2.3.x key names), `mode_id` and every mode parameter (`m:<mode id>:<key>`), so a 2.3.x device keeps its strip settings
+- No first-boot questions: defaults come from build defines, `$led set <key> <value>` changes them; the strip settings are a core 2.1 settings table (`Led::settings()`: validated `set`, `get`, `schema`, status lines, loaded before begin); one NVS namespace `led` holds them (2.3.x key names and types), `mode_id` and every mode parameter (`m:<mode id>:<key>`), so a 2.3.x device keeps its strip settings
+- `$led schema` lists the table rows and every mode parameter (`"group":"mode:<name>"`, `"set":"$led mode param <id> <key> <v>"`); `$system schema` includes them
 - Modes are pure functions over an RGB buffer (`modes/*.h`, shared maths in `fx/Math.h`): no Arduino, no FastLED, so they compile and run on the developer machine (`tests/unit/test_effects.cpp`, a pinned CRC per mode)
 - Modes are found by a **stable id** declared in the mode file, never by position: removing a mode never renumbers the others or their stored parameters
 - Render task `led_render` (stack 4096, priority 3, core 0, 20 ms period) renders under a mutex and calls `FastLED.show()` outside it; brightness fades over 500 ms
@@ -28,13 +29,14 @@ render task (50 fps): lock → fill override | current mode (fading? previous + 
                       → CRC-32 → brightness scale + colour order into the CRGB output buffer → unlock → FastLED.show()
 $led mode set 5       → find_mode(5) → load params (defaults ← NVS, clamped) → prepare state (main loop)
                       → swap under the render mutex (old → previous, new → current, fade armed) → NVS mode_id → listeners
-$led set num_led 30   → clamp 1..LED_STRIP_NUM_LEDS_MAX → NVS → applied on the next frame (old tail sent black once)
+$led set num_led 30   → names translated (chip, colorder) → core table: u16 in [1, LED_STRIP_NUM_LEDS_MAX]
+                      → member + NVS → on_setting_changed → applied on the next frame (old tail sent black once)
 ```
 
 - **`Led` class** (`src/Led/`) — a `xewe::Module` with id `led` (`declare=Led led(os);`); cannot be disabled and needs no init setup, so it begins without prompts.
-- **Pins are build-time.** FastLED takes them as template arguments, so `LED_PIN_DATA`/`LED_PIN_CLOCK` are fixed per firmware image (one image per pin pair, as the 2.3.x release matrix). `chip` changes are stored at once and applied after a restart; `num_led` and `colorder` apply live.
+- **Pins are settings.** `pin_data`/`pin_clock` default to `LED_PIN_DATA`/`LED_PIN_CLOCK` and apply after a restart (RESTART rows). Clockless chips (WS281x, SK6812) start on any GPIO FastLED can drive: the build pin uses FastLED's own controller, another pin a small copy of FastLED 3.10.3's RMT5 `ClocklessController` with the pin as a constructor argument (`LedRmtController`, Led.cpp). APA102 takes both pins as FastLED template arguments, so it always runs on the build pins (a different stored pair prints one line at boot); so do all chips when FastLED does not use its RMT5 driver. The pins are claimed in the core's registry (`xewe::pins::claim(pin, "led")`) at begin and released by `$led reset`; a pin held by another module falls back to the build pin, and a strapping pin gets the core's warning. `chip` also applies after a restart; `num_led`, `colorder`, `brightness` and `state` apply at once.
 - **Allocation rule.** A mode's state and the two fade buffers are sized on the main loop (`prepare` in `set_mode`/`set_param`/...); the render task only reallocates when the strip length changed since.
-- **Colour** — `mode color <rrggbb>` converts to HSV and sets the current mode's `hue`/`sat` (2.3.x behaviour); Rainbow and Christmas Lights have no colour. Hue → colour is the 2.3.x mapping per mode: Color Fade, Brightness Fade and Rainbow use `hsv_rainbow()`, a local re-implementation of FastLED 3.10.3 `hsv2rgb_rainbow` (bit-exact for all 2²⁴ inputs); Solid, Pulse and the status colour use `hsv_spectrum()`, the same float code as core `xewe::color::hsv_to_rgb`; Color Fade Two Zone keeps its six-sector `hsv()`.
+- **Colour** — `mode color <rrggbb>` converts to HSV and sets the current mode's `hue`/`sat` (2.3.x behaviour); Rainbow and Christmas Lights have no colour. Hue → colour is the 2.3.x mapping per mode: Color Fade, Brightness Fade and Rainbow use `hsv_rainbow()`, a local re-implementation of FastLED 3.10.3 `hsv2rgb_rainbow` (bit-exact for all 2²⁴ inputs); Solid, Pulse and the status colour use `hsv_spectrum()`, which calls core `xewe::color::hsv_to_rgb` (`<XeWeCore/Utils/Color.h>`, host-includable since 2.1); Color Fade Two Zone keeps its six-sector `hsv()`.
 - Frames are close to, not bit-identical with, 2.3.x: noise is value noise instead of FastLED's Perlin `inoise8/16`. Christmas Lights' flicker offsets are seeded from `esp_random() ^ millis()` at every mode start.
 
 ### Build defines
@@ -43,14 +45,14 @@ Pass with `xewe build --define KEY=VALUE` (release-matrix columns use the same n
 
 | Define | Default | Meaning |
 |---|---|---|
-| `LED_PIN_DATA` | S3: 48, C3/C6: 8 | data pin |
-| `LED_PIN_CLOCK` | S3: 12, C6: 21, C3: 4 | clock pin (APA102 only) |
+| `LED_PIN_DATA` | S3: 48, C3/C6: 8 | data pin; default of `pin_data` (C3/C6 GPIO 8 is a strapping pin: the core warns) |
+| `LED_PIN_CLOCK` | S3: 12, C6: 21, C3: 4 | clock pin (APA102 only); default of `pin_clock` |
 | `LED_STRIP_NUM_LEDS_MAX` | 2000 | buffer size (6 B RAM per LED: frame + output) |
 | `LED_COUNT` | 60 | default length |
 | `LED_CHIPSET` | `"WS2812B"` | default chip, a name from the table below |
 | `LED_COLOR_ORDER` | `"GRB"` | default colour order |
 | `LED_VOLTAGE` | 5 | supply voltage, for the power estimate only |
-| `LED_LISTENERS_MAX` | 4 | listener slots |
+| `LED_LISTENERS_MAX` | 6 | listener slots (xewe-led-os uses 4) |
 
 ### Chipsets
 
@@ -97,12 +99,14 @@ are unique, and every key fits NVS. Removing a mode is the reverse; the other id
 
 | Command | Description | Sample Usage |
 | :--- | :--- | :--- |
-| **`status`** | Chip, pins, length, colour order, voltage, brightness, state, fps, power, source (`fill` or `mode`), current mode, its colour, fade state and parameter values with ranges. | `$led status` |
+| **`status`** | The table rows (`chip: 41`, `num_led: 60`, `colorder: 2`, `voltage: 5`, `brightness: 128`, `state: true`, `pin_data: 8`, `pin_clock: 4`; stored values), then the chip and pins in use (`(restart to apply ...)` when the stored ones differ), colour order name, `Output: on, 128/255` (live: a transient off or `brightness 0` shows here), fps, power, source (`fill` or `mode`), current mode, its colour, fade state and parameter values with ranges. | `$led status` |
 | **`reset`** | Clear the whole `led` namespace (strip settings, mode and every mode parameter; back to build defaults and mode 0) and restart. | `$led reset` |
 | **`on`** / **`off`** | Fade in / out (state persisted). | `$led on` |
 | **`brightness`** | Set brightness 0–255 (persisted). `0` darkens the strip with State on and keeps the last non-zero value in NVS (2.3.x); status shows `0/255 (stored N)`, and a restart or off → on comes back at N. | `$led brightness 128` |
-| **`set`** | Set `chip` (name or id), `num_led` (1–max), `colorder` (RGB…BGR) or `voltage`. | `$led set num_led 60` |
-| **`fill`** | Show a static colour `rrggbb` over the mode; `off` (or any mode change) resumes the mode. | `$led fill ff0000` |
+| **`set`** | Set a table row (`$led schema`): `chip` (name or id, after restart), `num_led` (1–max), `colorder` (RGB…BGR or 0–5), `voltage` (1–48), `brightness` (1–255), `state` (true/false), `pin_data`/`pin_clock` (GPIO, after restart). Module-owned: translates names and the 2.3.x keys `length`/`color_order`, then the core's table path, which replies `num_led=60`, or `! $led set num_led: expected u16 in [1, 2000]`. | `$led set num_led 60` |
+| **`get`** | Print one row (core). | `$led get pin_data` |
+| **`schema`** | JSON lines: the 8 table rows, then one row per mode parameter (`"group":"mode:rainbow"`, `"set":"$led mode param 5 speed <v>"`), then `{"end":"led","count":N}` (core + `schema_extra`). | `$led schema` |
+| **`fill`** | Show a static colour `rrggbb` over the mode, optionally cross-faded from the current frame over `<ms>` (0–60000); `off` (or any mode change) resumes the mode. | `$led fill ff0000 500` |
 | **`checksum`** | CRC-32 of the current frame (pre-brightness RGB, `length` pixels). | `$led checksum` |
 | **`mode list`** | All modes with their parameter keys; `*` marks the current one. | `$led mode list` |
 | **`mode set`** | Select a mode by id or name (`rainbow`, `color_fade_two_zone`). | `$led mode set 5` |
@@ -119,26 +123,31 @@ other combination prints `Led: usage: $led mode list | set <m> | ...`. Replies s
 
 | Key | Type | Meaning |
 |---|---|---|
-| `chip` | u8 | chip id (applies after restart) |
-| `num_led` | u16 | length |
+| `chip` | u8 | chip id 0–45 (applies after restart) |
+| `num_led` | u16 | length 1–`LED_STRIP_NUM_LEDS_MAX` |
 | `colorder` | u8 | colour order index (RGB=0 … BGR=5) |
-| `voltage` | u8 | supply voltage |
-| `brightness` | u8 | last non-zero brightness |
+| `voltage` | u8 | supply voltage 1–48 |
+| `brightness` | u8 | last non-zero brightness 1–255 (a 0 stored by v2 0.1.0 is reported once and replaced by 128) |
 | `state` | bool | on/off |
+| `pin_data` | u8 | data GPIO 0–48 (applies after restart; new in 0.3.0) |
+| `pin_clock` | u8 | clock GPIO 0–48, APA102 (applies after restart; new in 0.3.0) |
 | `mode_id` | u8 | current mode id |
 | `m:<id>:<key>` | u16 | one per mode parameter (27 today; longest `m:2:min_bright`, 14 chars) |
 
-Dev builds of v2 that had the separate `led_modes` namespace keep those entries unused (LM16).
+The first eight are the settings table rows (`Led::settings()`, core ≥ 2.1): the core loads them before
+begin (out of range: default + one `!` line) and `$led reset` reloads the defaults. Dev builds of v2 that had the separate `led_modes` namespace keep those entries unused (LM16).
 
 ### C++ API
 
 ```cpp
 led.set_brightness(200, origin);  led.get_brightness();   led.set_state(true, origin);  led.get_state();
+led.set_state(false, origin, /*persist=*/false);   // off without an NVS write (also set_brightness(v, origin, false))
 led.set_mode(5, origin);          led.get_mode();         led.set_param(5, "speed", 7, origin);
 led.get_param(5, "speed");        led.set_color({255, 128, 0}, origin);   led.get_color();   // rrggbb
 led.set_speed(7, origin);         led.reset_params(5, origin);
-led.get_length();  led.get_max_length();  led.get_fps();  led.fill({255, 0, 0});  led.clear_fill();
-led.get_frame_checksum();  led.set_setting("num_led", "30");
+led.get_length();  led.get_max_length();  led.get_fps();  led.fill({255, 0, 0}, /*fade_ms=*/500);  led.clear_fill();
+led.get_frame_checksum();  led.set_setting("colorder", "GRB");   // `$led set` (prints)
+led.apply_setting("num_led", "30");                               // the core's table path, silent; false when refused
 // the registry, e.g. for a JSON list of modes (modes/Registry.h, namespace led_fx):
 for (const led_fx::ModeDef& m : led_fx::MODES) { m.id; m.name; m.params[i].key; m.param_count; }
 const led_fx::ModeDef* m = led_fx::find_mode(id);   // nullptr when not compiled in
@@ -159,11 +168,11 @@ struct MyListener : LedListener {
     void on_mode(uint8_t mode_id, const void* origin) override      { if (origin != this) dirty = true; }
     // also on_color(uint32_t rrggbb, origin), on_param(mode_id, key, value, origin); default bodies are no-ops
 };
-led.add_listener(&my_listener);              // false when all LED_LISTENERS_MAX (4) slots are taken
+led.add_listener(&my_listener);              // false when all LED_LISTENERS_MAX (6) slots are taken
 led.set_brightness(200, &my_listener);       // origin: my_listener skips this echo
 ```
 
-- Fixed array of `LED_LISTENERS_MAX` (4) pointers, no heap; `remove_listener()` frees a slot.
+- The set is the core's `xewe::ListenerSet<LedListener, LED_LISTENERS_MAX>` (`LedListeners`; core ≥ 2.1): 6 pointers, no heap; `remove_listener()` frees a slot.
 - Setters call the listeners only when a value changed, after NVS and outside the render mutex, in the
   task that called the setter (the main loop: CLI, web handlers, buttons, scheduler). The render task
   never calls a listener. `set_state(true)` from off also reports the restored brightness; a mode
@@ -177,7 +186,7 @@ led.set_brightness(200, &my_listener);       // origin: my_listener skips this e
 | | |
 |---|---|
 | Modules | none |
-| Libraries | XeWeCore >=2.0.0,<3.0.0; FastLED 3.10.3 (pinned in `libraries.toml`; a project lists it in its `xewe.toml` `[libraries]`: `FastLED = { repo = "https://github.com/FastLED/FastLED", ref = "3.10.3" }`) |
+| Libraries | XeWeCore >=2.1.0,<3.0.0 (settings table, `ListenerSet`, `pins`, `str::parse_hex_color`, host-includable `Color.h`); FastLED 3.10.3 (pinned in `libraries.toml`; a project lists it in its `xewe.toml` `[libraries]`: `FastLED = { repo = "https://github.com/FastLED/FastLED", ref = "3.10.3" }`) |
 | Boards | ESP32-C3, ESP32-C6, ESP32-S3 (arduino-esp32 3.3.12) |
 
 FastLED 3.10.3 compiles on all three chips with core 3.3.12; on the S3 its I2S parallel driver adds 6
@@ -193,10 +202,12 @@ harness whose lock lists FastLED (see the repo [README](../../README.md)). No st
 settings, modes, parameters, fps and the frame checksum are read back over serial (`$led checksum` of
 Solid red is compared with the expected CRC); the visual checks are skipped (`requires hardware`).
 Unit tests (`tests/unit/test_led.py`, `--unit-only`) build `test_effects.cpp` (registry lookups, a
-pinned CRC per mode, maths, cross-fade, seeds) and `test_listeners.cpp` (capacity 4, no duplicates,
-order, echo suppression, default no-ops) with g++, check the registry against the mode files, the
-command table, that the mode headers stay pure, and that setters notify outside the lock and never
-from the render task.
+pinned CRC per mode, maths, cross-fade, seeds) and `test_listeners.cpp` (capacity 6, no duplicates,
+order, echo suppression, default no-ops) with g++ `-I <core>/src` (the core checkout next to the
+modules repo, a project's `build/libraries/XeWeCore`, or `XEWE_CORE_SOURCE`; skipped when none is
+found), check the registry against the mode files, the command table, the settings table (keys,
+types, RESTART rows, no hand-written NVS reads), the pin claims, that the mode headers stay pure,
+and that setters notify outside the lock and never from the render task.
 
 ```sh
 build/tools/.venv/bin/python -m xewe test --module led              # lock chip
@@ -210,5 +221,7 @@ build/tools/.venv/bin/python -m xewe test --module led --unit-only  # unit tests
 - 2.3.x "parallel lines" (`lines`, `l_<i>_cnt`) were only used for the power report and are not ported; the stored keys are ignored. 2.3.x stored mode params under namespace `mc`, which v2 does not read.
 - `$led set num_led` and `fill` do not notify listeners (no 2.3.x integration reported them).
 - The cross-fade restarts from the newer mode when a change arrives mid-fade (2.3.x froze the half-blended frame).
-- Strapping pin 8 as the default data pin on C3/C6 (night-run follow-up #3) is unchanged.
+- Strapping pin 8 as the default data pin on C3/C6 (night-run follow-up #3) is unchanged; the core now warns at boot, and `$led set pin_data <gpio>` moves it.
+- `pin_clock` has no effect on APA102 yet (template pins: build pins only); a run-time clocked driver is not written.
+- The 0.3.0 changes (table, run-time data pin through `LedRmtController`, fill fade, pin claims) are written without a compile or a board (P3-A, 2026-10-09).
 - Chip timing, colour order on real strips, flicker with WiFi active, the power estimate and visual equivalence of the modes with 2.3.x are unverified (no strip attached during the port).

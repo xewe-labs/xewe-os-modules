@@ -6,7 +6,8 @@
 // temperature -> speed curve (Curve.h, pure and host-tested) that drives every fan once a second
 // while a temperature source feeds it (`fan.set_temperature(c, origin)`, e.g. a sensor module's
 // listener wired in the project). Commands under `$fan`, curve commands under `$fan curve ...`.
-// NVS namespace `fan`: key `data` (the fans), key `curve` (the curve points).
+// NVS namespace `fan`: key `data` (the fans), key `curve` (the curve points), and the settings table
+// rows `curve_ms`, `stale_ms` (core 2.1: `$fan get|schema`, `$fan set <key> <value>`).
 #pragma once
 
 #include <XeWeCore.h>
@@ -63,8 +64,18 @@ struct FanConfig {
     float                       ema_alpha                   = 0.3f;
     uint32_t                    absolute_max_rpm            = 10000;
     uint32_t                    ui_rounding                 = 10;
-    uint32_t                    curve_interval_ms           = 1000;     // curve -> fans period
-    uint32_t                    temperature_stale_ms        = 10000;    // no update for this long: NaN (fail-safe hot)
+    // curve period and stale timeout are run-time settings since 0.2.0 (`curve_ms`, `stale_ms`)
+};
+
+// Curve events (core 2.1 listener set: `fan.listeners.add(&l)`, up to 4). `origin` is whoever caused
+// the change: the temperature source passed to set_temperature(), or the caller of a curve change
+// (nullptr from the CLI). Called in the caller's task (curve target: from loop()); keep them short.
+struct FanListener {
+    virtual ~FanListener() = default;
+    // the curve's target speed changed (0-100 %) at `celsius` (NaN: source offline or stale)
+    virtual void on_curve_target(uint8_t, float, const void*) {}
+    // the curve points changed (add, remove, set, reset)
+    virtual void on_curve_changed(const void*) {}
 };
 
 // Stored settings (NVS namespace "fan", key "data"). Layout is frozen once flashed: append only,
@@ -126,6 +137,11 @@ public:
                                                              const bool do_restart   = true,
                                                              const bool keep_enabled = true) override;
     std::string                 status                      (const bool verbose = false)    const override;
+    xewe::Settings              settings                    ()                              const override;
+    // the fans and the curve points (not plain rows): "group":"fans"/"curve" with a "set" hint
+    void                        schema_extra                (xewe::SchemaOut& out)          const override;
+
+    xewe::ListenerSet<FanListener> listeners;
 
     // ---- fans ---------------------------------------------------------------------------------------
     bool                        add                         (uint8_t pwm_pin, uint8_t tach_pin = 255);
@@ -138,8 +154,8 @@ public:
 
     // ---- curve --------------------------------------------------------------------------------------
     // The temperature input of the curve (°C; NaN = source offline, counts as hot). The first call
-    // activates the curve: from then on it sets every fan once per curve_interval_ms (RAM only), and a
-    // source that stops calling for temperature_stale_ms is treated as offline. `origin` identifies the
+    // activates the curve: from then on it sets every fan once per `curve_ms` (RAM only), and a
+    // source that stops calling for `stale_ms` is treated as offline. `origin` identifies the
     // caller (nullptr from the CLI); shown in status.
     void                        set_temperature             (float celsius, const void* origin = nullptr);
     float                       get_temperature             ()                              const { return temperature; }
@@ -147,10 +163,11 @@ public:
     uint8_t                     get_curve_target            ()                              const { return curve_target_pct; }
     const std::vector<FanCurvePoint>& get_curve             ()                              const { return curve.points; }
     // add or replace the point at `temp` (speed 0-100 %)
-    bool                        curve_add                   (float temp, uint8_t speed_pct);
-    bool                        curve_remove                (float temp);
+    bool                        curve_add                   (float temp, uint8_t speed_pct, const void* origin = nullptr);
+    bool                        curve_remove                (float temp, const void* origin = nullptr);
     // replace the whole curve (sorted here, then validated); persist = false: RAM only, then save_curve()
-    bool                        set_curve                   (std::vector<FanCurvePoint> points, bool persist = true);
+    bool                        set_curve                   (std::vector<FanCurvePoint> points, bool persist = true,
+                                                             const void* origin = nullptr);
     void                        save_curve                  ();
 
     // {"fans":[{"pin_pwm","has_tach","speed"(0-100),"pin_tach","displayed_rpm","ema_rpm"}],
@@ -190,6 +207,7 @@ private:
     void                        load_curve                  ();
     void                        default_curve               ();
     void                        run_curve                   (uint32_t now, bool force = false);
+    void                        curve_changed               (const void* origin);
     std::string                 curve_lines                 ()                              const;
 
     void                        add_cmd                     (xewe::span<const std::string> args);
@@ -210,6 +228,8 @@ private:
     const void*                 temperature_origin          {nullptr};
     uint32_t                    last_curve_ms               {0};
     uint8_t                     curve_target_pct            {0};
+    uint16_t                    curve_ms                    {1000};     // table row: curve -> fans period
+    uint32_t                    stale_ms                    {10000};    // table row: no update this long -> NaN
 
     static constexpr uint32_t   PWM_FREQ                    = 25000;
     static constexpr uint8_t    PWM_RES                     = 8;

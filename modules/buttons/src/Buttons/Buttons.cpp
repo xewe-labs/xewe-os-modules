@@ -35,6 +35,26 @@ Buttons::Buttons(xewe::Os& host)
             button_remove_cmd(args);
         }
     });
+
+    // no settings table, so the core registers no `schema`: ours prints the extra rows
+    register_command({
+        "schema",
+        "Print the button mappings as schema rows (JSON Lines)",
+        "$buttons schema",
+        0,
+        [this](xewe::span<const std::string>) {
+            xewe::SchemaOut out(os.serial);
+            print_schema(out);
+            os.serial.printf("{\"end\":\"%s\",\"count\":%u}", id.c_str(), static_cast<unsigned>(out.count()));
+        }
+    });
+}
+
+void Buttons::schema_extra(xewe::SchemaOut& out) const {
+    for (const auto& b : data.buttons) {
+        out.row("\"key\":\"" + std::to_string(b.id) + "\",\"group\":\"button\",\"type\":\"button\",\"value\":" +
+                b.as_json_str() + ",\"set\":\"$buttons add <pin> \\\"<cmd>\\\" <pullup|pulldown> <event> <ms> | remove <id>\"");
+    }
 }
 
 void Buttons::begin_routines_regular() {
@@ -43,6 +63,7 @@ void Buttons::begin_routines_regular() {
 
 void Buttons::loop() {
     for (auto& button : data.buttons) {
+        if (!button.claimed) continue;                  // pin held by another module
         const uint32_t now           = millis();
         const int      current_state = digitalRead(button.pin);
 
@@ -76,6 +97,7 @@ void Buttons::loop() {
 void Buttons::reset(const bool verbose,
                     const bool do_restart,
                     const bool keep_enabled) {
+    for (const auto& button : data.buttons) xewe::pins::release(button.pin, id.c_str());
     data.buttons.clear();
     os.nvs.remove(id, "data");
     Module::reset(verbose, do_restart, keep_enabled);
@@ -132,12 +154,14 @@ std::string Buttons::status(const bool verbose) const {
     return result;
 }
 
-void Buttons::add(uint8_t pin,
+bool Buttons::add(uint8_t pin,
                   std::string command,
                   ButtonInputMode type,
                   ButtonTriggerEvent event,
                   uint32_t debounce_interval) {
-    if (is_disabled()) return;
+    if (is_disabled()) return false;
+    // several mappings may share a pin (same owner); another module's pin is refused and reported
+    if (!xewe::pins::claim(pin, id.c_str())) return false;
 
     uint32_t next_id = 0;
 
@@ -157,16 +181,20 @@ void Buttons::add(uint8_t pin,
     button.last_steady_state  = digitalRead(button.pin);
     button.last_flicker_state = button.last_steady_state;
     button.last_debounce_time = 0;
+    button.claimed            = true;
 
     data.buttons.push_back(std::move(button));
 
     save_to_nvs();
+    return true;
 }
 
 void Buttons::remove(uint32_t button_id) {
     if (is_disabled()) return;
 
     const auto old_size = data.buttons.size();
+    uint8_t    pin      = 255;
+    for (const auto& button : data.buttons) if (button.id == button_id) pin = button.pin;
 
     data.buttons.erase(
         std::remove_if(
@@ -179,7 +207,12 @@ void Buttons::remove(uint32_t button_id) {
         data.buttons.end()
     );
 
-    if (data.buttons.size() != old_size) save_to_nvs();
+    if (data.buttons.size() == old_size) return;
+    save_to_nvs();
+    // release the pin once no other mapping uses it
+    const bool still_used = std::any_of(data.buttons.begin(), data.buttons.end(),
+                                        [pin](const ButtonData& b) { return b.pin == pin; });
+    if (!still_used) xewe::pins::release(pin, id.c_str());
 }
 
 void Buttons::load_from_nvs() {
@@ -191,6 +224,8 @@ void Buttons::load_from_nvs() {
     for (auto& button : data.buttons) {
         const auto type = static_cast<ButtonInputMode>(button.type);
 
+        button.claimed = xewe::pins::claim(button.pin, id.c_str());     // refused: reported, mapping ignored
+        if (!button.claimed) continue;
         pinMode(button.pin, type == ButtonInputMode::PULL_UP ? INPUT_PULLUP : INPUT_PULLDOWN);
 
         button.last_steady_state  = digitalRead(button.pin);
@@ -250,7 +285,7 @@ void Buttons::button_add_cmd(xewe::span<const std::string> args) {
             return;
         }
 
-        add(
+        const bool added = add(
             static_cast<uint8_t>(pin_value),
             args[1],
             type,
@@ -258,9 +293,8 @@ void Buttons::button_add_cmd(xewe::span<const std::string> args) {
             static_cast<uint32_t>(debounce)
         );
 
-        os.serial.print(
-            "Successfully added button mapping."
-        );
+        os.serial.print(added ? "Successfully added button mapping."
+                              : "Error: pin not available (claimed by another module, see $pins claims).");
     } catch (...) {
         os.serial.print(
             "Error: invalid pin or debounce value."

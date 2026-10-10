@@ -87,8 +87,10 @@ Order and key names are fixed. Every key is present, even when empty.
 
 **`requires_core` syntax is the tools' syntax, `>=2.0.0,<3.0.0`, comma-separated with full
 versions.** The brief's `>=2.0.0 <3` form does not parse (`REQUIRES_RE`), and the contract changes,
-not the tools. Every ported module uses `requires_core=>=2.0.0,<3.0.0`. Core is `2.0.0`
-(`next/xewe-os-core/library.properties`).
+not the tools. Every ported module used `requires_core=>=2.0.0,<3.0.0` (core `2.0.0`). Since core
+`2.1.0` (P3-BC, 2026-10-09) every module except `led` declares `requires_core=>=2.1.0,<3.0.0`
+because it uses a settings table, `xewe::ListenerSet`, `xewe::SchemaOut` or the pin registry
+(section 3, "Core 2.1"); `tools/validate.py` enforces that (rule `core21`, section 5).
 
 Worked example, `modules/wifi/module.properties`:
 
@@ -210,6 +212,35 @@ are ≤ 15 chars too (`Nvs::MAX_KEY_LEN`).
 
 **Other.** No `std::span`, `xewe::os::`, `ModuleController`, `controller`, `xewe_cli` or `<XeWeOS.h>`
 anywhere (old API). `DBG_PRINTF`/`DBG_PRINTLN` remain available from XeWeCore.
+
+### Core 2.1: settings tables, listeners, pin claims
+
+**Settings (core ≥ 2.1.0, recommended).** A module with plain persistent settings declares them as one `static constexpr xewe::SettingDef` table returned from `xewe::Settings settings() const override` (`return {table, this};`), one `xewe::setting<&Class::member>(key, ...)` row per setting. The key is the NVS key under the module id: ≤ 15 characters, never renamed or retyped once published (that strands stored values; a rename is a MAJOR bump). Credentials and other confidential values **must** carry `SettingDef::SECRET`; settings that apply only after a reboot carry `SettingDef::RESTART`. The core then loads the table at `begin()` and provides `$<id> set|get|schema`, status lines and `$system schema`; a module's own command of the same name takes precedence. Values that are not plain rows (mode parameters) are reported with `schema_extra` rows carrying `"group"` and a `"set"` command hint. **Listeners (core ≥ 2.1.0).** A module that announces changes to other modules exposes `xewe::ListenerSet<Iface, N>` (default 4, no heap) and passes a `const void* origin` with every event: callers pass `this`, the CLI `nullptr`, and a listener ignores events whose origin is itself. Callbacks run in the setter's task; keep them short. A module using either declares `requires_core = ">=2.1.0,<3.0.0"`.
+
+Rules this repo adds on top (adopted by fan, mlx90614, wifi, time, scheduler, buttons, pins,
+web-interface; `led` by its own pass):
+
+- **Keep the old commands.** A module that already owns `set` (fan: `$fan set <pin> <speed>`) keeps it
+  and forwards a non-numeric first argument to `apply_setting(key, value, true)`; aliases
+  (`set_addr`, `set_pins`, `set_zone`) stay and call `apply_setting`. The hand-written NVS read/write
+  of a key the table covers is deleted (the core loaded it before `begin_routines_required`).
+- **Apply on change** in `on_setting_changed(def)` (it also runs while disabled: check before touching
+  hardware); it is not called by the load at boot.
+- **`status`** starts from `Module::status(false)` (which now prints one `key: value` line per row) and
+  adds only what a row cannot show (connection state, hex address, live readings).
+- **No table, extra rows only** (scheduler, buttons): override `schema_extra` and register an own
+  `schema` command (`print_schema` + the `{"end":"<id>","count":N}` line); the core registers
+  `schema` only for modules with a table.
+- **Migration from a FlexData blob** (mlx90614 0.1 `data`): read it once, accept it only when
+  `has("schema")` and the schema matches (CC7: a missing field is not the default), copy it with
+  `apply_setting`, then `os.nvs.remove` it. Blobs that stay blobs (fan `data`/`curve`) use the same
+  `has("schema")` check.
+- **Pin claims** (`xewe::pins`, core 2.1): a module that drives GPIOs claims each one with its id
+  (`xewe::pins::claim(gpio, id.c_str())`) before configuring it and releases it when it lets go
+  (`remove`, a pin change, `reset`). A refused claim (already held by another module) aborts the
+  operation; the core prints the conflict. Strapping pins are claimed with a warning. `$pins claims`
+  lists the registry.
+- **Hex colours** use the core's `xewe::str::parse_hex_color` / `to_hex_color`; no module-local copies.
 
 ## 4. Test contract (resolves Q1)
 
@@ -413,6 +444,7 @@ Rules the wrapper adds (R):
 | `source` | in `src/<folder>/*`: no `\bcli\s*\(`, `<XeWeOS.h>`, `xewe::os::`, `ModuleController`, `controller`, `xewe_cli`, `this->os`, `std::span`; the header contains `#include <XeWeCore.h>` |
 | `stray` | no `*.ino`, `scripts/`, `LICENSE.txt` or `module.properties` outside `modules/<slug>/`; no `xewe-os-module-*` directories |
 | `index` | `MODULES.md` equals what `--write-index` would generate |
+| `core21` | a module whose `src/` uses `SettingDef`, `ListenerSet`, `SchemaOut` or `xewe::pins::` declares `requires_core` with a lower bound ≥ `2.1.0`; every `xewe::setting<...>("key", ...)` key is 1-15 characters without whitespace, quote or backslash, and unique within the module (the core checks the same at compile time; this catches it without a build) |
 
 `--harness DIR` reads `DIR/xewe.toml` (the harness manifest) for the `[core] ref` (passed to the tools' `requires_core`
 check) and for `[libraries]`. `--write-index` rewrites `MODULES.md` (a header comment saying it is

@@ -29,6 +29,9 @@ public:
                                                            bool do_restart   = true,
                                                            bool keep_enabled = true) override;
     std::string                    status                 (bool verbose = false)     const override;
+    // core 2.1: no plain settings (no table); every schedule block is an extra schema row
+    // ("group":"schedule", "set" hint), printed by `$schedule schema` and `$system schema`
+    void                           schema_extra           (xewe::SchemaOut& out)     const override;
 
     bool                           add                    (uint16_t                 start_time,
                                                            uint16_t                 end_time,

@@ -61,6 +61,14 @@ def test_set_rejects_out_of_range(serial):
     serial.command("$fan set 4 256", expect=r"Failed to set fan speed\.", timeout=5)
 
 
+def test_settings_table(serial):
+    # core 2.1 table: `$fan set <key>` goes to the table, `$fan schema` lists 2 rows + fans + curve
+    serial.command("$fan get curve_ms", expect=r"curve_ms=\d+", timeout=5)
+    serial.command("$fan set stale_ms 999", expect=r"! \$fan set stale_ms: expected u32 in \[1000, 600000\]", timeout=5)
+    serial.command("$fan set nope 1", expect=r"! \$fan: no setting 'nope'", timeout=5)
+    serial.command("$fan schema", expect=r'\{"end":"fan","count":4\}', timeout=5)
+
+
 def test_argc_error(serial):
     serial.command("$fan set 1", expect=r"Argument count mismatch for '\$fan set'; expected 2, got 1", timeout=5)
 

@@ -4,8 +4,9 @@
 //
 // The led module: an addressable LED strip (chip, pins, length, colour order, brightness with fades,
 // 50 fps render task) and its modes (modes/Registry.h: one file per mode, stable ids, clamped and
-// persisted parameters, 900 ms cross-fade on every change). One NVS namespace `led`: the strip keys,
-// `mode_id` and `m:<mode id>:<key>`. Commands under `$led`, mode commands under `$led mode ...`.
+// persisted parameters, 900 ms cross-fade on every change). One NVS namespace `led`: the strip keys
+// (the core 2.1 settings table, Led::settings()), `mode_id` and `m:<mode id>:<key>`. Commands under
+// `$led`, mode commands under `$led mode ...`; `$led get|schema` come from the core.
 #pragma once
 
 #include <atomic>
@@ -29,7 +30,8 @@
 #include "modes/Registry.h"
 
 // ---- Build-time defaults (override per build: xewe build --define LED_PIN_DATA=13 ...) -------------
-// Pins are FastLED template arguments, so they are fixed per firmware image (release matrix columns).
+// The pins are the defaults of the `pin_data`/`pin_clock` settings (`$led set pin_data 5`, after a
+// restart). Clockless chips start on any usable GPIO; APA102 always uses these build pins (Led.cpp).
 #ifndef LED_PIN_DATA
 #  if defined(CONFIG_IDF_TARGET_ESP32S3)
 #    define LED_PIN_DATA 48          // S3 SuperMini / DevKitC-1 v1.0 on-board WS2812B
@@ -49,7 +51,7 @@
 #ifndef LED_STRIP_NUM_LEDS_MAX
 #define LED_STRIP_NUM_LEDS_MAX 2000      // buffer size; `$led set num_led` accepts 1..this
 #endif
-// Defaults below are used until `$led set <key> <value>` stores a value in NVS (namespace `led`).
+// Defaults of the settings table, used until `$led set <key> <value>` stores a value in NVS (namespace `led`).
 #ifndef LED_COUNT
 #define LED_COUNT 60
 #endif
@@ -82,23 +84,28 @@ public:
                                                 const bool do_restart   = true,
                                                 const bool keep_enabled = true)    override;
     std::string        status                  (const bool verbose = false) const  override;
+    xewe::Settings     settings                () const                            override;
+    void               schema_extra            (xewe::SchemaOut& out) const        override;
 
     // ---- strip --------------------------------------------------------------------------------------
-    // brightness and state (persisted); `origin` is passed to the listeners (echo suppression)
-    void               set_brightness          (uint8_t value, const void* origin = nullptr);
+    // brightness and state; `origin` is passed to the listeners (echo suppression). persist = false
+    // changes the strip only (no NVS write): e.g. a transient off that a restart does not keep
+    void               set_brightness          (uint8_t value, const void* origin = nullptr, bool persist = true);
     uint8_t            get_brightness          () const;
-    void               set_state               (bool on, const void* origin = nullptr);
+    void               set_state               (bool on, const void* origin = nullptr, bool persist = true);
     bool               get_state               () const;
 
-    // configuration (persisted); false + message on a bad value
+    // `$led set`: the table path (apply_setting) after translating names (chip WS2812B, colorder GRB)
+    // and the 2.3.x keys length/color_order; prints the result; false + message on a bad value
     bool               set_setting             (const std::string& key,
                                                 const std::string& value);
     uint16_t           get_length              () const;
     uint16_t           get_max_length          () const;
     uint16_t           get_fps                 () const;
 
-    // static colour over the mode (not persisted); clear_fill() or any mode change resumes the mode
-    void               fill                    (LedRgb color);
+    // static colour over the mode (not persisted), cross-faded from the current frame over fade_ms
+    // (0: at once); clear_fill() or any mode change resumes the mode
+    void               fill                    (LedRgb color, uint16_t fade_ms = 0);
     void               clear_fill              ();
     uint32_t           get_frame_checksum      () const;                          // CRC-32 of the last frame (pre-brightness)
 
@@ -115,11 +122,14 @@ public:
     uint16_t           get_param               (int mode_id, const std::string& param) const;
     uint32_t           get_color               () const;                          // rrggbb of the current mode (status `Color:`)
 
-    // ---- change listeners (LedListener.h): up to LED_LISTENERS_MAX, main loop only, no heap ---------
+    // ---- change listeners (LedListener.h, xewe::ListenerSet): up to LED_LISTENERS_MAX (6), no heap ----
     bool               add_listener            (LedListener* listener);           // false when full
     bool               remove_listener         (LedListener* listener);
     template <typename F>
     void               notify_listeners        (F&& call) const { listeners.notify(call); }
+
+protected:
+    void               on_setting_changed      (const xewe::SettingDef& def)       override;
 
 private:
     struct Slot {
@@ -137,18 +147,28 @@ private:
     uint8_t*           out                     = nullptr;   // LED_STRIP_NUM_LEDS_MAX * 3, CRGB-compatible output
 
     const LedChipset*  chipset                 = nullptr;   // active (registered with FastLED)
-    uint8_t            stored_chip_id          = 0;         // NVS value, applies after restart
-    uint16_t           num_led                 = 1;         // set from NVS / LED_COUNT at begin
+    int8_t             active_data_pin         = -1;        // claimed GPIOs (xewe::pins), -1 none
+    int8_t             active_clock_pin        = -1;
     uint16_t           shown_led               = 0;         // length FastLED currently sends (render task)
     uint16_t           frame_len               = 0;         // length of the last rendered frame
+    uint8_t            brightness_setting      = 0;         // current target, 0 after `brightness 0`
+
+    // settings table rows (Led::settings(), loaded by the core before begin; NVS keys = row keys)
+    uint8_t            stored_chip_id          = 0;         // chip, applies after restart
+    uint16_t           num_led                 = 1;
     uint8_t            color_order             = 0;
     uint8_t            voltage                 = 5;
-    uint8_t            brightness_setting      = 0;
+    uint8_t            brightness_saved        = 128;       // last non-zero brightness
+    bool               state_saved             = true;
+    uint8_t            pin_data                = 0;         // apply after restart
+    uint8_t            pin_clock               = 0;
 
     LedListeners       listeners;
 
     bool               fill_active             = false;
     LedRgb             fill_color              = {0, 0, 0};
+    uint16_t           fill_fade_ms            = 0;         // > 0 while a fill cross-fade runs (from buffer_old)
+    uint32_t           fill_start_ms           = 0;
 
     // mode state machine, guarded by render_mutex
     Slot               current;
@@ -169,6 +189,8 @@ private:
 
     // strip
     bool               add_leds                (uint8_t chip_id);
+    void               claim_pins              (const LedChipset& chip);           // sets active_*_pin
+    void               release_pins            ();
     static void        render_task_entry       (void* self);
     void               render_task             ();
     void               render_frame            ();                                // caller holds render_mutex
