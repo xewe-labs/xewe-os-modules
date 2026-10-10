@@ -1,0 +1,16 @@
+# tests.yml: validator, module unit tests and a c3 compile of the all-modules harness (a template
+# clone with --modules all, modules source = this commit) for every push and PR.
+name: tests
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  modules:
+    uses: xewe-labs/xewe-os-tools/.github/workflows/xewe-modules-tests.yml@main

@@ -9,6 +9,7 @@ In a project that feeds the curve from a sensor (the cooling pad), the curve rew
 once a second, so speeds set by hand are not read back.
 """
 import os
+import time
 
 import pytest
 
@@ -114,6 +115,43 @@ def test_settings_survive_restart(serial):
         serial.command("$fan curve list", expect=r"88\.25 C -> 33 %", timeout=5)
     finally:
         serial.command("$fan curve remove 88.25", expect=r"Curve point removed\.", timeout=5)
+
+
+def test_failsafe_when_no_temperature(serial):
+    # no temperature after boot for stale_ms: fans at the last point; the first reading ends it
+    serial.send("$system restart")
+    m = wait_for_banner(serial, f"{BOOT_READY}|{BOOT_UNPROVISIONED}", 90, reset=False)
+    assert m[0] == BOOT_READY, "board came back unprovisioned"
+    serial.collect(silence=0.5)
+    stale = int(serial.command("$fan get stale_ms", expect=r"stale_ms=(\d+)", timeout=5)[1])
+    if stale > 30000:
+        pytest.skip(f"stale_ms {stale} too long for this test")
+    time.sleep(stale / 1000 + 2)
+    serial.send("$fan status")
+    m = serial.expect(r"Temperature: (never received \(fail-safe (\d+) %\)|none yet|[-\d.]+ C \(source\)|offline)", timeout=5)
+    if not m[1].startswith("never"):
+        pytest.skip(f"no fail-safe here: {m[1]} (empty curve, or a sensor feeds the curve)")
+    if int(m[2]) == 100:
+        serial.command("$fan status", expect=r"speed 255", timeout=5)
+    serial.command("$fan temp 20", expect=r"Temperature set to 20\.00 C", timeout=5)
+    serial.command("$fan status", expect=r"Temperature: 20\.00 C \(CLI\)", timeout=5)
+
+
+def test_failsafe_spins_fans(serial):
+    pwm = os.environ.get("XEWE_TEST_FAN_PWM_PIN")
+    tach = os.environ.get("XEWE_TEST_FAN_TACH_PIN")
+    if not (pwm and tach):
+        pytest.skip("requires hardware: a 4-wire fan on XEWE_TEST_FAN_PWM_PIN / XEWE_TEST_FAN_TACH_PIN")
+    serial.send("$system restart")
+    m = wait_for_banner(serial, f"{BOOT_READY}|{BOOT_UNPROVISIONED}", 90, reset=False)
+    assert m[0] == BOOT_READY, "board came back unprovisioned"
+    serial.collect(silence=0.5)
+    stale = int(serial.command("$fan get stale_ms", expect=r"stale_ms=(\d+)", timeout=5)[1])
+    time.sleep(stale / 1000 + 4)   # fail-safe, then a few 1 s RPM windows
+    serial.command("$fan status", expect=r"Temperature: never received \(fail-safe [1-9]\d* %\)", timeout=5)
+    serial.send("$fan status")
+    m = serial.expect(rf"PWM pin {pwm}, speed \d+, tach pin {tach}, (\d+) RPM", timeout=5)
+    assert int(m[1]) > 0, "fan not spinning in fail-safe"
 
 
 def test_rpm_reading(serial):

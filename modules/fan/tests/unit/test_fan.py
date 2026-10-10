@@ -28,7 +28,7 @@ def test_properties_match_source():
 @pytest.mark.unit
 def test_curve_unit_gpp(tmp_path):
     """tests/unit/test_curve.cpp: interpolation, clamps, validation, schema, `curve set` parsing,
-    hysteresis and colours of src/Fan/Curve.h."""
+    hysteresis, the never-received fail-safe and colours of src/Fan/Curve.h."""
     gpp = shutil.which("g++")
     if gpp is None:
         pytest.skip("g++ not installed")
@@ -39,7 +39,7 @@ def test_curve_unit_gpp(tmp_path):
     assert run.returncode == 0, run.stdout + run.stderr
     summary = re.search(r"PASSED: (\d+) check\(s\), 0 failure\(s\)", run.stdout)
     assert summary, run.stdout
-    assert int(summary[1]) >= 72      # minimum check count: a silently emptied test fails
+    assert int(summary[1]) >= 78      # minimum check count: a silently emptied test fails
 
 
 @pytest.mark.unit
@@ -49,7 +49,8 @@ def test_curve_header_is_pure():
     assert includes and all(re.fullmatch(r"c[a-z]+|string|vector", i) for i in includes), includes
     cpp = (SRC / "Fan.cpp").read_text()
     for needle in ("curve_math::schema_ok(stored.schema)", "curve_math::validate_points(",
-                   "curve_math::speed_to_pwm(", "curve_math::target_speed(", "curve_math::parse_curve_spec("):
+                   "curve_math::speed_to_pwm(", "curve_math::target_speed(", "curve_math::parse_curve_spec(",
+                   "curve_math::never_received("):
         assert needle in cpp, needle
     assert "namespace curve_math {" not in cpp
 

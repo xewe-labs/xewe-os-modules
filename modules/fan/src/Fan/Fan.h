@@ -160,6 +160,8 @@ public:
     void                        set_temperature             (float celsius, const void* origin = nullptr);
     float                       get_temperature             ()                              const { return temperature; }
     bool                        curve_active                ()                              const;
+    // no temperature since begin() for `stale_ms` with a curve configured: fans at the fail-safe speed
+    bool                        curve_failsafe              ()                              const;
     uint8_t                     get_curve_target            ()                              const { return curve_target_pct; }
     const std::vector<FanCurvePoint>& get_curve             ()                              const { return curve.points; }
     // add or replace the point at `temp` (speed 0-100 %)
@@ -226,6 +228,7 @@ private:
     bool                        temperature_seen            {false};
     uint32_t                    temperature_ms              {0};
     const void*                 temperature_origin          {nullptr};
+    uint32_t                    begin_ms                    {0};
     uint32_t                    last_curve_ms               {0};
     uint8_t                     curve_target_pct            {0};
     uint16_t                    curve_ms                    {1000};     // table row: curve -> fans period

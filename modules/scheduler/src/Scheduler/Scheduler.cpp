@@ -22,7 +22,7 @@ Scheduler::Scheduler(xewe::Os& host,
     register_command({
         "add",
         "Add schedule: <start> <end> <day> <RRGGBB> \"<cmd1|cmd2>\"",
-        "$schedule add 480 1020 1 FF0000 \"led on|relay 1\"",
+        "$schedule add 480 1020 1 FF0000 \"$system status|$time status\"",
         5,
         [this](xewe::span<const std::string> args) { cli_add(args); }
     });

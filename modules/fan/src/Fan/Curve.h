@@ -107,6 +107,13 @@ uint8_t target_speed(const std::vector<P>& points, float temp) {
     return 0;
 }
 
+// A source that never reported: once `stale_ms` has passed since begin() with a curve configured and
+// no temperature yet, the fans go to the fail-safe speed, target_speed(points, NaN) (the last point,
+// full cooling with the default curve). The first reading ends it.
+inline bool never_received(bool seen, bool has_points, uint32_t since_begin_ms, uint32_t stale_ms) {
+    return !seen && has_points && since_begin_ms > stale_ms;
+}
+
 // Same duty for every fan: curve speed -> 0-255 PWM.
 template <class P>
 uint8_t target_pwm(const std::vector<P>& points, float temp) {

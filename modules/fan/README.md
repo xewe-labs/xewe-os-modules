@@ -17,7 +17,7 @@ sensor. A module for [XeWe OS](https://github.com/xewe-labs/xewe-os), built on
   10 000 RPM dropped as noise
 - A pin is never shared: `add` refuses a PWM pin that is another fan's tach and a tach pin that is
   another fan's PWM or tach (shared ISRs and re-routed LEDC outputs otherwise)
-- Curve maths in `src/Fan/Curve.h`, pure C++ (no Arduino), host-tested with g++ (≥ 72 checks):
+- Curve maths in `src/Fan/Curve.h`, pure C++ (no Arduino), host-tested with g++ (≥ 78 checks):
   interpolation, clamps, validation (sorted, no duplicates, -40..200 °C, ≤ 100 %), schema check,
   `curve set` parsing, and colour helpers for projects that light LEDs along the curve (hex colours:
   the core's `xewe::str::parse_hex_color` / `to_hex_color`)
@@ -26,7 +26,9 @@ sensor. A module for [XeWe OS](https://github.com/xewe-labs/xewe-os), built on
   are claimed in the core pin registry (`xewe::pins`, released on `remove`); curve events via
   `fan.listeners` (`FanListener`)
 - Fail-safe: an unreadable temperature (NaN) or a source silent for `stale_ms` (10 s) counts as hot → every fan at
-  the last point's speed
+  the last point's speed. The same applies when no temperature ever arrives: `stale_ms` after boot, with a curve
+  configured, the fans go to the last point's speed and status shows `Temperature: never received (fail-safe N %)`;
+  the first reading returns to normal curve control
 - NVS: one FlexData blob per item, one write per change (`fan/data` the fans, `fan/curve` the curve);
   the curve loop writes RAM only. A blob with another `schema` is never reinterpreted and never
   overwritten at boot (defaults from RAM until the next change)
@@ -121,7 +123,7 @@ Metadata and dependencies are declared in [`module.properties`](module.propertie
 | Key (namespace `fan`) | Type | Default | Meaning |
 |---|---|---|---|
 | `curve_ms` | u16 100–60000 | 1000 | how often the curve sets the fans, ms (table row) |
-| `stale_ms` | u32 1000–600000 | 10000 | a temperature older than this counts as offline (hot), ms (table row) |
+| `stale_ms` | u32 1000–600000 | 10000 | a temperature older than this, or none this long after boot, counts as offline (hot), ms (table row) |
 | `data` | FlexData blob | `FAN*` defines | the fans: PWM pin, tach pin, speed; one write per change |
 | `curve` | FlexData blob | 22 °C → 0 %, 27 °C → 100 %, 32 °C → 100 % | the curve points; one write per change |
 

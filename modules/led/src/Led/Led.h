@@ -107,6 +107,8 @@ public:
     // (0: at once); clear_fill() or any mode change resumes the mode
     void               fill                    (LedRgb color, uint16_t fade_ms = 0);
     void               clear_fill              ();
+    bool               fill_active             () const;                          // a fill() is shown (until clear_fill or a mode change)
+    LedRgb             fill_color              () const;                          // the last fill() colour
     uint32_t           get_frame_checksum      () const;                          // CRC-32 of the last frame (pre-brightness)
 
     // ---- modes (modes/Registry.h; ids are the stable ids of the mode files) -------------------------
@@ -165,8 +167,8 @@ private:
 
     LedListeners       listeners;
 
-    bool               fill_active             = false;
-    LedRgb             fill_color              = {0, 0, 0};
+    bool               fill_on                 = false;
+    LedRgb             fill_rgb                = {0, 0, 0};
     uint16_t           fill_fade_ms            = 0;         // > 0 while a fill cross-fade runs (from buffer_old)
     uint32_t           fill_start_ms           = 0;
 

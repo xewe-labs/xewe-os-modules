@@ -253,7 +253,7 @@ void Led::begin_routines_regular() {
 void Led::reset(const bool verbose, const bool do_restart, const bool keep_enabled) {
     {
         xewe::LockGuard lock(render_mutex);
-        fill_active   = false;
+        fill_on   = false;
         brightness.turn_off();
         current       = Slot{};
         led_fx::default_params(*current.def, current.params);
@@ -337,7 +337,7 @@ std::string Led::status(const bool verbose) const {
         snap_order             = color_order;
         snap_brightness        = brightness_setting;
         snap_on                = brightness.get_state();
-        snap_fill              = fill_active;
+        snap_fill              = fill_on;
         snap_fading            = transitioning || fill_fade_ms != 0;
         snap_mode              = current.def;
         std::copy(current.params, current.params + led_fx::MAX_PARAMS, values);
@@ -473,16 +473,26 @@ uint16_t Led::get_fps() const        { return fps.load(); }
 void Led::fill(LedRgb color, uint16_t fade_ms) {
     xewe::LockGuard lock(render_mutex);
     if (fade_ms != 0) buffer_old.assign(frame, frame + num_led);   // fade from what is shown now
-    fill_color    = color;
-    fill_active   = true;
+    fill_rgb    = color;
+    fill_on   = true;
     fill_fade_ms  = fade_ms;
     fill_start_ms = 0;                                             // set by the next rendered frame
 }
 
 void Led::clear_fill() {
     xewe::LockGuard lock(render_mutex);
-    fill_active  = false;
+    fill_on  = false;
     fill_fade_ms = 0;
+}
+
+bool Led::fill_active() const {
+    xewe::LockGuard lock(render_mutex);
+    return fill_on;
+}
+
+LedRgb Led::fill_color() const {
+    xewe::LockGuard lock(render_mutex);
+    return fill_rgb;
 }
 
 uint32_t Led::get_frame_checksum() const {
@@ -655,7 +665,7 @@ void Led::activate(const led_fx::ModeDef& mode, const uint16_t* values) {
         current             = std::move(next);
         transitioning       = true;
         transition_start_ms = 0;                    // set by the next rendered frame
-        fill_active         = false;                // a mode change ends `$led fill`
+        fill_on         = false;                // a mode change ends `$led fill`
         fill_fade_ms        = 0;
     }
 }
@@ -915,8 +925,8 @@ void Led::render_frame() {
     const uint16_t n      = num_led;
     const uint32_t now_ms = millis();
 
-    if (fill_active) {
-        std::fill(frame, frame + n, fill_color);
+    if (fill_on) {
+        std::fill(frame, frame + n, fill_rgb);
         if (fill_fade_ms != 0) {   // `fill(colour, fade_ms)`: from the frame shown at the call (buffer_old)
             if (fill_start_ms == 0) fill_start_ms = now_ms ? now_ms : 1;
             if (buffer_old.size() < n) buffer_old.resize(n, LedRgb{0, 0, 0});   // strip grown since

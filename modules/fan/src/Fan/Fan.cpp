@@ -130,7 +130,8 @@ Fan::~Fan() {
 void Fan::begin_routines_required() {
     load();
     load_curve();
-    last_curve_ms = millis();
+    begin_ms      = millis();
+    last_curve_ms = begin_ms;
 }
 
 void Fan::loop() {
@@ -423,11 +424,16 @@ bool Fan::curve_active() const {
     return is_enabled() && temperature_seen && !curve.points.empty();
 }
 
+bool Fan::curve_failsafe() const {
+    return is_enabled() && curve_math::never_received(temperature_seen, !curve.points.empty(), millis() - begin_ms, stale_ms);
+}
+
 void Fan::run_curve(uint32_t now, bool force) {
-    if (!curve_active() || (!force && now - last_curve_ms < curve_ms)) return;
+    const bool never = curve_failsafe();
+    if ((!curve_active() && !never) || (!force && now - last_curve_ms < curve_ms)) return;
     last_curve_ms = now;
-    // a source that stopped reporting counts as offline: NaN -> last point (fail-safe hot)
-    const float   t      = (now - temperature_ms > stale_ms) ? NAN : temperature;
+    // a source that stopped (or never started) reporting counts as offline: NaN -> last point (fail-safe hot)
+    const float   t      = (never || now - temperature_ms > stale_ms) ? NAN : temperature;
     const uint8_t before = curve_target_pct;
     curve_target_pct = curve_math::target_speed(curve.points, t);
     set_all(curve_math::speed_to_pwm(curve_target_pct), false);    // RAM only: no NVS write per second
@@ -536,7 +542,10 @@ std::string Fan::curve_lines() const {
             s += buf;
         }
     }
-    if (!temperature_seen) {
+    if (curve_failsafe()) {
+        s += "\n  Temperature: never received (fail-safe " +
+             std::to_string(curve_math::target_speed(curve.points, NAN)) + " %)";
+    } else if (!temperature_seen) {
         s += "\n  Temperature: none yet (curve idle; fed by set_temperature or $fan temp)";
     } else {
         char buf[96];

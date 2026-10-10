@@ -169,6 +169,17 @@ int main() {
         CHECK(parse_curve_spec("30:50,20:10", v) && validate_points(v) == CurveError::unsorted);   // caller sorts
     }
 
+    {
+        // a source that never reports: fail-safe after stale_ms since begin(), at the last point
+        CHECK(!never_received(false, true, 10000, 10000));
+        CHECK(never_received(false, true, 10001, 10000));
+        CHECK(!never_received(true, true, 60000, 10000));                 // a reading arrived: normal curve
+        CHECK(!never_received(false, false, 60000, 10000));               // no curve: nothing to drive
+        CHECK(target_speed(def, nan) == 100);                             // the fail-safe speed
+        const std::vector<Pt> low = {{30.0f, 20}, {60.0f, 70}};
+        CHECK(target_speed(low, nan) == 70);
+    }
+
     std::printf("%s: %d check(s), %d failure(s)\n", failures ? "FAILED" : "PASSED", checks, failures);
     return failures ? 1 : 0;
 }

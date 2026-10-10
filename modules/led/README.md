@@ -144,6 +144,7 @@ led.set_mode(5, origin);          led.get_mode();         led.set_param(5, "spee
 led.get_param(5, "speed");        led.set_color({255, 128, 0}, origin);   led.get_color();   // rrggbb
 led.set_speed(7, origin);         led.reset_params(5, origin);
 led.get_length();  led.get_max_length();  led.get_fps();  led.fill({255, 0, 0}, /*fade_ms=*/500);  led.clear_fill();
+led.fill_active();  led.fill_color();     // a fill is shown (status `Source: fill`) and its colour
 led.get_frame_checksum();  led.set_setting("colorder", "GRB");   // `$led set` (prints)
 led.apply_setting("num_led", "30");                               // the core's table path, silent; false when refused
 // the registry, e.g. for a JSON list of modes (modes/Registry.h, namespace led_fx):
@@ -218,7 +219,7 @@ build/tools/.venv/bin/python -m xewe test --module led --unit-only  # unit tests
 - xewe-led-os keys that this module does not read: the "parallel lines" keys (`lines`, `l_<i>_cnt`,
   used there only for the power report) and the mode parameters under namespace `mc`. They stay in
   NVS, ignored.
-- `$led set num_led` and `fill` do not notify listeners.
+- `$led set num_led` and `fill` do not notify listeners (poll `fill_active()`).
 - A change that arrives during a cross-fade restarts the fade from the newer mode.
 - The default data pin on C3/C6 is GPIO 8, a strapping pin: the core warns at boot, and
   `$led set pin_data <gpio>` moves it.
