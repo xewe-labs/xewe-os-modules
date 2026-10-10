@@ -1,17 +1,13 @@
 # xewe-os-modules: module contract
 
-Status: decided by A8 on 2026-10-08. A9 builds the repo and ports the six modules against this file.
-Sources: `priorities.md` (D4, D12, D13, D14, D21, D22, Q1, Q2, steering log), `next/xewe-os-core`
-(`Module.h/.cpp`, `XeWeOs.h`, `Cli.h`, `extras/ModuleTemplate`, `examples/05_Os`), `next/xewe-os-tools`
-(`SPEC.md` §9/§10, `src/xewe/modules.py`, `src/xewe/testing/plugin.py`, `runner.py`), the six
-`xewe-os/xewe-os-module-*` clones and `org-tooling/.github/guidelines/modules.md`.
-
-The contract follows what the tools already parse. **It needs no tools change** (section 7 lists one
-optional cosmetic change).
+The rules every module in this repository follows. It describes what `xewe-os-tools` parses and what
+`tools/validate.py` checks; where a rule is enforced, the rule says by whom (**T** = the tools'
+`xewe modules validate`, **R** = this repository's `tools/validate.py`). Rules without a checker are
+reviewed by hand. Section 5 lists every validator rule.
 
 ---
 
-## 1. Repo layout
+## 1. Repository layout
 
 ```
 xewe-os-modules/
@@ -23,82 +19,81 @@ xewe-os-modules/
 │       ├── tests/board/test_<slug>.py   # pytest on the ESP32 through `xewe test` (required)
 │       ├── tests/unit/                  # optional: developer-machine tests (`unit` pytest, C++ for g++)
 │       └── README.md
-├── libraries.toml          # library catalogue: `[Name] repo = "...", ref = "..."` for every depends_libraries name; `xewe setup` installs those the selected modules need (a harness xewe.toml [libraries] pin wins)
-├── tools/validate.py       # thin wrapper around the tools' validator plus repo rules (section 5)
+├── libraries.toml          # library catalogue: repo and ref of every depends_libraries name
+├── tools/validate.py       # the tools' validator plus the repository rules (section 5)
 ├── MODULES.md              # generated index: `tools/validate.py --write-index`
-├── README.md               # what a module is, how to add one, how to test through a harness
-├── AGENTS.md               # agent rules (section 6)
-├── LICENSE.txt             # GPL-3.0-only, one file for the repo
-└── .gitignore
+├── README.md               # what the modules are and how a project uses them
+├── CONTRACT.md             # this file
+├── .agents/                # agent workspace: AGENTS.md (how to work here), RULES.md (hard rules)
+├── LICENSE.txt             # GPL-3.0-only, one file for the repository
+└── .gitignore              # __pycache__/, *.pyc, .pytest_cache/, build/, .venv/, .DS_Store
 ```
 
-What `xewe/modules.py` actually expects. A9 matches this exactly:
+How the tools read the repository (`xewe.modules.registry`):
 
 - **Discovery.** `Registry.load(root)` iterates `sorted((root / "modules").iterdir())` and takes every
-  directory that contains a `module.properties` file. The directory name is `dir_slug`, and the
-  `slug` key must equal it. Old-layout directories (`xewe-os-module-<slug>/`) are still read, so
-  **none may remain in the new repo**. A `module.properties` at the repo root would also be picked
-  up, so the root must not have one.
+  directory that contains a `module.properties` file. The directory name must equal the `slug` key.
+  Directories named `xewe-os-module-<slug>/` (the older one-repo-per-module layout) and a
+  `module.properties` at the repository root are also picked up, so neither may exist here (R
+  `stray`).
 - **Parsing.** `key=value` lines, split at the first `=`. The first occurrence of a key wins, and
-  `#` lines are comments. No quoting, no continuation lines, no spaces around `=` (the space would
+  `#` lines are comments. No quoting, no continuation lines, no spaces around `=` (a space would
   become part of the key).
-- **Install.** Only `modules/<slug>/src/<folder>/` is compiled: it is copied to `build/modules/src/<folder>/` (the
-  generated Arduino library `XeWeModules`), with `.git` skipped. `include=src/<Folder>/<Folder>.h`
-  becomes `#include "<Folder>/<Folder>.h"` in `XeWeModules.h`, which the project's generated
-  `src/Modules.h` includes; the `declare=` line is copied into `src/Modules.h` verbatim, in
-  dependency order.
-- **Tests.** `Module.tests_dir` is `modules/<slug>/tests/`. Generate copies its `board/` and `unit/`
-  to the project's `build/modules/tests/<slug>/` (beside the library; arduino-cli reads only
-  `library.properties` and `src/`, so they never reach the firmware). `runner.test_roots` adds
-  `build/modules/tests/<slug>/` for every module in `build/modules/modules.lock`, or only for the
-  modules named with `--module`; pytest collects `board/` and `unit/` below it recursively. A test
-  that reads its module's files (`module.properties`, `src/`, `README.md`, a C++ test beside it)
-  sets `MODULE_DIR = module_dir(__file__)` (`from xewe.testing import module_dir`): `modules/<slug>/`
-  in this repo, and the same folder of the project's modules checkout when it runs from the copy.
-- **Dependency order.** Depth-first over `[modules] selected`, dependencies first, error on a cycle.
-  `depends_modules` is split on commas and/or whitespace.
-
-Per-module `LICENSE.txt`, `.gitignore`, `scripts/validate.sh` and `xewe-os-module-<slug>.ino`
-are dropped. `tests/` holds exactly `board/` and, optionally, `unit/`; neither holds a `conftest.py`
-or an `__init__.py`. The plugin comes in through the `pytest11` entry point, and the runner uses
-`--import-mode=importlib`, so `tests/board/test_<slug>.py` and `tests/unit/test_<slug>.py` may share
-a basename.
-
-`.gitignore`: `__pycache__/`, `*.pyc`, `.pytest_cache/`, `build/`, `.venv/`, `.DS_Store`.
+- **Install.** Only `modules/<slug>/src/<folder>/` is compiled: it is copied to
+  `build/modules/src/<folder>/` of the project (the generated Arduino library `XeWeModules`), with
+  `.git` skipped. `include=src/<Folder>/<Folder>.h` becomes `#include "<Folder>/<Folder>.h"` in
+  `XeWeModules.h`, which the project's generated `src/Modules.h` includes; the `declare=` line is
+  copied into `src/Modules.h` verbatim, in dependency order.
+- **Tests.** `xewe modules generate` copies `tests/board/` and `tests/unit/` to the project's
+  `build/modules/tests/<slug>/`, beside the library (arduino-cli reads only `library.properties` and
+  `src/`, so tests never reach the firmware). `xewe test` collects `build/modules/tests/<slug>/` for
+  every module in `build/modules/modules.lock`, or only for the modules named with `--module`. A test
+  that reads its module's files (`module.properties`, `src/`, `README.md`, a C++ test beside it) sets
+  `MODULE_DIR = module_dir(__file__)` (`from xewe.testing import module_dir`): that is
+  `modules/<slug>/` in the modules checkout, also when the test runs from the copy.
+- **Dependency order.** Depth-first over `[modules] selected`, dependencies first; a cycle is an
+  error. `depends_modules` is split on commas and/or whitespace.
+- **Test discovery.** The pytest plugin comes in through the `pytest11` entry point and the runner
+  uses `--import-mode=importlib`, so `tests/board/test_<slug>.py` and `tests/unit/test_<slug>.py` may
+  share a basename, and no `conftest.py` or `__init__.py` is needed or allowed.
 
 ## 2. `module.properties`
 
-Order and key names are fixed. Every key is present, even when empty.
+Every key is present, even when empty, in this order (the order is a convention; no validator checks
+it): `name`, `slug`, `id`, `version`, `description`, `repo`, `folder`, `include`, `declare`,
+`depends_modules`, `depends_libraries`, `requires_core`. The tools require every key except `repo`
+and `depends_libraries`, which they accept as legacy keys; any other key is a T warning. R requires
+`repo` through its own rule.
 
-| Key | Meaning | Validation (T = tools `xewe modules validate`, R = repo `tools/validate.py`) |
+| Key | Meaning | Checks |
 |---|---|---|
-| `name` | Display name. It must equal the `name` argument passed to `xewe::Module` in the `.cpp`, because `status` prints `<name> module enabled` | T: present. R: equals the C++ name string (literal search in the `.cpp`) |
+| `name` | Display name. It equals the `name` argument passed to `xewe::Module` in the `.cpp`, because `status` prints `<name> module enabled` | T: present. R `name`: the literal `"<name>"` appears in the `.cpp` |
 | `slug` | Directory name, `--modules` value, `depends_modules` target | T: `^[a-z0-9][a-z0-9-]*$`, unique, equals the directory name |
-| `id` | CLI group (`$<id>`) **and** NVS namespace. It can never change once released | T: `^[a-z][a-z0-9_]*$`, ≤ 15 chars, unique. R: the literal `"<id>"` appears in the `.cpp` |
-| `version` | Module semver. Bump MINOR for added commands and MAJOR for removed or changed ones (pre-1.0: MINOR for breaking) | T: `X.Y.Z` |
-| `description` | One line, shown in the module checklist and `MODULES.md` | T: non-empty, ≤ 100 chars |
-| `repo` | Browse URL: `https://github.com/xewe-labs/xewe-os-modules/tree/main/modules/<slug>` | T: accepted (legacy key, not checked). R: equals that URL with this slug |
-| `folder` | The one installed folder, named like the class | T: `^[A-Z][A-Za-z0-9]*$`, unique, `src/<folder>/` exists. R: `src/<folder>/<folder>.h` and `.cpp` exist |
-| `include` | Header that the generated `XeWeModules.h` includes | T: starts with `src/<folder>/`, file exists. R: equals `src/<folder>/<folder>.h` |
-| `declare` | Exact line placed in `src/Modules.h` | T: `^(\w+)\s+(\w+)\s*\((.*)\)\s*;$`, variable unique and ≠ `os`, every identifier argument is `os` or the variable of a transitive dependency; a type ≠ folder is only a warning. R: type == folder (error), first argument is exactly `os` |
-| `depends_modules` | Comma-separated slugs, empty for none | T: each exists, no self-dependency, acyclic |
-| `depends_libraries` | Comma-separated Arduino library names that must come from the harness `xewe.toml` `[libraries]`. Libraries bundled with the esp32 core (WiFi, WebServer, Wire, ...) and XeWeCore are **not** listed. Empty for the six phase 1 modules; `led` lists `FastLED`, `fan` and `mlx90614` list `ArduinoJson` (both in `libraries.toml`) | T: accepted (legacy key). R: each name matches `^[A-Za-z0-9_.\- ]+$`, is not `XeWeCore`/`XeWeOS`, and with `--harness DIR` is a key of `[libraries]` |
-| `requires_core` | XeWeCore range | T: `^>=\s*X.Y.Z(\s*,\s*<\s*X.Y.Z)?$`, checked against `[core] ref` when run inside a harness |
+| `id` | CLI group (`$<id>`) **and** NVS namespace. It never changes once released | T: `^[a-z][a-z0-9_]*$`, ≤ 15 characters, unique. R `id-source`: the literal `"<id>"` appears in the `.cpp` |
+| `version` | The module's semver: MINOR for added commands, MAJOR for removed or changed ones (before 1.0: MINOR for breaking changes) | T: `X.Y.Z` |
+| `description` | One line, shown in `xewe modules list` and `MODULES.md` | T: non-empty, ≤ 100 characters |
+| `repo` | Browse URL | R `repo`: exactly `https://github.com/xewe-labs/xewe-os-modules/tree/main/modules/<slug>` |
+| `folder` | The one installed folder, named like the class | T: `^[A-Z][A-Za-z0-9]*$`, unique, `src/<folder>/` exists. R `files`: `src/<folder>/<folder>.h` and `.cpp` exist |
+| `include` | Header that the generated `XeWeModules.h` includes | T: starts with `src/<folder>/`, the file exists. R `files`: exactly `src/<folder>/<folder>.h` |
+| `declare` | The line placed in `src/Modules.h` | T: `^(\w+)\s+(\w+)\s*\((.*)\)\s*;$`; variable unique and not `os`; every identifier argument is `os` or the variable of a transitive dependency; a type other than the folder is a warning. R `class`: type == folder (error). R `declare-os`: the first argument is exactly `os` |
+| `depends_modules` | Comma-separated slugs, empty for none | T: each exists, no self-dependency, no cycle |
+| `depends_libraries` | Comma-separated Arduino library names. Libraries bundled with the esp32 core (WiFi, WebServer, Wire, ...) and XeWeCore are **not** listed | R `depends_libraries`: see section 5 |
+| `requires_core` | XeWeCore range, `>=X.Y.Z,<X.Y.Z` | T: `^>=\s*X.Y.Z(\s*,\s*<\s*X.Y.Z)?$`, checked against the harness `[core] ref` when that is a version. R `core21`: see section 5 |
 
-**`requires_core` syntax is the tools' syntax, `>=2.0.0,<3.0.0`, comma-separated with full
-versions.** The brief's `>=2.0.0 <3` form does not parse (`REQUIRES_RE`), and the contract changes,
-not the tools. Every ported module used `requires_core=>=2.0.0,<3.0.0` (core `2.0.0`). Since core
-`2.1.0` (P3-BC, 2026-10-09) every module except `led` declares `requires_core=>=2.1.0,<3.0.0`
-because it uses a settings table, `xewe::ListenerSet`, `xewe::SchemaOut` or the pin registry
-(section 3, "Core 2.1"); `tools/validate.py` enforces that (rule `core21`, section 5).
+`requires_core` uses the comma form with full versions, `>=2.1.0,<3.0.0`; `>=2.1.0 <3` does not
+parse. A module that uses a settings table, `xewe::ListenerSet`, `xewe::SchemaOut` or the pin registry
+needs core 2.1 and declares `>=2.1.0,<3.0.0` (R `core21`). Every module in this repository does.
 
-Worked example, `modules/wifi/module.properties`:
+The repository tag (`v0.3.0`) is what a project's `xewe.toml` pins; a module's `version` is
+informational plus the promise for its commands.
+
+Example, `modules/wifi/module.properties`:
 
 ```properties
 name=Wifi
 slug=wifi
 id=wifi
-version=0.2.0
+version=0.3.0
 description=Connects to a local WiFi network and keeps the connection alive
 repo=https://github.com/xewe-labs/xewe-os-modules/tree/main/modules/wifi
 folder=Wifi
@@ -106,56 +101,58 @@ include=src/Wifi/Wifi.h
 declare=Wifi wifi(os);
 depends_modules=
 depends_libraries=
-requires_core=>=2.0.0,<3.0.0
+requires_core=>=2.1.0,<3.0.0
 ```
 
-`version` goes 0.1.0 → 0.2.0 for all six, because the port to XeWeCore 2 breaks the API. The other
-current values stay as they are. Ids: `wifi`, `web_interface`, `time`, `schedule` (scheduler's id is
-not its slug, which is fine), `buttons`, `pins`. Declares: `Wifi wifi(os);`,
-`WebInterface web_interface(os, wifi);`, `Time time_module(os, wifi);`,
-`Scheduler scheduler(os, time_module);`, `Buttons buttons(os);`, `Pins pins(os);`.
+The scheduler's id (`schedule`) differs from its slug; that is allowed. The declares in this
+repository: `Buttons buttons(os);`, `Fan fan(os);`, `Led led(os);`, `Mlx90614 mlx90614(os);`,
+`Pins pins(os);`, `Scheduler scheduler(os, time_module);`, `Time time_module(os, wifi);`,
+`WebInterface web_interface(os, wifi);`, `Wifi wifi(os);`.
 
 ## 3. C++ contract
 
 **Base and include.** A module is `class <Folder> : public xewe::Module`. Its header has
-`#include <XeWeCore.h>` as the only XeWeCore include (umbrella, steering 2026-10-08; sub-header-only
-includes do not resolve the library). esp32-core headers (`<WiFi.h>`, `<WebServer.h>`, `<Wire.h>`)
-are allowed. A required module's header is included relatively, `#include "../Wifi/Wifi.h"`, because
-installed folders sit side by side in `build/modules/src/`.
+`#include <XeWeCore.h>` as the only XeWeCore include (R `source`): arduino-cli finds the library only
+through its top-level header. Host-includable core headers (`XeWeCore/Utils/Color.h`,
+`Listeners.h`) may be included by pure headers that host tests compile. esp32-core headers
+(`<WiFi.h>`, `<WebServer.h>`, `<Wire.h>`) are allowed. A required module's header is included
+relatively, `#include "../Wifi/Wifi.h"`, because installed folders sit side by side in
+`build/modules/src/`.
+
+**Namespace: global.** Module classes and their config structs live in the global namespace. The
+generated `declare` lines (`Wifi wifi(os);`) and the template sketch name them unqualified, and the
+validator keeps class and variable names unique across the repository. A clash with a user's or a
+third-party global name (for example a user's own `Time`) fails at compile time; the fix is a rename.
 
 **Overrides.**
 
 | Hook | Rule |
 |---|---|
-| `status(bool verbose) const` | **Must** override. Starts from `Module::status(false)` (`"<name> module enabled|disabled"`), appends the module's own state, and prints when `verbose`. The first printed line must still match `<name> module (enabled\|disabled)` |
-| `reset(verbose, do_restart, keep_enabled)` | **Must** override when the module holds RAM state or hardware; clears it, then calls `Module::reset(...)`, which wipes the NVS namespace. Otherwise it may be omitted |
-| `begin_routines_required/init/regular/common` | Optional; override only what is used (semantics in `doc/os/module.md`) |
-| `loop()` | Optional. **Must not block** (see section 7, wifi) |
-| `enable/disable` | May override. Call the base |
+| `status(bool verbose) const` | **Must** override. Starts from `Module::status(false)` (`"<name> module enabled\|disabled"`, then one `key: value` line per settings row), appends what a row cannot show, and prints when `verbose`. The first printed line must match `<name> module (enabled\|disabled)` |
+| `reset(verbose, do_restart, keep_enabled)` | **Must** override when the module holds RAM state or hardware: clear it, release claimed pins, then call `Module::reset(...)`, which wipes the NVS namespace and reloads the table defaults |
+| `begin_routines_required/init/regular/common` | Optional; override only what is used (XeWeCore `doc/os/module.md`) |
+| `loop()` | Optional. **Must not block**: no waiting loops, no prompts (exception: wifi, section 6) |
+| `enable/disable` | May override; call the base |
+| `settings()` | Override when the module has plain persistent settings (section 3.1) |
+| `on_setting_changed(def)` | Override to apply a changed row (section 3.1) |
+| `schema_extra(out)` | Override to report values that are not table rows (section 3.1) |
 
-Every module passes `has_cli_commands = true` so that `$<id> status` exists for `test_status`.
-Commands go through `register_command(Command{name, description, sample_usage, arg_count, fn})`,
-where `fn` takes `xewe::span<const std::string>` (not `std::span`) and `sample_usage` is the literal
-`"$<id> <cmd> ..."`.
+Every module passes `has_cli_commands = true`, so `$<id> status` exists for `test_status`. Commands
+go through `register_command(Command{name, description, sample_usage, arg_count, fn})`, where `fn`
+takes `xewe::span<const std::string>` (never `std::span`) and `sample_usage` is the literal
+`"$<id> <cmd> ..."`. A command registered once per argument count (led `mode`, fan `curve`) dispatches
+on its first argument; the core picks the registration whose count matches.
 
-**Q2, namespace: decided global.** Module classes and their config structs live in the global
-namespace, as all six do today. The generated `declare` lines (`Wifi wifi(os);`) and the template
-sketch name them unqualified. Global names are what vibecoders type, they keep `declare` and
-`Modules.h` unchanged, and the validator keeps module class and variable names unique across the
-repo. The cost is that a module class can still collide with a user's or a third-party library's
-global name (for example a user's own `Time`). That fails loudly at compile time, the fix is a
-rename, and a namespace would make every module and sketch line longer to prevent it.
-
-**Constructor parameters: never reuse a member name.** `Module::os` is a protected member. A
-constructor parameter that is also named `os` hides it in the constructor body. Command lambdas
-written there with `[this]` then fail with `'os' is not captured`, and with `[&]` they silently bind
-the parameter instead (verified with g++ -std=c++20). Hence:
+**Constructor parameters never reuse a member name.** `Module::os` is a protected member. A
+constructor parameter also named `os` hides it in the constructor body: command lambdas written there
+with `[this]` then fail with `'os' is not captured`, and with `[&]` they silently bind the parameter.
+Hence:
 
 - The Os parameter is named **`host`**. Bodies and lambdas use the member `os`, never `this->os`.
 - A dependency parameter is named **`<var>_ref`**. The member is named like the dependency's
   `declare` variable: `wifi`, `time_module`.
-- **No handler registered from a constructor may use `[&]` or `[=]`.** Capture `[this]` only. A
-  value parameter such as `config` must be stored in a member first.
+- **No handler registered from a constructor uses `[&]` or `[=]`.** Capture `[this]` only. A value
+  parameter such as `config` is stored in a member first.
 
 ```cpp
 // modules/wifi/src/Wifi/Wifi.h
@@ -195,146 +192,118 @@ private:
 ```
 
 **Dependencies.** A module that uses another module takes it by reference after `host`, stores it,
-and calls `add_requirement(dep)` in the constructor body. The relationship is written down in three
-places, all checked by the validator: `depends_modules=wifi` gives the order and auto-selection, the
-`declare` line passes the dependency's variable (`WebInterface web_interface(os, wifi);`), and the
-header uses a relative include. A config struct, if any, comes last and is defaulted (`= {}`), so the
-`declare` line can omit it.
+and calls `add_requirement(dep)` in the constructor body. The relationship is written in three
+places: `depends_modules=wifi` gives the order and the automatic selection, the `declare` line passes
+the dependency's variable (`WebInterface web_interface(os, wifi);`, checked by T), and the header uses
+a relative include. A config struct, if any, comes last and is defaulted (`= {}`), so the `declare`
+line can omit it.
 
-**`cli` macro.** arduino-esp32 defines `cli()` as a function-like macro. Never write `cli(` in
+**The `cli` macro.** arduino-esp32 defines `cli()` as a function-like macro. Never write `cli(` in
 module code: no `os.cli(...)`, no member or local named `cli` initialised with parentheses. Use
-`os.cli.execute("...")`, and brace-init anything named `cli`. `tools/validate.py` greps
-`\bcli\s*\(` (section 5).
+`os.cli.execute("...")` and brace-initialise anything named `cli` (R `source`).
 
-**ids.** ≤ 15 chars, `[a-z][a-z0-9_]*`. The id is both the CLI group (`$wifi ...`) and the NVS
-namespace (`os.nvs.read<T>(id, key)`); a longer id makes Nvs reject every write silently. NVS keys
-are ≤ 15 chars too (`Nvs::MAX_KEY_LEN`).
+**Ids and keys.** An id is ≤ 15 characters, `[a-z][a-z0-9_]*`. It is both the CLI group (`$wifi ...`)
+and the NVS namespace; NVS rejects a longer namespace. NVS keys are ≤ 15 characters too
+(`Nvs::MAX_KEY_LEN`). A key that is stored on devices is never renamed or retyped: the stored value
+would be lost (a rename is a MAJOR version bump).
 
-**Other.** No `std::span`, `xewe::os::`, `ModuleController`, `controller`, `xewe_cli` or `<XeWeOS.h>`
-anywhere (old API). `DBG_PRINTF`/`DBG_PRINTLN` remain available from XeWeCore.
+**Old API.** None of `std::span`, `xewe::os::`, `ModuleController`, `controller`, `xewe_cli`,
+`this->os` or `<XeWeOS.h>` appears in `src/` (R `source`). `DBG_PRINTF`/`DBG_PRINTLN` come from
+XeWeCore.
 
-### Core 2.1: settings tables, listeners, pin claims
+### 3.1 Settings, listeners, pin claims (core ≥ 2.1)
 
-**Settings (core ≥ 2.1.0, recommended).** A module with plain persistent settings declares them as one `static constexpr xewe::SettingDef` table returned from `xewe::Settings settings() const override` (`return {table, this};`), one `xewe::setting<&Class::member>(key, ...)` row per setting. The key is the NVS key under the module id: ≤ 15 characters, never renamed or retyped once published (that strands stored values; a rename is a MAJOR bump). Credentials and other confidential values **must** carry `SettingDef::SECRET`; settings that apply only after a reboot carry `SettingDef::RESTART`. The core then loads the table at `begin()` and provides `$<id> set|get|schema`, status lines and `$system schema`; a module's own command of the same name takes precedence. Values that are not plain rows (mode parameters) are reported with `schema_extra` rows carrying `"group"` and a `"set"` command hint. **Listeners (core ≥ 2.1.0).** A module that announces changes to other modules exposes `xewe::ListenerSet<Iface, N>` (default 4, no heap) and passes a `const void* origin` with every event: callers pass `this`, the CLI `nullptr`, and a listener ignores events whose origin is itself. Callbacks run in the setter's task; keep them short. A module using either declares `requires_core = ">=2.1.0,<3.0.0"`.
+**Settings table.** A module with plain persistent settings declares them as one
+`static constexpr xewe::SettingDef` table returned from `xewe::Settings settings() const override`
+(`return {table, this};`), one `xewe::setting<&Class::member>("key", ...)` row per setting. The key
+is the NVS key under the module id: 1–15 characters, no whitespace, quote or backslash, unique within
+the module (R `core21`; the core checks the same at compile time). Credentials and other confidential
+values carry `SettingDef::SECRET` (never printed); settings that apply only after a reboot carry
+`SettingDef::RESTART`. The core loads the table before `begin_routines_required` (an out-of-range
+stored value falls back to the default with one `!` line) and provides `$<id> set|get|schema`, the
+status lines and the module's part of `$system schema`. A module's own command of the same name takes
+precedence.
 
-Rules this repo adds on top (adopted by fan, mlx90614, wifi, time, scheduler, buttons, pins,
-web-interface; `led` by its own pass):
+- **Applying a change.** `on_setting_changed(def)` runs after `set`/`apply_setting` stored a row. It
+  also runs while the module is disabled, so check before touching hardware. It is not called by the
+  load at boot. The module never reads or writes a table key by hand; the exception is a runtime
+  setter that persists a value the user changed by other means (led `brightness`, `state`).
+- **Keeping existing commands.** A module that already owns `set` (fan: `$fan set <pin> <speed>`)
+  keeps it and forwards a non-numeric first argument to `apply_setting(key, value, true)`. Older
+  command names (`set_addr`, `set_pins`, `set_zone`) stay and call `apply_setting`.
+- **`status`** starts from `Module::status(false)`, which prints one `key: value` line per row, and
+  adds only what a row cannot show (connection state, a hex address, live readings).
+- **Values that are not rows** (mode parameters, fans, curve points, schedule blocks, button
+  mappings) are reported by overriding `schema_extra`: one row per value with a `"group"` and a
+  `"set"` command hint. The core registers `schema` only for modules with a table; a module with only
+  extra rows (scheduler, buttons) registers its own `schema` command that prints them (`print_schema`)
+  and the `{"end":"<id>","count":N}` line.
+- **Stored FlexData blobs.** A blob carries a `schema` field and is accepted only when
+  `has("schema")` is true and the value matches; a missing field is not the struct default. A blob
+  from another layout is never reinterpreted and never overwritten at boot. When table rows replace
+  an older blob (mlx90614 `data`), the module reads it once, copies the values with
+  `apply_setting`, then removes it with `os.nvs.remove`.
 
-- **Keep the old commands.** A module that already owns `set` (fan: `$fan set <pin> <speed>`) keeps it
-  and forwards a non-numeric first argument to `apply_setting(key, value, true)`; aliases
-  (`set_addr`, `set_pins`, `set_zone`) stay and call `apply_setting`. The hand-written NVS read/write
-  of a key the table covers is deleted (the core loaded it before `begin_routines_required`).
-- **Apply on change** in `on_setting_changed(def)` (it also runs while disabled: check before touching
-  hardware); it is not called by the load at boot.
-- **`status`** starts from `Module::status(false)` (which now prints one `key: value` line per row) and
-  adds only what a row cannot show (connection state, hex address, live readings).
-- **No table, extra rows only** (scheduler, buttons): override `schema_extra` and register an own
-  `schema` command (`print_schema` + the `{"end":"<id>","count":N}` line); the core registers
-  `schema` only for modules with a table.
-- **Migration from a FlexData blob** (mlx90614 0.1 `data`): read it once, accept it only when
-  `has("schema")` and the schema matches (CC7: a missing field is not the default), copy it with
-  `apply_setting`, then `os.nvs.remove` it. Blobs that stay blobs (fan `data`/`curve`) use the same
-  `has("schema")` check.
-- **Pin claims** (`xewe::pins`, core 2.1): a module that drives GPIOs claims each one with its id
-  (`xewe::pins::claim(gpio, id.c_str())`) before configuring it and releases it when it lets go
-  (`remove`, a pin change, `reset`). A refused claim (already held by another module) aborts the
-  operation; the core prints the conflict. Strapping pins are claimed with a warning. `$pins claims`
-  lists the registry.
-- **Hex colours** use the core's `xewe::str::parse_hex_color` / `to_hex_color`; no module-local copies.
+**Listeners.** A module that announces changes to other code exposes
+`xewe::ListenerSet<Iface, N>` (fixed size, default 4, no heap) and passes a `const void* origin` with
+every event: a caller passes `this`, the CLI passes `nullptr`, and a listener ignores events whose
+origin is itself. Callbacks run in the task that called the setter, after the change is applied;
+keep them short (set a flag, work in `loop()`). A reading with no cause (a sensor poll) may omit the
+origin.
 
-## 4. Test contract (resolves Q1)
+**Pin claims.** A module that drives GPIOs claims each one in the core's pin registry with its id
+(`xewe::pins::claim(gpio, id.c_str())`) before configuring it and releases it when it lets go
+(`remove`, a pin change, `reset`). A refused claim (the pin is held by another module) aborts the
+operation; the core prints the conflict. Strapping pins are claimed with a warning. `$pins claims`
+lists the registry.
 
-Every module has `modules/<slug>/tests/board/test_<slug>.py` (board tests) and may have
-`modules/<slug>/tests/unit/` (unit tests: `tests/unit/test_<slug>.py` with `unit`-marked pytest
-tests, plus any C++ files it compiles). Both are run by `xewe test` (pytest in-process) inside a
-`xewe-os` harness (D21). The fixtures come from `xewe.testing.plugin` and are never
-redefined:
+**Hex colours** use the core's `xewe::str::parse_hex_color` / `to_hex_color`; no module keeps its own
+copy.
 
-| Fixture | Scope | Behaviour, verified in `plugin.py` |
+## 4. Tests
+
+Every module has `tests/board/test_<slug>.py` (board tests) and may have `tests/unit/` (unit tests:
+`tests/unit/test_<slug>.py` with `unit`-marked pytest tests, plus any C++ files it compiles). Both run
+through `xewe test` (pytest in-process) inside an xewe-os project. The fixtures come from
+`xewe.testing.plugin` and are never redefined:
+
+| Fixture | Scope | Behaviour |
 |---|---|---|
-| `compiled` | session | `build.build_chip(p, lock, chip)` for the session chip. A failure is `pytest.fail` for every dependent test. Returns the binary `Path` |
-| `board` | session | `board(xewe, compiled)`, so **it compiles first**, then detects a board. None → `pytest.skip("compiled, not run: …")`; `--require-board` → fail |
-| `firmware` | session | Depends on `board` and `compiled`. Flashes once and waits ≤ 3 s for a boot line |
-| `serial` | function | A `Console` with `send`, `expect(regex, timeout=10)` (regex *search* per line), `command(cmd, expect, timeout)`, `collect`, `drain`, `lines`, `reset` |
+| `compiled` | session | Builds the project firmware for the session chip. A build failure fails every dependent test. Returns the binary `Path` |
+| `board` | session | Compiles first, then detects a board. None → `pytest.skip("compiled, not run: …")`; with `--require-board` → fail |
+| `firmware` | session | Depends on `board` and `compiled`. Flashes once and waits for the boot line |
+| `serial` | function | A console with `send`, `expect(regex, timeout=10)` (a regex *search* per line), `command(cmd, expect, timeout)`, `collect`, `drain`, `lines`, `reset` |
 
 **Markers.** `unit` means pure logic that runs on the developer machine, never needs a board or a
-build, and is selected by `--unit-only` (`-m unit`). `board` means it needs the firmware. Any test
-that uses `compiled`, `board`, `firmware` or `serial` is auto-marked `board` (`BOARD_FIXTURES`).
-Unit tests live in `tests/unit/` and are marked explicitly with `@pytest.mark.unit`; `tests/board/`
-holds only board tests.
+build, and is selected by `--unit-only` (`-m unit`). Unit tests live in `tests/unit/` and are marked
+explicitly with `@pytest.mark.unit`. Any test that uses `compiled`, `board`, `firmware` or `serial`
+is marked `board` automatically; `tests/board/` holds only board tests.
 
-**No-board behaviour (D22), checked against the code.** `firmware` → `board` → `compiled`, so the
-build happens before the skip and a compile error fails the test. **No tools change is needed.**
+**Without a board** `firmware` → `board` → `compiled` still builds, so a compile error fails the run,
+and every serial test reports "compiled, not run".
 
-**Required tests, per module:**
+**Required board tests** (R `tests`):
 
 | Test | Fixture | No board | Board |
 |---|---|---|---|
-| `test_compiles` | `compiled` | **runs and passes or fails**: the harness firmware with this module selected builds for the session chip (`--xewe-chip`, or every chip with `--all-chips`) | same |
+| `test_compiles` | `compiled` | runs: the firmware with this module selected builds for the session chip (`--chip`, or each chip with `--all-chips`) | same |
 | `test_status` | `serial` | "compiled, not run" | `$<id> status` → `<name> module (enabled\|disabled)` |
-| one behaviour test, `test_<what>` | `serial` | "compiled, not run" | exercises one of the module's own commands |
+| one behaviour test, `test_<what>` | `serial` | "compiled, not run" | runs one of the module's own commands |
 
-`test_compiles` takes `compiled` and not `firmware`. Through `firmware` it would be skipped and add
-nothing to the other two tests, while through `compiled` it is an assertion that really executes in
-no-board mode. The cost is that the tools' summary counts it under "board passed" (section 7).
+`test_compiles` takes `compiled`, not `firmware`, so it is a real assertion in no-board mode.
 
-**CLI syntax, from `Cli.h` and `Module::register_generic_commands`:** `$<group> <command> [args]`,
-with case-insensitive group ids. Every module with CLI commands gets `$<id> status` and `$<id> reset`,
-plus `$<id> enable` and `$<id> disable` when `can_be_disabled`. `$<id> status` calls `status(true)`.
-`$help`, `$help <id>` and `$system status` also exist.
+**Console syntax** (XeWeCore `Cli` and `Module::register_generic_commands`): `$<group> <command>
+[args]`, group ids case-insensitive. Every module with commands gets `$<id> status` and
+`$<id> reset`, plus `$<id> enable` and `$<id> disable` when it can be disabled. `$<id> status` calls
+`status(true)`. `$help`, `$help <id>`, `$system status` and `$system schema` also exist.
 
-Full wifi test files:
-
-```python
-# modules/wifi/tests/board/test_wifi.py
-"""Wifi module tests. Run through a harness: `python -m xewe test --module wifi`.
-
-Board tests assume a provisioned board: first boot done, WiFi credentials stored, connected.
-"""
-ID = "wifi"
-NAME = "Wifi"
-
-
-def test_compiles(compiled):
-    # build of the harness firmware (this module selected) for the session chip
-    assert compiled.is_file()
-
-
-def test_status(serial):
-    serial.command(f"${ID} status", expect=rf"{NAME} module (enabled|disabled)", timeout=5)
-
-
-def test_scan_lists_networks(serial):
-    serial.command("$wifi scan", expect=r"Scanning WiFi networks", timeout=5)
-    serial.expect(r"^\s*0\. \S", timeout=20)   # numbered, de-duplicated SSIDs
-```
-
-```python
-# modules/wifi/tests/unit/test_wifi.py
-"""Wifi module unit tests: pure logic on the developer machine, no board and no build."""
-import pytest
-
-from xewe.testing import module_dir
-
-ID = "wifi"
-NAME = "Wifi"
-MODULE_DIR = module_dir(__file__)   # modules/wifi/, also when run from build/modules/tests/wifi/unit/
-
-
-@pytest.mark.unit
-def test_properties_match_source():
-    props = dict(l.split("=", 1) for l in (MODULE_DIR / "module.properties").read_text().splitlines() if "=" in l)
-    cpp = (MODULE_DIR / "src" / props["folder"] / f"{props['folder']}.cpp").read_text()
-    assert props["id"] == ID and f'"{ID}"' in cpp and f'"{NAME}"' in cpp
-```
-
-Template (copy and fill in):
+Board test template:
 
 ```python
 # modules/<slug>/tests/board/test_<slug>.py
 """<Name> module tests. Run through a harness: `python -m xewe test --module <slug>`.
 
-Hardware preconditions: <what the board must have: provisioned, wiring, ...>.
+Hardware preconditions: <what the board must have: provisioned, wiring, env vars>.
 """
 ID = "<id>"
 NAME = "<name>"          # module.properties name == C++ name argument
@@ -352,39 +321,54 @@ def test_<behaviour>(serial):
     serial.command(f"${ID} <command> <args>", expect=r"<regex from the module's real output>", timeout=10)
 ```
 
+Unit test template (every module has at least this one):
+
 ```python
-# modules/<slug>/tests/unit/test_<slug>.py   (optional)
+# modules/<slug>/tests/unit/test_<slug>.py
 """<Name> module unit tests: pure logic on the developer machine, no board and no build."""
 import pytest
 
+from xewe.testing import module_dir
+
+ID = "<id>"
+NAME = "<name>"
+MODULE_DIR = module_dir(__file__)   # modules/<slug>/, also when run from build/modules/tests/<slug>/unit/
+
 
 @pytest.mark.unit
-def test_<pure_logic>():   # Python-side checks that need no build
-    ...
+def test_properties_match_source():
+    props = dict(l.split("=", 1) for l in (MODULE_DIR / "module.properties").read_text().splitlines() if "=" in l)
+    cpp = (MODULE_DIR / "src" / props["folder"] / f"{props['folder']}.cpp").read_text()
+    assert props["id"] == ID and f'"{ID}"' in cpp and f'"{NAME}"' in cpp
 ```
 
-Rules: regexes are copied from strings the module really prints. No `time.sleep`; use
-`expect(timeout=)`. No `conftest.py`. Nothing under `tests/` but `board/` and `unit/`. A test that needs credentials or wiring reads them from an env
-var (`XEWE_TEST_<ID>_<WHAT>`) and calls `pytest.skip("needs ...")` when it is unset, so it never
-hangs.
+Rules:
 
-**Unit tests (optional).** Logic that does not touch hardware (effect frames, curve maths,
-parsers) can also be tested in C++ on the developer machine, without a board or an Arduino build.
-`led` (`tests/unit/test_effects.cpp`, `tests/unit/test_listeners.cpp`) and the
-`fan` (`tests/unit/test_curve.cpp`, the curve from the cooling pad) and `mlx90614` (`tests/unit/test_convert.cpp`) follow it.
+- Regexes are copied from strings the module really prints.
+- No `time.sleep`; use `expect(..., timeout=)`.
+- No `conftest.py` or `__init__.py`, and nothing under `tests/` but `board/` and `unit/` (R `files`).
+- A test that changes state undoes it (add, then remove; set, then restore).
+- A test that needs credentials or wiring reads them from an environment variable
+  (`XEWE_TEST_<ID>_<WHAT>`) and calls `pytest.skip("needs ...")` when it is unset, so it never hangs.
+- The module docstring states the hardware preconditions. Board tests assume a provisioned board:
+  first boot done and every first-boot prompt answered (`xewe provision`).
 
-- **Rule.** Effect and maths logic lives in a pure header, `src/<Folder>/<Thing>.h`, which the
-  module's `.cpp` calls instead of keeping its own copy. Pure means standard headers only (`<cstdint>`,
-  `<cmath>`, `<vector>`, `<string>`, ...): no `<Arduino.h>`, `<XeWeCore.h>` or esp32-core headers.
-- **Location.** `modules/<slug>/tests/unit/*.cpp`, one `main()` per file, including the header by
-  relative path (`#include "../../src/<Folder>/<Thing>.h"`). Only `src/<Folder>/` is installed, so
-  these files never reach the firmware.
-- **Output.** One line per check (`ok   <expr>` / `FAIL <expr> (line N)`), then the summary
-  `PASSED: <n> check(s), 0 failure(s)` or `FAILED: ...`; exit code non-zero on any failure.
+**C++ unit tests (optional).** Logic that does not touch hardware (effect frames, curve maths, value
+conversion) is tested in C++ on the developer machine. `led` (`test_effects.cpp`,
+`test_listeners.cpp`), `fan` (`test_curve.cpp`) and `mlx90614` (`test_convert.cpp`) do this.
+
+- **Pure header.** The logic lives in `src/<Folder>/<Thing>.h`, which the module's `.cpp` calls
+  instead of keeping its own copy. Pure means standard headers only (`<cstdint>`, `<cmath>`,
+  `<vector>`, `<string>`, ...) plus the host-includable core headers: no `<Arduino.h>`,
+  `<XeWeCore.h>` or esp32-core headers.
+- **Location.** `tests/unit/*.cpp`, one `main()` per file, including the header by relative path
+  (`#include "../../src/<Folder>/<Thing>.h"`). Only `src/<Folder>/` is installed into firmware.
+- **Output.** One line per check (`ok   <expr>` / `FAIL <expr> (line N)`), then
+  `PASSED: <n> check(s), 0 failure(s)` or `FAILED: ...`; a non-zero exit code on any failure.
 - **Driver.** A `@pytest.mark.unit` test in `tests/unit/test_<slug>.py` compiles it with
   `g++ -std=c++17 -Wall -Wextra -Werror` into `tmp_path`, runs it, and asserts exit 0, `PASSED` and a
-  minimum check count, so a silently emptied test fails. When `shutil.which("g++")` is `None` it calls
-  `pytest.skip("g++ not installed")`. A second unit test may assert the header's includes stay pure.
+  minimum check count, so a silently emptied test fails. Without g++ it calls
+  `pytest.skip("g++ not installed")`. A second unit test may assert that the header stays pure.
 
 ```python
 @pytest.mark.unit
@@ -393,134 +377,81 @@ def test_<thing>_unit_gpp(tmp_path):
     if gpp is None:
         pytest.skip("g++ not installed")
     exe = tmp_path / "test_<thing>"
-    src = MODULE_DIR / "tests" / "unit" / "test_<thing>.cpp"   # MODULE_DIR = module_dir(__file__)
+    src = MODULE_DIR / "tests" / "unit" / "test_<thing>.cpp"
     subprocess.run([gpp, "-std=c++17", "-Wall", "-Wextra", "-Werror", "-o", str(exe), str(src)], check=True)
     run = subprocess.run([str(exe)], capture_output=True, text=True, timeout=30)
     assert run.returncode == 0, run.stdout + run.stderr
     assert int(re.search(r"PASSED: (\d+) check", run.stdout)[1]) >= <n>
 ```
 
-**Selection through the harness (D21).** The harness is a *copy* of the `xewe-os` template. Never use
-`next/xewe-os` itself, because `setup --modules` writes its `xewe.toml`.
+**Running through a project.** Tests run in a *copy* of the xewe-os template, never in the template
+itself (`setup --modules` rewrites its `xewe.toml`):
 
 ```sh
-cp -r next/xewe-os "$SCRATCH/harness" && cd "$SCRATCH/harness"
-XEWE_TOOLS_SOURCE=…/next/xewe-os-tools XEWE_CORE_SOURCE=…/next/xewe-os-core \
-  ./setup.sh --modules-source …/next/xewe-os-modules --modules wifi   # wifi + its deps
-build/tools/.venv/bin/python -m xewe test --module wifi              # one chip (manifest chip, c3)
-build/tools/.venv/bin/python -m xewe test --module wifi --all-chips  # c3, c6, s3
-build/tools/.venv/bin/python -m xewe test --unit-only                # unit tests of all selected modules
+./setup.sh --modules-source /path/to/xewe-os-modules --modules wifi   # wifi and its dependencies
+build/tools/.venv/bin/python -m xewe test --module wifi               # the manifest's chip
+build/tools/.venv/bin/python -m xewe test --module wifi --all-chips   # c3, c6, s3
+build/tools/.venv/bin/python -m xewe test --unit-only                 # unit tests of the selected modules
 ```
 
-`--module` must name a selected module (exit 2 otherwise). Its dependencies are compiled in but their
-tests are not run. Without `--module`, the tests of every resolved module run. The repo gate (A9, and
-later CI) has two parts. **Isolation:** for each slug, `xewe modules select <slug>`, then
-`xewe test --module <slug> --all-chips`; this proves each module compiles with only its dependencies.
-**Together:** `--modules all`, then `xewe build --all-chips` and `xewe test`; this proves there are
-no clashes between modules.
+`--module` names a selected module (exit 2 otherwise); its dependencies are compiled in but their
+tests do not run. Without `--module`, the tests of every selected module run.
+
+A change is complete when it passes in two ways. **Alone:** for each changed module,
+`xewe modules select <slug>` then `xewe test --module <slug> --all-chips`; this proves the module
+compiles with only its dependencies. **Together:** `--modules all`, then `xewe build --all-chips` and
+`xewe test`; this proves the modules do not clash.
 
 ## 5. Validator: `tools/validate.py`
 
-**Decision: a thin wrapper, no duplication.** `xewe modules validate` (`xewe.modules.registry.validate()`) already
-implements slug, id, folder, include, declare, depends_modules, requires_core, version, description
-and required keys. `tools/validate.py` imports `xewe.modules.registry`, calls
-`validate(Registry.load(repo_root), core_ref)`, and adds only the repo-policy rules below. It needs a
-Python that has `xewe-os-tools` installed, which is the harness venv
-(`<harness>/build/tools/.venv/bin/python tools/validate.py [--harness DIR]`). Without one it exits 3 with
-`xewe-os-tools not importable; run with <harness>/build/tools/.venv/bin/python`.
+`xewe modules validate` (`xewe.modules.registry.validate()`) implements the T rules of section 2.
+`tools/validate.py` imports `xewe.modules.registry`, runs `validate(Registry.load(repo_root),
+core_ref)`, and adds the repository rules below. It needs a Python with `xewe-os-tools` installed,
+which is a project's venv:
 
-Rules the wrapper adds (R):
+```sh
+<project>/build/tools/.venv/bin/python tools/validate.py [--harness <project>]
+<project>/build/tools/.venv/bin/python tools/validate.py --write-index
+```
+
+Without the tools it exits 3 with `xewe-os-tools not importable; run with
+<harness>/build/tools/.venv/bin/python`.
 
 | Rule | Check |
 |---|---|
-| `class` | `declare` type == `folder`. This is an error, while the tools only warn. Combined with unique folders, it makes class names unique |
-| `declare-os` | first `declare` argument is exactly `os` |
+| `class` | `declare` type == `folder` (an error here; T only warns). With unique folders this makes class names unique |
+| `declare-os` | the first `declare` argument is exactly `os` |
 | `name` | `module.properties` `name` appears as a string literal in `src/<folder>/<folder>.cpp` |
 | `id-source` | `"<id>"` appears as a string literal in the `.cpp` |
-| `files` | `src/<folder>/<folder>.h`, `.cpp`, `README.md` and `tests/board/test_<slug>.py` exist; `include` == `src/<folder>/<folder>.h`; `tests/` holds only `board/` and (optionally) `unit/`, any other entry is an error; no `conftest.py` or `__init__.py` in either (the tools' `xewe modules validate` applies the same layout rule) |
-| `tests` | `tests/board/test_<slug>.py` parsed with `ast`: defines `test_compiles`, `test_status` and at least one other `test_*` function |
-| `repo` | equals `https://github.com/xewe-labs/xewe-os-modules/tree/main/modules/<slug>` |
-| `depends_libraries` | names syntax, not XeWeCore/XeWeOS; warning when a name is missing from `libraries.toml`; with `--harness DIR`, error when a name is in neither `libraries.toml` nor that manifest's `[libraries]` |
-| `source` | in `src/<folder>/*`: no `\bcli\s*\(`, `<XeWeOS.h>`, `xewe::os::`, `ModuleController`, `controller`, `xewe_cli`, `this->os`, `std::span`; the header contains `#include <XeWeCore.h>` |
-| `stray` | no `*.ino`, `scripts/`, `LICENSE.txt` or `module.properties` outside `modules/<slug>/`; no `xewe-os-module-*` directories |
-| `index` | `MODULES.md` equals what `--write-index` would generate |
-| `core21` | a module whose `src/` uses `SettingDef`, `ListenerSet`, `SchemaOut` or `xewe::pins::` declares `requires_core` with a lower bound ≥ `2.1.0`; every `xewe::setting<...>("key", ...)` key is 1-15 characters without whitespace, quote or backslash, and unique within the module (the core checks the same at compile time; this catches it without a build) |
+| `files` | `src/<folder>/<folder>.h`, `.cpp`, `README.md` and `tests/board/test_<slug>.py` exist; `include` == `src/<folder>/<folder>.h`; `tests/` holds only the directories `board/` and `unit/`; neither holds `conftest.py` or `__init__.py` |
+| `tests` | `tests/board/test_<slug>.py` parses (`ast`) and defines `test_compiles`, `test_status` and at least one other top-level `test_*` function |
+| `repo` | `repo` equals `https://github.com/xewe-labs/xewe-os-modules/tree/main/modules/<slug>` |
+| `depends_libraries` | each name matches `^[A-Za-z0-9_.\- ]+$` and is not `XeWeCore`/`XeWeOS`. With `--harness`: a name in neither `libraries.toml` nor the harness `[libraries]` is an error. A name missing from `libraries.toml` is otherwise a warning |
+| `source` | no line of any file in `src/<folder>/` matches `\bcli\s*\(`, `<XeWeOS\.h>`, `xewe::os::`, `ModuleController`, `\bcontroller\b`, `xewe_cli`, `this->os\b` or `std::span` (comments included); the header contains `#include <XeWeCore.h>` |
+| `core21` | a module whose `src/` (`.h`, `.hpp`, `.cpp`, `.tpp`) uses `SettingDef`, `ListenerSet`, `SchemaOut` or `xewe::pins::` declares `requires_core` with a lower bound ≥ `2.1.0`; every `xewe::setting<...>("key", ...)` key is 1–15 characters without whitespace, quote or backslash, and unique within the module |
+| `stray` (module) | no `*.ino` anywhere in the module, no `scripts/` and no `LICENSE.txt` in its directory |
+| `stray` (repository) | no `module.properties` other than `modules/<slug>/module.properties`, no `*.ino` outside `modules/`, no `xewe-os-module-*` directory at the root or under `modules/` |
+| `index` | `MODULES.md` equals what `--write-index` would write |
 
-`--harness DIR` reads `DIR/xewe.toml` (the harness manifest) for the `[core] ref` (passed to the tools' `requires_core`
-check) and for `[libraries]`. `--write-index` rewrites `MODULES.md` (a header comment saying it is
-generated, then one table row per module: slug, name, id, version, description, depends_modules,
-requires_core) and exits.
+`--harness DIR` reads `DIR/xewe.toml` for `[core] ref` (passed to the T `requires_core` check) and
+`[libraries]`. `--write-index` rewrites `MODULES.md` (a header comment saying it is generated, then
+one row per module: slug, name, id, version, description, dependencies, `requires_core`) and exits.
 
-**Output.** One line per finding, in the tools' `Problem.__str__` format so both sources look the
-same: `error: <slug>: <message>` or `warning: <slug>: <message>`. The message starts with the rule
-or key name (`id 'x' is 16 chars…`, `tests: test_status missing`). The last line is
-`N modules, E errors, W warnings`. **Exit codes:** 0 no errors (warnings allowed), 1 at least one
-error, 2 usage error (bad path, bad flag), 3 tools not importable. These match the tools' exit-code
-table. Stdlib only, apart from the `xewe` import.
+**Output.** One line per finding, in the tools' format: `error: <slug>: <message>` or
+`warning: <slug>: <message>` (`repo` instead of a slug for repository rules); the message starts with
+the rule or key name. The last line is `N modules, E errors, W warnings`. **Exit codes:** 0 no errors
+(warnings allowed), 1 at least one error, 2 usage error (bad path, unreadable manifest or
+`libraries.toml`), 3 tools not importable. Standard library only, apart from the `xewe` import.
 
-## 6. Porting checklist for A9
+## 6. Known limits
 
-Per module (wifi, web-interface, time, scheduler, buttons, pins):
-
-1. Copy `src/<Folder>/` → `modules/<slug>/src/<Folder>/`. Reference clones stay untouched.
-2. `#include <XeWeOS.h>` → `#include <XeWeCore.h>`. Keep relative module includes
-   (`"../Wifi/Wifi.h"`, `"../Time/Time.h"`).
-3. `xewe::os::Module` → `xewe::Module`, `xewe::os::ModuleController& controller` →
-   `xewe::Os& host`, and `: Module(controller,` → `: xewe::Module(host,`.
-4. `controller.` → `os.` in every body (wifi 30, time 24, pins 21, buttons 15, scheduler 12,
-   web-interface 4 occurrences). `controller.xewe_cli.execute` → `os.cli.execute` (buttons,
-   web-interface).
-5. Dependency parameters → `<var>_ref`, members keep `wifi` / `time_module`. Remove any
-   `this->os` / `this->controller`. Make sure no lambda uses `[&]`/`[=]`.
-6. `std::span<const std::string>` → `xewe::span<const std::string>` (pins, time, scheduler,
-   buttons, wifi). Drop `#include <span>` where it becomes unused.
-7. `grep -nE '\bcli\s*\('`. It must find nothing.
-8. web-interface: C++ name `"Web_Interface"` and properties `name=WebInterface` disagree. Set both
-   to `Web Interface`. Check the C++ name of the other five against `name=` (they match today).
-9. `module.properties`: new `repo`, `version=0.2.0`, `depends_libraries=` (empty),
-   `requires_core=>=2.0.0,<3.0.0`.
-10. Delete the `.ino` validation sketch, `scripts/validate.sh`, the per-module `LICENSE.txt` and
-    `.gitignore`. The test replaces them.
-11. Write `tests/board/test_<slug>.py` (section 4; pure-logic checks go to `tests/unit/test_<slug>.py`). The behaviour test uses one command from the module's
-    own `register_command` list and a regex copied from what that command prints. Prefer read-only
-    commands: wifi `$wifi scan`, time `$time fetch`, pins `$pins gpio_read <pin>` or `adc_read`.
-    Scheduler (`$schedule add/remove`) and buttons (`$buttons add/remove`) have only mutating
-    commands, so their test runs `add` and then `remove`, leaving the board as it found it. For web-interface, check the serial output of a command; no HTTP
-    from tests in phase 1.
-12. README trim: keep the title line, Overview, Highlights, "How it works", Commands, Requirements
-    (Modules / Boards; Libraries → "XeWeCore >=2.0.0,<3.0.0"), and a Tests section (preconditions +
-    the `xewe test --module` line). Remove the Layout table, `validate.sh` mentions and framework
-    links to `xewe-library-os`.
-
-Repo level: write `tools/validate.py` (section 5), `MODULES.md` via `--write-index`, `README.md`
-(contract summary + harness commands; link this file), `AGENTS.md` (hard rules: section 3
-bullets, test rules, "run `tools/validate.py` and `xewe test --module <slug> --all-chips` before
-done"), `LICENSE.txt` (copy one module's), `.gitignore` (section 1). Gate for A9: validator exit 0;
-each module in isolation compiles for c3/c6/s3 through the harness; `--modules all` compiles for
-c3/c6/s3; `xewe test` exits 0 with every board test "compiled, not run" and every
-`test_compiles` passed.
-
-## 7. Open points (each decided)
-
-1. **Wifi `loop()` blocks** (`while (WiFi.status() != WL_CONNECTED)` with a 5 s `get_yn`), which
-   breaks the "loop must not block" rule and stalls the CLI while it is disconnected. *Decision:* A9
-   ports it unchanged and records it under "Known issues" in the wifi README. The fix (a
-   non-blocking reconnect state machine) waits for step 5, when a board can verify it.
-2. **First-boot prompts block board tests.** `get_yn` defaults to `timeout_ms = 0`, so a freshly
-   erased board waits forever at "Would you like to enable …?". *Decision:* board tests assume a
-   provisioned board, and each test file states its preconditions in the docstring. A
-   `provision` helper (answering first-boot prompts over serial) is deferred to step 5, when tests
-   first run on a board.
-3. **The "board passed" label for `test_compiles`.** In no-board mode the plugin's summary counts it as
-   `1 board passed`. *Decision:* accept. Optional, cosmetic tools change: count passed tests whose
-   only board fixture is `compiled` as "compiled". Not required for A9.
-4. **Module C++ unit tests (developer machine).** None of the six phase 1 modules has logic separable from
-   Arduino APIs (scheduler's day/time parsing is the closest). *Decision:* phase 1 module tests are
-   Python only. Superseded for pure headers by "Unit tests (optional)" in section 4; tests that need
-   core's `tests/unit` shim still wait until it is reusable from outside core.
-5. **Per-module `version` vs repo tag (D12).** *Decision:* both are kept. The repo tag (`v0.2.0`) is
-   what `xewe.toml` pins, and the per-module `version` is informational plus the semver promise for
-   that module's commands. The six ports ship as `0.2.0` under repo tag `v0.2.0`.
-6. **Time's class name `Time`** is a generic global, which is the risk Q2 accepts. *Decision:* keep it
-   (renaming the folder changes the install path for existing firmware). The validator's uniqueness
-   rules cover clashes between modules, and a clash with user code fails at compile time.
+1. **wifi `loop()` blocks** while disconnected (`while (WiFi.status() != WL_CONNECTED)` with a 5 s
+   `get_yn` prompt per pass), which breaks the "loop must not block" rule: the console and every
+   other module stall until WiFi is back. The fix is a non-blocking reconnect state machine. The wifi
+   README lists it under Known issues.
+2. **First-boot prompts.** A freshly erased board waits at "Would you like to enable …?" (`get_yn`
+   without a timeout). Board tests therefore assume a provisioned board; `xewe provision` answers
+   the prompts.
+3. **`test_compiles` counts as "board passed"** in the tools' summary, although it needs no board.
+4. **The class name `Time`** is a generic global name. It stays, because renaming the folder changes
+   the install path for existing firmware; a clash with user code fails at compile time.

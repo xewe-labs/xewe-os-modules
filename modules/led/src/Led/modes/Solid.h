@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // xewe-os-modules/modules/led/src/Led/modes/Solid.h
 //
-// Solid (id 0): one colour on every pixel. 2.3.x: core float hsv_to_rgb.
+// Solid (id 0): one colour on every pixel. Colour: core float hsv_to_rgb.
 #pragma once
 
 #include "Mode.h"

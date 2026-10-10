@@ -73,7 +73,7 @@ public:
                                                     const bool keep_enabled = true) override;
 
     std::string             status                 (const bool verbose = false)     const override;
-    // core 2.1: no plain settings (no table); every mapping is an extra schema row ("group":"button")
+    // no plain settings (no table); every mapping is an extra schema row ("group":"button")
     void                    schema_extra           (xewe::SchemaOut& out)           const override;
 
     // false when the pin is held by another module (core pin registry, xewe::pins)

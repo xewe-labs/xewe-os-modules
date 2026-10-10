@@ -33,7 +33,7 @@ public:
                                                    bool do_restart   = true,
                                                    bool keep_enabled = true) override;
     std::string           status                  (bool verbose = false)     const override;
-    // core 2.1 table: `tz_gmt_str` (str <= 9, "GMT+00:00"), the same NVS key as 0.2
+    // settings table: `tz_gmt_str` (str <= 9, "GMT+00:00"); an offset stored by an earlier version loads unchanged
     xewe::Settings        settings                ()                         const override;
 
     tm                    get_current_time        ()                         const;

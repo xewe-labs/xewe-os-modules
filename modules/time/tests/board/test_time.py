@@ -26,6 +26,6 @@ def test_fetch_syncs_time(serial):
 
 
 def test_settings_table(serial):
-    # core 2.1: tz_gmt_str row
+    # settings table: tz_gmt_str row
     serial.command("$time get tz_gmt_str", expect=r"tz_gmt_str=GMT[+-]\d\d:\d\d", timeout=5)
     serial.command("$time schema", expect=r'\{"end":"time","count":1\}', timeout=5)

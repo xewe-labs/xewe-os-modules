@@ -62,7 +62,7 @@ std::string fold(const std::string& text) {
     return out;
 }
 
-// Christmas Lights flicker seed, new at every mode start (2.3.x random16() in the mode constructor).
+// Christmas Lights flicker seed, new at every mode start.
 // Never 0: led_fx::prepare() treats 0 as "keep the fixed default seed" (host tests).
 uint32_t effect_seed() {
     return (esp_random() ^ millis()) | 1u;
@@ -77,7 +77,7 @@ constexpr const char* MODE_USAGE =
     "Led: usage: $led mode list | set <m> | param <m> <key> <value> | color [rrggbb] | reset_params [m] | speed <n>";
 
 // Clockless chips on a run-time data pin: FastLED's RMT5 driver takes the pin as a constructor argument
-// underneath its template, so one small controller class serves every GPIO. Elsewhere (RMT4, the I2S
+// underneath its template, so one small driver class serves every GPIO. Elsewhere (RMT4, the I2S
 // or SPI clockless drivers) the data pin stays the build define.
 #if defined(FASTLED_RMT5) && FASTLED_RMT5 && !defined(FASTLED_ESP32_I2S) && !defined(FASTLED_ESP32_USE_CLOCKLESS_SPI)
 #define LED_RUNTIME_PINS 1
@@ -124,7 +124,7 @@ bool pin_usable(int pin) {
 #endif
 }
 
-// a clockless chip on `pin`: FastLED's own controller on the build pin, LedRmtController elsewhere
+// a clockless chip on `pin`: FastLED's own driver on the build pin, LedRmtController elsewhere
 template <template <uint8_t, EOrder> class CHIP>
 CLEDController* add_clockless(int pin, CRGB* leds, int count) {
 #if LED_RUNTIME_PINS
@@ -184,7 +184,7 @@ Led::Led(xewe::Os& host, LedConfig config_param)
     register_command({"mode", "Modes: param <m> <key> <value>", "$led mode param 5 speed 7", 4,
                       [this](xewe::span<const std::string> args) { cli_mode(args); }});
 
-    // 2.3.x command names (LM2, LM15): same handlers as above
+    // xewe-led-os command names, kept as aliases: same handlers as above
     register_command({"set_brightness", "2.3.x name of `brightness`", "$led set_brightness 128", 1,
                       [this](xewe::span<const std::string> args) { cli_brightness(args); }});
     register_command({"set_state", "2.3.x: set on/off state <0|1>", "$led set_state 0", 1,
@@ -228,7 +228,7 @@ void Led::begin_routines_regular() {
     if (active_data_pin >= 0) add_leds(chip->id);
     FastLED.setBrightness(255);
 
-    brightness_setting = brightness_saved;   // a 0 stored by v2 0.1.0 is outside [1, 255]: the core used 128
+    brightness_setting = brightness_saved;   // a stored 0 is outside [1, 255]: the core used 128
 
     // ---- modes: stored mode (unknown id -> the first registry row), prepared here, not in the task --
     const led_fx::ModeDef* mode = led_fx::find_mode(os.nvs.read<uint8_t>(id, "mode_id", led_fx::default_mode().id));
@@ -264,7 +264,7 @@ void Led::reset(const bool verbose, const bool do_restart, const bool keep_enabl
 }
 
 // The plain strip settings: `$led set|get <key>`, `$led schema`, the status lines, loaded before begin.
-// Keys are the 2.3.x NVS keys and types (a 2.3.x device keeps its values); never rename or retype one.
+// Keys and types match xewe-led-os (a device moved from it keeps its values); never rename or retype one.
 xewe::Settings Led::settings() const {
     static constexpr xewe::SettingDef table[] = {
         xewe::setting<&Led::stored_chip_id>  ("chip", 0, 45, default_chip_id(), "Chip id (2.3.x ids); by name: $led set chip WS2812B",
@@ -387,7 +387,7 @@ std::string Led::status(const bool verbose) const {
 // =============================================================================
 // Strip API
 // =============================================================================
-// 2.3.x semantics: 0 fades the strip to dark but keeps State on, and NVS keeps the last non-zero
+// 0 fades the strip to dark but keeps State on, and NVS keeps the last non-zero
 // brightness, so a restart (or off -> on) comes back lit at that level instead of dark with State on.
 // The NVS key and type are the table row's (`brightness`, u8), so the next boot loads it.
 void Led::set_brightness(uint8_t value, const void* origin, bool persist) {
@@ -418,7 +418,7 @@ void Led::set_state(bool on, const void* origin, bool persist) {
         old_setting = brightness_setting;
         if (on) brightness.turn_on();
         else    brightness.turn_off();
-        // off -> on fades to the last non-zero brightness (2.3.x), also after `brightness 0`
+        // off -> on fades to the last non-zero brightness, also after `brightness 0`
         if (on && !was_on) brightness_setting = brightness.get_brightness();
         new_setting = brightness_setting;
     }
@@ -442,7 +442,7 @@ bool Led::remove_listener(LedListener* listener) {
     return listeners.remove(listener);
 }
 
-// `$led set` and the 2.3.x aliases: names and old keys translated, then the table path (validate,
+// `$led set` and its aliases: names and alias keys translated, then the table path (validate,
 // assign, persist, on_setting_changed), which prints `key=value` or the `!` error line.
 bool Led::set_setting(const std::string& key, const std::string& value) {
     const std::string k = key == "length" ? "num_led" : key == "color_order" ? "colorder" : key;
@@ -557,7 +557,7 @@ bool Led::set_speed(int32_t value, const void* origin) {
     return set_param(get_mode(), "speed", value, origin);
 }
 
-// 2.3.x reset_current_mode: every parameter back to its table default in one pass: one NVS write per
+// Every parameter back to its table default in one pass: one NVS write per
 // parameter, one cross-fade (only when `mode_id` is the current mode), on_param per changed value.
 bool Led::reset_params(int mode_id, const void* origin) {
     const led_fx::ModeDef* mode = led_fx::find_mode(mode_id);
@@ -707,7 +707,7 @@ void Led::cli_fill(xewe::span<const std::string> args) {
     os.serial.printf("Led: fill %02x%02x%02x", color.r, color.g, color.b);
 }
 
-// $led mode <sub> [args]: registered for 1, 2 and 4 arguments (LM15)
+// $led mode <sub> [args]: registered for 1, 2 and 4 arguments
 void Led::cli_mode(xewe::span<const std::string> args) {
     const std::string sub = fold(args[0]);
     switch (args.size()) {

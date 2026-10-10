@@ -1,7 +1,5 @@
 # wifi — joins a WiFi network and keeps it connected
 
-XeWe OS module · created 2026-09-15 (split out of xewe-os, where it was developed from 2026-01) · Solo: Max Dokukin · Status: Active (0.3.0)
-
 ## Overview
 
 Connects to a local WiFi network and keeps the connection alive. A module for
@@ -37,7 +35,7 @@ loop:        while not connected → 5 s "disable and reset?" prompt → reconne
 | **`connect`** | Connect or reconnect; prompts for a network if needed. | `$wifi connect` |
 | **`disconnect`** | Disconnect from WiFi. | `$wifi disconnect` |
 | **`scan`** | List available networks. | `$wifi scan` |
-| **`set`** / **`get`** / **`schema`** | Settings table (core 2.1): `ssid` (str ≤ 32), `psw` (str ≤ 63, secret: shown as `********`). Same NVS keys as before; `$wifi connect` uses them. | `$wifi set ssid "My Net"` |
+| **`set`** / **`get`** / **`schema`** | Settings table: `ssid` (str ≤ 32), `psw` (str ≤ 63, secret: shown as `********`); `$wifi connect` uses them. | `$wifi set ssid "My Net"` |
 
 ### Requirements
 
@@ -49,13 +47,25 @@ loop:        while not connected → 5 s "disable and reset?" prompt → reconne
 
 Metadata and dependencies are declared in [`module.properties`](module.properties).
 
+### Settings and NVS keys
+
+| Key (namespace `wifi`) | Type | Default | Meaning |
+|---|---|---|---|
+| `ssid` | str ≤ 32 | empty | network name, used by `$wifi connect` and at boot |
+| `psw` | str ≤ 63 | empty | password; a SECRET row, never printed (`********`) |
+
+### Build defines
+
+| Define | Default | Meaning |
+|---|---|---|
+| `DEBUG_Wifi` | 0 | 1 prints debug output, including the credentials (bench only) |
+
 ### Known issues
 
 - **`loop()` blocks while disconnected.** It runs `while (WiFi.status() != WL_CONNECTED)` with a
   5 s "Disable and reset WiFi module?" prompt (`get_yn`) and a reconnect attempt per pass. This
   breaks the "loop must not block" rule: the CLI and every other module stall until WiFi is back.
-  Ported unchanged on purpose (CONTRACT.md section 7.1); a non-blocking reconnect state machine is
-  planned for step 5, when a board can verify it.
+  The fix is a non-blocking reconnect state machine (CONTRACT.md section 6).
 - Set `-DDEBUG_Wifi=1` for debug output only on a bench: it prints credentials to serial.
   Credentials are stored in NVS unencrypted.
 
@@ -72,8 +82,7 @@ build/tools/.venv/bin/python -m xewe test --module wifi --unit-only  # unit test
 ```
 
 - `test_compiles` builds the harness firmware with this module selected; it runs without a board.
-- `test_status` (`$wifi status`) and `test_scan_lists_networks` (`$wifi scan`) need a board; without one they report
+- `test_status` (`$wifi status`), `test_scan_lists_networks` (`$wifi scan`) and `test_settings_table_masks_password` (`$wifi schema`, `psw` masked) need a board; without one they report
   "compiled, not run".
 - Hardware precondition: a provisioned board (first boot done, WiFi credentials stored, connected). A freshly erased board stops at the first-boot
-  "Would you like to enable ...?" prompts (`get_yn` waits forever), so provision it by hand first
-  (CONTRACT.md section 7.2).
+  "Would you like to enable ...?" prompts, so provision it first (`xewe provision`).

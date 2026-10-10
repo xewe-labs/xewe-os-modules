@@ -5,7 +5,7 @@
 // The led module: an addressable LED strip (chip, pins, length, colour order, brightness with fades,
 // 50 fps render task) and its modes (modes/Registry.h: one file per mode, stable ids, clamped and
 // persisted parameters, 900 ms cross-fade on every change). One NVS namespace `led`: the strip keys
-// (the core 2.1 settings table, Led::settings()), `mode_id` and `m:<mode id>:<key>`. Commands under
+// (the settings table, Led::settings()), `mode_id` and `m:<mode id>:<key>`. Commands under
 // `$led`, mode commands under `$led mode ...`; `$led get|schema` come from the core.
 #pragma once
 
@@ -96,7 +96,7 @@ public:
     bool               get_state               () const;
 
     // `$led set`: the table path (apply_setting) after translating names (chip WS2812B, colorder GRB)
-    // and the 2.3.x keys length/color_order; prints the result; false + message on a bad value
+    // and the alias keys length/color_order; prints the result; false + message on a bad value
     bool               set_setting             (const std::string& key,
                                                 const std::string& value);
     uint16_t           get_length              () const;

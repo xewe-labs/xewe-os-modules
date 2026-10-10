@@ -1,7 +1,5 @@
 # buttons — bind CLI commands to physical buttons
 
-XeWe OS module · created 2026-09-15 (split out of xewe-os, where it was developed from 2026-01) · Solo: Max Dokukin · Status: Active (0.3.0)
-
 ## Overview
 
 Binds commands to physical buttons with software debouncing. A module for
@@ -15,7 +13,7 @@ prompt.
 
 - Per-button software debouncing: a state change is accepted only after it has been stable for the mapping's interval (default 50 ms) (`Buttons::loop`)
 - Three trigger events (`on_press`, `on_release`, `on_change`) and two input modes (`pullup`, `pulldown`); "pressed" is derived from the input mode
-- Mappings are `FlexData` records persisted as one NVS entry; runtime-only debounce state is not stored
+- Mappings are `FlexData` records persisted as one NVS entry (`buttons/data`); runtime-only debounce state is not stored
 - `$buttons status` prints a table of active mappings (ID, pin, command, debounce, type, event)
 
 ## How it works
@@ -36,9 +34,9 @@ loop: digitalRead → stable for debounce_ms? → state changed? → event match
 | :--- | :--- | :--- |
 | **`add`** | Add a mapping: `<pin> "<cmd>" <pullup\|pulldown> <on_press\|on_release\|on_change> <debounce_ms>`. | `$buttons add 9 "$system reboot" pullup on_press 50` |
 | **`remove`** | Remove a mapping by its id (see `$buttons status`). | `$buttons remove 0` |
-| **`schema`** | Every mapping as a JSON Lines row (`"group":"button"`), then the end line (core 2.1; also in `$system schema`). | `$buttons schema` |
+| **`schema`** | Every mapping as a JSON Lines row (`"group":"button"`), then `{"end":"buttons","count":N}` (also in `$system schema`). | `$buttons schema` |
 
-Pins are claimed in the core pin registry (`xewe::pins`, core 2.1): `add` refuses a pin another module holds; a stored mapping whose pin is taken is reported at boot and ignored; `remove` releases the pin once no mapping uses it.
+Pins are claimed in the core pin registry (`xewe::pins`): `add` refuses a pin another module holds; a stored mapping whose pin is taken is reported at boot and ignored; `remove` releases the pin once no mapping uses it.
 
 ### Requirements
 
@@ -49,6 +47,15 @@ Pins are claimed in the core pin registry (`xewe::pins`, core 2.1): `add` refuse
 | Boards | ESP32-C3, ESP32-C6, ESP32-S3 (arduino-esp32 3.x) |
 
 Metadata and dependencies are declared in [`module.properties`](module.properties).
+
+### Settings and NVS keys
+
+No settings table: the mappings are not plain settings. Each mapping is an extra schema row
+(`"group":"button"`) in `$buttons schema` and `$system schema`.
+
+| Key (namespace `buttons`) | Type | Meaning |
+|---|---|---|
+| `data` | FlexData blob | every mapping: id, pin, command, input mode, event, debounce |
 
 ### Tests
 
@@ -66,5 +73,4 @@ build/tools/.venv/bin/python -m xewe test --module buttons --unit-only  # unit t
 - `test_status` (`$buttons status`) and `test_add_then_remove` (`$buttons add`, then `$buttons remove` with the new id) need a board; without one they report
   "compiled, not run".
 - Hardware precondition: a provisioned board. The add/remove test needs a free GPIO in `XEWE_TEST_BUTTONS_PIN` and is skipped without it; it removes the mapping it adds. A freshly erased board stops at the first-boot
-  "Would you like to enable ...?" prompts (`get_yn` waits forever), so provision it by hand first
-  (CONTRACT.md section 7.2).
+  "Would you like to enable ...?" prompts, so provision it first (`xewe provision`).

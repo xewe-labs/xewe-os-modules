@@ -64,10 +64,10 @@ struct FanConfig {
     float                       ema_alpha                   = 0.3f;
     uint32_t                    absolute_max_rpm            = 10000;
     uint32_t                    ui_rounding                 = 10;
-    // curve period and stale timeout are run-time settings since 0.2.0 (`curve_ms`, `stale_ms`)
+    // curve period and stale timeout are run-time settings (`curve_ms`, `stale_ms`)
 };
 
-// Curve events (core 2.1 listener set: `fan.listeners.add(&l)`, up to 4). `origin` is whoever caused
+// Curve events (core listener set: `fan.listeners.add(&l)`, up to 4). `origin` is whoever caused
 // the change: the temperature source passed to set_temperature(), or the caller of a curve change
 // (nullptr from the CLI). Called in the caller's task (curve target: from loop()); keep them short.
 struct FanListener {

@@ -3,7 +3,7 @@
 // xewe-os-modules/modules/led/src/Led/modes/ColorFadeTwoZone.h
 //
 // Color Fade Two Zone (id 2): noise between two hues, smoothed frame to frame (state.pixels).
-// 2.3.x: its hand-written six-sector HSV (hsv).
+// Colours: six-sector HSV (hsv).
 #pragma once
 
 #include "Mode.h"

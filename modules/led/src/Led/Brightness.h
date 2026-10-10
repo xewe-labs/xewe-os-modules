@@ -5,7 +5,7 @@
 
 #include <XeWeCore.h>
 
-// Brightness and on/off with a linear fade (ported from xewe-led-os 2.3.x Brightness).
+// Brightness and on/off with a linear fade.
 // Not thread-safe: Led calls it with its render mutex held.
 class LedBrightness {
 public:

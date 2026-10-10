@@ -63,9 +63,9 @@ void Wifi::begin_routines_regular() {
 }
 
 void Wifi::loop() {
-    // enforce Wifi connection if the module is active
+    // blocks until connected while the module is active (README, Known issues)
     while (WiFi.status() != WL_CONNECTED) {
-        // Optimized: Use get_yn with 1 attempt (retry_count=1) to act as a timed prompt
+        // one attempt with a timeout: a timed prompt that defaults to no
         bool user_disabled = os.serial.get_yn(
             "Wifi connection lost\nReconnecting in 5 seconds\nDisable and reset WiFi module?",
             1,    // retry_count
@@ -105,8 +105,6 @@ bool Wifi::connect(bool prompt_for_credentials) {
     DBG_PRINTF(Wifi, "connect(prompt_for_credentials=%d)\n", prompt_for_credentials);
     if (is_disabled(true)) return false;
     if (is_connected(true)) return true;
-
-    // First debug is already present
 
     std::string ssid, pwd;
     if (read_stored_credentials(ssid, pwd)) {
@@ -273,7 +271,6 @@ std::vector<std::string> Wifi::scan(bool verbose) {
 
     if (verbose) {
         for (size_t j = 0; j < unique_ssid_list.size(); ++j) {
-            // Optimized: Use printf instead of snprintf + print
             os.serial.printf("%zu. %s", j, unique_ssid_list[j].c_str());
         }
     }
@@ -295,7 +292,7 @@ bool Wifi::join(std::string_view ssid,
     if (is_disabled(true)) return false;
 
     for (uint8_t retry_counter = 0; retry_counter < retry_count; retry_counter++) {
-        // Optimized: Print "Joining [ssid]" without a newline (end="") so dots appear on same line
+        // no line end, so the progress dots follow on the same line
         os.serial.print(std::string("Joining ") + std::string(ssid), "");
 
         DBG_PRINTF(Wifi, "join(): ssid='%.*s'\n", int(ssid.size()), ssid.data());
@@ -323,7 +320,7 @@ bool Wifi::join(std::string_view ssid,
         DBG_PRINTLN(Wifi, "join(): timeout, disconnected");
     }
     if (retry_count > 1) {
-        // Optimized: Use get_yn with 1 attempt/timeout
+        // one attempt, 10 s timeout
         bool reset_credentials = os.serial.get_yn("Would you like to reset credentials?", 1, 10000);
         if (reset_credentials) reset();
     }
@@ -348,7 +345,6 @@ uint8_t Wifi::prompt_credentials(std::string& ssid,
 
     std::vector<std::string> networks = scan(true);
 
-    // Optimized: get_int handles parsing and retry logic directly
     // Min value -3 covers the menu options (-1, -2, -3) and max is high enough for network indices
     int                      choice   = os.serial.get_int(
         "\nSelect network by number; or enter\n-1 to exit\n-2 to rescan\n-3 to enter custom SSID\nSelection: ",

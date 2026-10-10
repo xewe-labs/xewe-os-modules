@@ -62,7 +62,7 @@ def test_set_rejects_out_of_range(serial):
 
 
 def test_settings_table(serial):
-    # core 2.1 table: `$fan set <key>` goes to the table, `$fan schema` lists 2 rows + fans + curve
+    # settings table: `$fan set <key>` goes to the table, `$fan schema` lists 2 rows + fans + curve
     serial.command("$fan get curve_ms", expect=r"curve_ms=\d+", timeout=5)
     serial.command("$fan set stale_ms 999", expect=r"! \$fan set stale_ms: expected u32 in \[1000, 600000\]", timeout=5)
     serial.command("$fan set nope 1", expect=r"! \$fan: no setting 'nope'", timeout=5)

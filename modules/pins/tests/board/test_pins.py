@@ -24,5 +24,5 @@ def test_adc_read(serial):
 
 
 def test_claims_listing(serial):
-    # core 2.1 pin registry listing (owned by the pins module)
+    # core pin registry listing (owned by the pins module)
     serial.command("$pins claims", expect=r"GPIO \d+: \w+|No GPIO claimed", timeout=5)

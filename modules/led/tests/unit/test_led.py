@@ -23,7 +23,7 @@ TABLE_RX = re.compile(r"inline constexpr ParamDef PARAMS\[\] = \{\n(.*?)\n\};", 
 MODEDEF_RX = re.compile(
     r"inline constexpr ModeDef (MODE_\w+) = \{(\d+), \"([^\"]+)\", (\w+)::PARAMS, LED_FX_COUNT_OF\((\w+)::PARAMS\),")
 STD_HEADERS = {"cmath", "cstddef", "cstdint", "cstring", "vector", "string", "array", "algorithm"}
-# core headers that are host-includable (standard library only; core >= 2.1, CC4 + CC2)
+# core headers that are host-includable (standard library only; core >= 2.1)
 CORE_HEADERS = {"XeWeCore/Utils/Color.h", "XeWeCore/Utils/Listeners.h"}
 
 
@@ -71,7 +71,7 @@ def test_properties_match_source():
 def test_chipset_table_matches_add_leds():
     table = re.findall(r"\{\s*(\d+),\s*\"(\w+)\",\s*(true|false)\s*\}", (SRC / "Chipsets.h").read_text())
     ids = [int(i) for i, _, _ in table]
-    assert ids and len(ids) == len(set(ids)) and all(0 <= i <= 45 for i in ids)   # 2.3.x id range
+    assert ids and len(ids) == len(set(ids)) and all(0 <= i <= 45 for i in ids)   # the stored chip id range
     cpp = (SRC / "Led.cpp").read_text()
     cases = re.findall(r"case (\d+):\s+c = (?:&FastLED\.addLeds|add_clockless)<(\w+)[,>]", cpp)
     assert sorted((int(i), n) for i, n in cases) == sorted((int(i), n) for i, n, _ in table)
@@ -85,7 +85,7 @@ def test_chipset_table_matches_add_leds():
 def test_effects_unit_gpp(tmp_path):
     # registry lookups, every mode's frames (pinned CRC per mode id), maths, cross-fade, seeds
     count = _run_gpp(tmp_path, "test_effects")
-    assert count >= 56, f"only {count} checks ran (56 when written, 44 before the split); was the test emptied?"
+    assert count >= 56, f"only {count} checks ran (at least 56 expected); was the test emptied?"
 
 
 @pytest.mark.unit
@@ -93,12 +93,12 @@ def test_listener_fanout_unit_gpp(tmp_path):
     # LedListener.h: core xewe::ListenerSet with 6 slots, no duplicates, slot order, origin echo
     # suppression, default no-op bodies
     count = _run_gpp(tmp_path, "test_listeners")
-    assert count >= 28, f"only {count} checks ran (28 when written); was the test emptied?"
+    assert count >= 28, f"only {count} checks ran (at least 28 expected); was the test emptied?"
 
 
 @pytest.mark.unit
 def test_registry_consistent():
-    # LM13/LM14: one file per mode, Registry.h is the one list; ids and names unique, keys fit NVS
+    # one file per mode, Registry.h is the one list; ids and names unique, keys fit NVS
     registry = (MODES_DIR / "Registry.h").read_text()
     includes = re.findall(r'^#include "(\w+\.h)"', registry, re.M)
     rows = re.findall(r"^\s+(MODE_\w+),\s*$", re.search(r"MODES\[\] = \{\n(.*?)\n\};", registry, re.S)[1], re.M)
@@ -133,14 +133,14 @@ def test_registry_consistent():
             assert step >= 1, f"{name}.{key}"
             assert len(f"m:{mode_id}:{key}") <= 15, f"NVS key m:{mode_id}:{key} longer than 15"
     assert sorted(rows) == sorted(consts), "every mode file listed once in MODES[] (and nothing else)"
-    # the ids of 2.3.x are kept (LM14)
+    # the stored mode ids never change
     assert ids_by_name == {"Solid": 0, "Color Fade": 1, "Color Fade Two Zone": 2, "Brightness Fade": 3,
                        "Pulse": 4, "Rainbow": 5, "Christmas Lights": 6}
 
 
 @pytest.mark.unit
 def test_no_positional_mode_lookup():
-    # LM14: modes are found by id (find_mode); MODES[...] appears only in Registry.h (default_mode = first row)
+    # modes are found by id (find_mode); MODES[...] appears only in Registry.h (default_mode = first row)
     for f in sorted(SRC.rglob("*")):
         if f.is_file() and f.name != "Registry.h":
             assert not re.search(r"\bMODES\[[^\]]", f.read_text()), f"{f.relative_to(SRC)} indexes MODES[]"
@@ -184,11 +184,11 @@ def test_setters_notify_listeners():
 
 @pytest.mark.unit
 def test_mode_api_for_led_web():
-    # LM17/LM18: the names the project-local LedWeb calls (led.<name>); setters take an origin
+    # the names a project-local web page calls (led.<name>); setters take an origin
     h = (SRC / "Led.h").read_text()
     for decl in ("set_mode", "set_param", "set_color", "set_speed", "reset_params", "set_brightness", "set_state"):
         assert re.search(rf"\b{decl}\s*\([^;]*const void\* origin = nullptr[^;]*\);", h, re.S), decl
-    # led gaps closed in 0.3.0: a transient on/off and brightness (no NVS write), fill with a fade
+    # a transient on/off and brightness (no NVS write), fill with a fade
     for decl in ("set_state", "set_brightness"):
         assert re.search(rf"\b{decl}\s*\([^;]*bool persist = true\);", h, re.S), decl
     assert re.search(r"\bfill\s*\(LedRgb color, uint16_t fade_ms = 0\);", h)
@@ -196,7 +196,7 @@ def test_mode_api_for_led_web():
                    "add_listener", "remove_listener", "fill", "clear_fill", "get_frame_checksum", "notify_listeners"):
         public = h.split("public:", 1)[1].split("private:", 1)[0]
         assert re.search(rf"\b{getter}\s*\(", public), f"{getter} not public"
-    assert "LedFrameSource" not in h and "set_frame_source" not in h, "frame source is internal (LM17)"
+    assert "LedFrameSource" not in h and "set_frame_source" not in h, "frame source is internal"
     cpp = (SRC / "Led.cpp").read_text()
     body = re.search(r"bool Led::reset_params\(int mode_id, const void\* origin\) \{(.*?)\n\}", cpp, re.S)[1]
     assert body.count("activate(") == 1 and body.count("persist_params(") == 1 and "set_param(" not in body
@@ -206,7 +206,7 @@ def test_mode_api_for_led_web():
 
 @pytest.mark.unit
 def test_command_table():
-    # LM15: the `$help` table as registered: strip commands, `mode` per arg count, 2.3.x aliases;
+    # the `$help` table as registered: strip commands, `mode` per arg count, xewe-led-os aliases;
     # names fit the core's 15-character limit; every `mode` subcommand is dispatched
     cpp = (SRC / "Led.cpp").read_text()
     table = re.findall(r'register_command\(\{"(\w+)", "[^"]*", "([^"]*)", (\d+),', cpp)
@@ -231,7 +231,7 @@ def test_command_table():
 
 @pytest.mark.unit
 def test_settings_table():
-    # core 2.1 table (Led::settings): the 2.3.x NVS keys and types, read and written nowhere else by
+    # settings table (Led::settings): the xewe-led-os NVS keys and types, read and written nowhere else by
     # hand except the two runtime setters; RESTART where a restart applies it; README lists every key
     cpp, h = (SRC / "Led.cpp").read_text(), (SRC / "Led.h").read_text()
     body = re.search(r"xewe::Settings Led::settings\(\) const \{(.*?)\n\}", cpp, re.S)[1]
@@ -272,7 +272,7 @@ def test_settings_table():
 
 @pytest.mark.unit
 def test_pins_claimed_and_hex_from_core():
-    # CC5 pin registry: claim at begin (data, clock for clocked chips), release on reset; CC3 hex parser
+    # pin registry: claim at begin (data, clock for clocked chips), release on reset; core hex parser
     cpp = (SRC / "Led.cpp").read_text()
     claim = re.search(r"void Led::claim_pins\(.*?\n\}", cpp, re.S)[0]
     assert "xewe::pins::claim(data" in claim and "xewe::pins::claim(clock" in claim

@@ -110,7 +110,7 @@ int main() {
         CHECK(!same(a, c));
         CHECK(!(a[0].r == a[5].r && a[0].g == a[5].g && a[0].b == a[5].b));
         // pinned: integer-only maths, so the frame is the same on every host (and on the ESP32)
-        CHECK(crc32(a) == 0x2a589e69u);   // LX1: FastLED rainbow HSV (was 0x9103d394 with six-sector HSV)
+        CHECK(crc32(a) == 0x2a589e69u);   // FastLED rainbow HSV
         uint16_t         p[MAX_PARAMS] = {0, 255};
         ModeState        st;
         std::vector<Rgb> red(32);
@@ -161,9 +161,9 @@ int main() {
         render(m, p, st, buf.data(), 0, 40);
         CHECK(st.pixels.empty());
     }
-    // LX1 colour fidelity: hsv_rainbow == FastLED 3.10.3 hsv2rgb_rainbow (2.3.x CHSV / fill_rainbow) and
-    // hsv_spectrum == core xewe::color::hsv_to_rgb (2.3.x Solid / Pulse). The exhaustive comparison against
-    // the real functions is test_logs/2026-10-09-night-run/led/lx1-colour-compare.*; these are spot values.
+    // colour fidelity: hsv_rainbow == FastLED 3.10.3 hsv2rgb_rainbow (CHSV / fill_rainbow) and
+    // hsv_spectrum == core xewe::color::hsv_to_rgb (Solid / Pulse). Spot values, printed by the real
+    // functions.
     {
         struct Ref { uint8_t h, s, v; Rgb c; };
         static const Ref rainbow_ref[] = {   // printed by FastLED's hsv2rgb_rainbow
@@ -208,11 +208,8 @@ int main() {
         prepare(m, e, 32, 0);
         CHECK(e.words == d.words);
     }
-    // every mode: same inputs -> same CRC (two independent states), pinned per mode id. LX1 changed the
-    // pins of Color Fade (1), Brightness Fade (3) and Rainbow (5) when they moved to FastLED rainbow HSV
-    // (were 0xb3575225, 0xb8d00e70, 0x5dd08412); Solid, Two Zone, Pulse, Christmas are unchanged. The pins are
-    // host values (checked with g++ -O0 and -O2 on aarch64); Pulse uses std::sin, so its pin is host-only.
-    // Unchanged by the split into one file per mode (LM13).
+    // every mode: same inputs -> same CRC (two independent states), pinned per mode id. The pins are
+    // host values (the same with g++ -O0 and -O2 on aarch64); Pulse uses std::sin, so its pin is host-only.
     {
         struct Pin { uint8_t id; uint32_t crc; };
         static const Pin pinned[] = {

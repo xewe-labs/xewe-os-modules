@@ -39,7 +39,7 @@ def test_curve_unit_gpp(tmp_path):
     assert run.returncode == 0, run.stdout + run.stderr
     summary = re.search(r"PASSED: (\d+) check\(s\), 0 failure\(s\)", run.stdout)
     assert summary, run.stdout
-    assert int(summary[1]) >= 72      # 73 from the pad + 14 `curve set` parsing - 15 hex checks (now core CC3)
+    assert int(summary[1]) >= 72      # minimum check count: a silently emptied test fails
 
 
 @pytest.mark.unit
@@ -56,7 +56,7 @@ def test_curve_header_is_pure():
 
 @pytest.mark.unit
 def test_r1_fixes_kept():
-    """Night-run review R1: 64-bit tach maths, shared-pin refusal, schema mismatch never overwritten."""
+    """64-bit tach maths, shared-pin refusal, schema mismatch never overwritten."""
     cpp = (SRC / "Fan.cpp").read_text()
     assert "static_cast<uint64_t>(pulses) * 30000u" in cpp
     assert "f->pin_tach == pwm_pin" in cpp and "f->pin_pwm == tach_pin" in cpp

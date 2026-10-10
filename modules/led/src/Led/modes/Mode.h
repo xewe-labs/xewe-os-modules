@@ -32,7 +32,7 @@ struct ParamDef {
 };
 
 // Per-instance state of a running mode. Counters advance once per rendered frame (50 fps in the
-// firmware), as in 2.3.x. The two per-pixel buffers are for modes that need them (Color Fade Two Zone
+// firmware). The two per-pixel buffers are for modes that need them (Color Fade Two Zone
 // keeps its smoothed frame in `pixels`, Christmas Lights its noise offsets in `words`); the mode's
 // prepare() sizes them.
 struct ModeState {
@@ -45,7 +45,7 @@ struct ModeState {
 // prepare: size the state's buffers for n pixels (nullptr: the mode needs none). Led calls it from the
 //          main loop when a mode starts, so the render task does not allocate on a mode change;
 //          render() calls it again and only allocates when the strip length changed.
-// color:   the colour that stands for the mode (2.3.x Mode::get_rgb; status `Color:`, on_color).
+// color:   the colour that stands for the mode (status `Color:`, on_color).
 // render:  one frame into buf[0..n) from the parameter values `p` (table order). Runs in the render
 //          task with the render mutex held: no blocking, no NVS, no serial.
 using PrepareFn = void (*)(ModeState& st, uint16_t n);
@@ -72,7 +72,7 @@ inline int param_index(const ModeDef& mode, const char* key) {
     return -1;
 }
 
-// clamp into [min, max]; `hue` wraps around 0..255 instead (as in 2.3.x)
+// clamp into [min, max]; `hue` wraps around 0..255 instead
 inline uint16_t clamp_param(const ParamDef& p, int32_t value) {
     if (std::strcmp(p.key, "hue") == 0) {
         int32_t wrapped = value % 256;
@@ -90,8 +90,8 @@ inline void default_params(const ModeDef& mode, uint16_t* out) {
 
 // ---- running a mode -----------------------------------------------------------------------------------
 // `seed` != 0 reseeds the state's generator first and drops seeded buffers (Christmas Lights flicker
-// offsets): the firmware passes esp_random() ^ millis() so the pattern differs per start (2.3.x
-// random16()); 0 keeps the fixed default seed, which the unit tests rely on for pinned frames.
+// offsets): the firmware passes esp_random() ^ millis() so the pattern differs per start;
+// 0 keeps the fixed default seed, which the unit tests rely on for pinned frames.
 inline void prepare(const ModeDef& mode, ModeState& st, uint16_t n, uint32_t seed = 0) {
     if (seed != 0) {
         st.rng = seed;

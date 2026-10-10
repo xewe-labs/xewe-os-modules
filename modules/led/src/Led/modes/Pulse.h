@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // xewe-os-modules/modules/led/src/Led/modes/Pulse.h
 //
-// Pulse (id 4): one colour, brightness on a sine at `speed` beats per minute. 2.3.x: core float
+// Pulse (id 4): one colour, brightness on a sine at `speed` beats per minute. Colour: core float
 // hsv_to_rgb, then nscale8(beatsin8). Uses std::sin, so its frames are host-specific in the last bit.
 #pragma once
 

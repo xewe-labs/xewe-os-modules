@@ -65,7 +65,7 @@ Mlx90614::Mlx90614(xewe::Os& host, Mlx90614Config config)
 }
 
 xewe::Settings Mlx90614::settings() const {
-    // keys are new in 0.2.0 (the 0.1 blob `data` is migrated by migrate_blob); 255 = pin not configured
+    // a version-0.1 blob `data` is copied into these rows by migrate_blob; 255 = pin not configured
     static constexpr xewe::SettingDef table[] = {
         xewe::setting<&Mlx90614::i2c_address>("addr", 0x01, 0x7F, MLX90614_ADDR, "I2C address (decimal; set_addr takes hex)"),
         xewe::setting<&Mlx90614::sda_pin>    ("sda", 0, 255, MLX90614_SDA, "I2C SDA GPIO, 255 = none"),
@@ -269,11 +269,11 @@ float Mlx90614::read_i2c_temp(uint8_t register_address) {
     return celsius;
 }
 
-// 0.1.x kept addr/pins in one FlexData blob (`data`). Copy it to the table keys once, then remove it.
-// has("schema") tells a stored schema from the struct default (CC7): a blob without one is foreign.
+// Version 0.1 kept addr/pins in one FlexData blob (`data`). Copy it to the table keys once, then remove it.
+// has("schema") tells a stored schema from the struct default: a blob without one is foreign.
 void Mlx90614::migrate_blob() {
     Mlx90614Store store;
-    if (!os.nvs.read_flex(id, "data", store)) return;          // nothing stored by 0.1.x
+    if (!os.nvs.read_flex(id, "data", store)) return;          // no version-0.1 blob
     if (!store.has("schema") || store.schema != Mlx90614Store::SCHEMA) {
         os.serial.print("MLX90614: stored 0.1 settings have an unknown schema; using the table values "
                         "(the blob is left untouched)");
@@ -289,8 +289,8 @@ void Mlx90614::migrate_blob() {
 }
 
 int Mlx90614::scan() {
-    // bounded: a per-probe timeout, an overall budget and a stop on a dead bus (night-run follow-up:
-    // a bare bus without pull-ups blocked the console for tens of seconds)
+    // bounded: a per-probe timeout, an overall budget and a stop on a dead bus (a bare
+    // bus without pull-ups would otherwise block the console for tens of seconds)
     const uint16_t saved_timeout = Wire.getTimeOut();
     Wire.setTimeOut(config.scan_probe_timeout_ms);
     const uint32_t start = millis();

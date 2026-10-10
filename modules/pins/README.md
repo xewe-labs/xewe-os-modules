@@ -1,19 +1,17 @@
 # pins — GPIO, ADC, PWM and I2C from the command line
 
-XeWe OS module · created 2026-09-15 (split out of xewe-os, where it was developed from 2026-01) · Solo: Max Dokukin · Status: Active (0.3.0)
-
 ## Overview
 
 GPIO, ADC, PWM and I2C access from the command line. A module for
 [XeWe OS](https://github.com/xewe-labs/xewe-os), built on [XeWeCore](https://github.com/xewe-labs/xewe-os-core). It exposes the board's pins as
-nine commands so hardware can be probed and driven without writing or flashing code: read and
+eleven commands so hardware can be probed and driven without writing or flashing code: read and
 write digital levels, set pin modes, read the ADC, attach and drive PWM, and scan an I2C bus.
 Combined with the Buttons, Scheduler and WebInterface modules, pin commands become the actions
 behind buttons, schedules and HTTP requests.
 
 ## Highlights
 
-- Nine commands covering digital I/O, pin modes with pull resistors, ADC, PWM and I2C scanning
+- Eleven commands covering digital I/O, pin modes with pull resistors, ADC, PWM, I2C scanning and the pin registry
 - PWM uses the arduino-esp32 3.x pin-based API (`ledcAttach`, `ledcWrite`, `ledcDetach`): 1 Hz–40 MHz, 1–16 bits
 - I2C scan initialises `Wire` on any SDA/SCL pair and probes addresses 0x01–0x77
 - Arguments are parsed and validated (`xewe::str::parse_int`) with an error message instead of a crash
@@ -46,7 +44,7 @@ Direct hardware access without writing code.
 | **`claims`** | Every GPIO in the core pin registry with its owner (`GPIO 3: fan`), strapping pins marked. | `$pins claims` |
 | **`release`** | Free a GPIO that `$pins` claimed. | `$pins release 9` |
 
-Core 2.1 pin registry: every command claims its pin for `pins` on first use and refuses a pin another module holds (`! GPIO 3 already claimed by fan, refused for pins`), so `$pins` cannot reconfigure a fan, sensor or button pin. `pwm_stop` and `release` free it; `i2c_scan` frees its two pins after the scan.
+Pin registry: every command claims its pin for `pins` on first use and refuses a pin another module holds (`! GPIO 3 already claimed by fan, refused for pins`), so `$pins` cannot reconfigure a fan, sensor or button pin. `pwm_stop` and `release` free it; `i2c_scan` frees its two pins after the scan.
 
 ### Requirements
 
@@ -71,8 +69,7 @@ build/tools/.venv/bin/python -m xewe test --module pins --unit-only  # unit test
 ```
 
 - `test_compiles` builds the harness firmware with this module selected; it runs without a board.
-- `test_status` (`$pins status`) and `test_adc_read` (`$pins adc_read <pin>`) need a board; without one they report
+- `test_status` (`$pins status`), `test_adc_read` (`$pins adc_read <pin>`) and `test_claims_listing` (`$pins claims`) need a board; without one they report
   "compiled, not run".
 - Hardware precondition: a provisioned board. `adc_read` reads `XEWE_TEST_PINS_ADC_PIN` (default 1); nothing is written. A freshly erased board stops at the first-boot
-  "Would you like to enable ...?" prompts (`get_yn` waits forever), so provision it by hand first
-  (CONTRACT.md section 7.2).
+  "Would you like to enable ...?" prompts, so provision it first (`xewe provision`).

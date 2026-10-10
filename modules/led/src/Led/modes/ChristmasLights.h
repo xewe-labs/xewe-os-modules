@@ -22,7 +22,7 @@ inline void prepare(ModeState& st, uint16_t n) {   // per-pixel noise offsets fr
     for (uint16_t& o : st.words) o = next_random16(st.rng);
 }
 
-inline Rgb color(const uint16_t*) {   // fixed amber (2.3.x)
+inline Rgb color(const uint16_t*) {   // fixed amber
     return {85, 49, 22};
 }
 

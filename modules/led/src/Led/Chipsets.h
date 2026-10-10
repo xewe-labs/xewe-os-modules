@@ -6,11 +6,11 @@
 #include <cstddef>
 #include <cstdint>
 
-// Supported chipsets. Ids are the ids of xewe-led-os 2.3.x (LED_CHIPSET_TABLE, NVS key led/chip), so a
-// device keeps its stored chip. The old table had 46 entries; only the chips the release matrix ships
-// (WS2812B on-board LEDs and Led Dock strips) plus the common WS2811/WS2812/SK6812/APA102 are compiled
-// in, because every entry instantiates a FastLED driver. Adding one: a row here and a case in
-// Led::add_leds() (Led.cpp). The full old list is in README.md.
+// Supported chipsets. The ids are stored (NVS key led/chip) and never change; they match xewe-led-os,
+// so a device moved from it keeps its stored chip. Ids run 0..45; only the chips the release matrix
+// ships (WS2812B on-board LEDs and Led Dock strips) plus the common WS2811/WS2812/SK6812/APA102 are
+// compiled in, because every entry instantiates a FastLED driver. Adding one: a row here and a case in
+// Led::add_leds() (Led.cpp). The full id list is in README.md.
 struct LedChipset {
     uint8_t     id;
     const char* name;
@@ -47,7 +47,7 @@ constexpr const LedChipset* led_chipset_by_name(const char* name) {
     return nullptr;
 }
 
-// Colour orders, indexed like NVS key led/colorder (same order as 2.3.x).
+// Colour orders, indexed like NVS key led/colorder: the order is stored, never reorder it.
 inline constexpr const char* LED_COLOR_ORDERS[6] = {"RGB", "RBG", "GRB", "GBR", "BRG", "BGR"};
 
 constexpr int led_color_order_index(const char* name) {

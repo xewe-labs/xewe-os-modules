@@ -6,7 +6,8 @@
 // every 500 ms (5 s while it does not answer). Error reads (short read, the sensor's error flag) are
 // reported as offline, never as a temperature. Listeners (Mlx90614Listener) get every poll result,
 // e.g. to feed the fan module's curve (`mlx90614.listeners.add(&l)`). NVS namespace `mlx90614`: the
-// settings table rows `addr`, `sda`, `scl` (core 2.1); the 0.1 blob `data` is migrated once and removed.
+// settings table rows `addr`, `sda`, `scl`; a `data` blob left by version 0.1 is copied into them once
+// and removed.
 #pragma once
 
 #include <XeWeCore.h>
@@ -53,7 +54,7 @@ struct Mlx90614Listener {
     virtual void on_temperature(float object_c, float ambient_c, bool online) = 0;
 };
 
-// Pins and address left this struct in 0.2.0: they are table rows (defaults MLX90614_SDA/SCL/ADDR).
+// Pins and address are not here: they are table rows (defaults MLX90614_SDA/SCL/ADDR).
 struct Mlx90614Config {
     uint32_t                    poll_interval_ms            = 500;
     uint32_t                    offline_poll_interval_ms    = 5000;     // back off while no sensor answers
@@ -61,7 +62,7 @@ struct Mlx90614Config {
     uint16_t                    scan_probe_timeout_ms       = 10;       // Wire timeout per probe during `scan`
 };
 
-// 0.1.x stored settings (NVS namespace "mlx90614", key "data"): read once at boot to migrate them to
+// Settings stored by version 0.1 (NVS namespace "mlx90614", key "data"): read once at boot, copied to
 // the table keys, then removed. Never written again.
 struct Mlx90614Store : xewe::FlexData<Mlx90614Store> {
     static constexpr uint8_t    SCHEMA                      = 1;
@@ -101,9 +102,9 @@ public:
     // {"module","online","object_temp"|null,"ambient_temp"|null,"i2c_address","sda_pin","scl_pin","read_errors"}
     std::string                 get_json                    ()                              const;
 
-    // up to MLX90614_LISTENERS_MAX, no heap (core 2.1 ListenerSet): listeners.add(&l) / remove(&l)
+    // up to MLX90614_LISTENERS_MAX, no heap (core ListenerSet): listeners.add(&l) / remove(&l)
     xewe::ListenerSet<Mlx90614Listener, MLX90614_LISTENERS_MAX> listeners;
-    // 0.1 names, kept: listeners.add / listeners.remove
+    // the same as listeners.add / listeners.remove
     bool                        add_listener                (Mlx90614Listener* l)           { return listeners.add(l); }
     bool                        remove_listener             (Mlx90614Listener* l)           { return listeners.remove(l); }
 
@@ -140,7 +141,7 @@ private:
     uint8_t                     i2c_address                 {0x5A};
     uint8_t                     bus_sda                     {255};      // the pins claimed for the running bus
     uint8_t                     bus_scl                     {255};
-    bool                        batch                       {false};    // set_pins/migration: one bus restart
+    bool                        batch                       {false};    // set_pins/blob copy: one bus restart
 
     static constexpr uint8_t    MLX_RAM_TA                  = 0x06;
     static constexpr uint8_t    MLX_RAM_TOBJ1               = 0x07;

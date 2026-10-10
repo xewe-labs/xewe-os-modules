@@ -17,7 +17,7 @@ class Wifi : public xewe::Module {
 public:
     explicit                 Wifi                    (xewe::Os& host);
 
-    // optional implementation
+    // xewe::Module hooks
     void                     begin_routines_required ()        override;
     void                     begin_routines_init     ()        override;
     void                     begin_routines_regular  ()        override;
@@ -30,11 +30,11 @@ public:
 
     std::string              status                  (const bool verbose = false)     const override;
 
-    // core 2.1 table: `ssid` (str 32) and `psw` (str 63, SECRET: never printed). Same NVS keys as
-    // 0.2, so stored credentials load unchanged. `$wifi set ssid "My Net"` + `$wifi connect`.
+    // settings table: `ssid` (str 32) and `psw` (str 63, SECRET: never printed). Credentials stored
+    // by an earlier version load unchanged (same NVS keys). `$wifi set ssid "My Net"` + `$wifi connect`.
     xewe::Settings           settings                ()                               const override;
 
-    // other methods
+    // connection API
     bool                     connect                 (bool prompt_for_credentials);
     bool                     disconnect              (bool verbose = false);
     bool                     is_connected            (bool verbose = false)           const;

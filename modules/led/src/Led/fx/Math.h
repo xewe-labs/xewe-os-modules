@@ -4,10 +4,11 @@
 //
 // Shared pure maths of the LED modes: colour conversions, noise, blending, cross-fade. Host-compilable
 // on purpose: standard library plus core's host-includable Utils/Color.h, no Arduino, no FastLED
-// (tests/unit/test_effects.cpp builds it with g++ -I <core>/src). The conversions are the 2.3.x ones:
+// (tests/unit/test_effects.cpp builds it with g++ -I <core>/src). Three colour conversions:
 // FastLED's rainbow HSV (a bit-exact local re-implementation, see hsv_rainbow), core's float HSV
 // (xewe::color::hsv_to_rgb, called) and the six-sector HSV of Color Fade Two Zone. Frames are close to,
-// not bit-identical with, 2.3.x because the noise is value noise, not FastLED's Perlin inoise8/16.
+// not bit-identical with, FastLED-rendered ones because the noise is value noise, not FastLED's Perlin
+// inoise8/16.
 #pragma once
 
 #include <array>
@@ -21,7 +22,7 @@
 
 namespace led_fx {
 
-using Rgb = LedRgb;   // one pixel type for the strip and the modes (LM17)
+using Rgb = LedRgb;   // one pixel type for the strip and the modes
 
 inline uint8_t scale8(uint8_t value, uint8_t scale) {
     return static_cast<uint8_t>((static_cast<uint16_t>(value) * (static_cast<uint16_t>(scale) + 1)) >> 8);
@@ -37,8 +38,7 @@ inline uint8_t clamp8(int32_t v) {
     return static_cast<uint8_t>(v < 0 ? 0 : (v > 255 ? 255 : v));
 }
 
-// 8-bit HSV to RGB, six linear sectors (the hand-written ColorHSV of 2.3.x's Color Fade Two Zone; v2 uses
-// it for Two Zone only)
+// 8-bit HSV to RGB, six linear sectors (Color Fade Two Zone only)
 inline Rgb hsv(uint8_t hue8, uint8_t sat, uint8_t val) {
     uint8_t        r, g, b;
     const uint16_t h = static_cast<uint16_t>(hue8) * 6;
@@ -66,11 +66,11 @@ inline Rgb hsv(uint8_t hue8, uint8_t sat, uint8_t val) {
     return {r, g, b};
 }
 
-// FastLED's "rainbow" HSV to RGB (CHSV -> CRGB, fill_rainbow), used by 2.3.x Color Fade, Brightness Fade
+// FastLED's "rainbow" HSV to RGB (CHSV -> CRGB, fill_rainbow), used by Color Fade, Brightness Fade
 // and Rainbow. Re-implemented from FastLED 3.10.3 src/hsv2rgb.cpp hsv2rgb_rainbow() (MIT licence,
 // https://github.com/FastLED/FastLED) with its defaults Y1 = 1, Y2 = 0, G2 = 0, Gscale = 0 and
-// FASTLED_SCALE8_FIXED = 1; no FastLED include so this header stays host-buildable. Verified bit-exact
-// against the real function for all 256 x 256 x 256 inputs (wip/xewe-led-os-v2 MIGRATION-REPORT, LX1).
+// FASTLED_SCALE8_FIXED = 1; no FastLED include so this header stays host-buildable. Bit-exact
+// with the real function for all 256 x 256 x 256 inputs.
 inline uint8_t scale8_video_fl(uint8_t i, uint8_t scale) {   // FastLED scale8_video
     return static_cast<uint8_t>(((static_cast<int>(i) * scale) >> 8) + ((i && scale) ? 1 : 0));
 }
@@ -113,8 +113,8 @@ inline Rgb hsv_rainbow(uint8_t hue, uint8_t sat, uint8_t val) {
     return {r, g, b};
 }
 
-// Core's float HSV to RGB, XeWeCore Utils/Color.h xewe::color::hsv_to_rgb (2.3.x Solid, Pulse and every
-// mode's base colour). The core header is host-includable (CC4, core >= 2.1), so this is no copy.
+// Core's float HSV to RGB, XeWeCore Utils/Color.h xewe::color::hsv_to_rgb (Solid, Pulse and every
+// mode's base colour). The core header is host-includable (core >= 2.1), so this calls it, no copy.
 inline Rgb hsv_spectrum(uint8_t hue, uint8_t sat, uint8_t val) {
     const std::array<uint8_t, 3> c = xewe::color::hsv_to_rgb({hue, sat, val});
     return {c[0], c[1], c[2]};

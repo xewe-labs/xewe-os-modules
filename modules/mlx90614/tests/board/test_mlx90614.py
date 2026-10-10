@@ -35,7 +35,7 @@ def test_status(serial):
 
 
 def test_settings_table(serial):
-    # core 2.1: addr/sda/scl rows; out-of-range refused by the core
+    # settings table: addr/sda/scl rows; out-of-range refused by the core
     serial.command("$mlx90614 get addr", expect=r"addr=\d+", timeout=5)
     serial.command("$mlx90614 set addr 200", expect=r"! \$mlx90614 set addr: expected u8 in \[1, 127\]", timeout=5)
     serial.command("$mlx90614 schema", expect=r'\{"end":"mlx90614","count":3\}', timeout=5)

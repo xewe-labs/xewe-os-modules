@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // xewe-os-modules/modules/led/src/Led/modes/Rainbow.h
 //
-// Rainbow (id 5): a moving rainbow. 2.3.x: fill_rainbow (hsv_rainbow).
+// Rainbow (id 5): a moving rainbow. Colours: FastLED fill_rainbow (hsv_rainbow).
 #pragma once
 
 #include "Mode.h"
@@ -15,7 +15,7 @@ inline constexpr ParamDef PARAMS[] = {
     {"density", "Density", 1, 30, 10, 1, 'a'},
 };
 
-inline Rgb color(const uint16_t*) {   // no colour of its own: white (2.3.x)
+inline Rgb color(const uint16_t*) {   // no colour of its own: white
     return {255, 255, 255};
 }
 

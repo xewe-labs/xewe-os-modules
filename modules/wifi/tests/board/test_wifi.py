@@ -23,6 +23,6 @@ def test_scan_lists_networks(serial):
 
 
 def test_settings_table_masks_password(serial):
-    # core 2.1: ssid + psw (SECRET: never printed)
+    # settings table: ssid + psw (SECRET: never printed)
     serial.command("$wifi get psw", expect=r"psw=\*{8}", timeout=5)
     serial.command("$wifi schema", expect=r'\{"end":"wifi","count":2\}', timeout=5)

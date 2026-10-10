@@ -1,7 +1,5 @@
 # scheduler — run stored commands on a weekly schedule
 
-XeWe OS module · created 2026-09-15 (split out of xewe-os, where it was developed from 2026-07) · Solo: Max Dokukin · Status: Active (0.3.0)
-
 ## Overview
 
 Runs stored commands on a weekly schedule. A module for [XeWe OS](https://github.com/xewe-labs/xewe-os), built on [XeWeCore](https://github.com/xewe-labs/xewe-os-core). A schedule block
@@ -38,7 +36,7 @@ Times are minutes from midnight (0-1439), days are 0 (Monday) to 6 (Sunday); sev
 | :--- | :--- | :--- |
 | **`add`** | Add a schedule: `<start> <end> <day> <RRGGBB> "<cmd1\|cmd2>"`. | `$schedule add 480 1020 1 FF0000 "$pins gpio_write 8 1"` |
 | **`remove`** | Remove a schedule by id. | `$schedule remove 1` |
-| **`schema`** | Every schedule as a JSON Lines row (`"group":"schedule"`), then `{"end":"schedule","count":N}` (core 2.1; also in `$system schema`). | `$schedule schema` |
+| **`schema`** | Every schedule as a JSON Lines row (`"group":"schedule"`), then `{"end":"schedule","count":N}` (also in `$system schema`). | `$schedule schema` |
 
 ### Requirements
 
@@ -49,6 +47,16 @@ Times are minutes from midnight (0-1439), days are 0 (Monday) to 6 (Sunday); sev
 | Boards | ESP32-C3, ESP32-C6, ESP32-S3 (arduino-esp32 3.x) |
 
 Metadata and dependencies are declared in [`module.properties`](module.properties).
+
+### Settings and NVS keys
+
+No settings table: schedule blocks are not plain settings. Each block is an extra schema row
+(`"group":"schedule"`, with the `$schedule add` command as its `"set"` hint) in `$schedule schema` and
+`$system schema`.
+
+| Key (namespace `schedule`) | Type | Meaning |
+|---|---|---|
+| `schedules` | FlexData blob | every block: id, start and end minute, day, colour, commands |
 
 ### Tests
 
@@ -66,5 +74,4 @@ build/tools/.venv/bin/python -m xewe test --module scheduler --unit-only  # unit
 - `test_status` (`$schedule status`) and `test_add_then_remove` (`$schedule add`, then `$schedule remove` with the new id) need a board; without one they report
   "compiled, not run".
 - Hardware precondition: a provisioned board with Time and Wifi enabled, past the reboot that follows first setup. The test adds one block and removes it again. A freshly erased board stops at the first-boot
-  "Would you like to enable ...?" prompts (`get_yn` waits forever), so provision it by hand first
-  (CONTRACT.md section 7.2).
+  "Would you like to enable ...?" prompts, so provision it first (`xewe provision`).

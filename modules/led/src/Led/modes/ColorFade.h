@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // xewe-os-modules/modules/led/src/Led/modes/ColorFade.h
 //
-// Color Fade (id 1): hue and saturation drift around a base colour along 2D noise. 2.3.x: CHSV, so
+// Color Fade (id 1): hue and saturation drift around a base colour along 2D noise. Colours:
 // FastLED rainbow HSV (hsv_rainbow).
 #pragma once
 
@@ -20,7 +20,7 @@ inline constexpr ParamDef PARAMS[] = {
     {"min_bright", "Depth", 0, 255, 150, 1, 'a'},
 };
 
-inline Rgb color(const uint16_t* p) {   // 2.3.x: core hsv_to_rgb of the base colour
+inline Rgb color(const uint16_t* p) {   // core hsv_to_rgb of the base colour
     return hsv_spectrum(static_cast<uint8_t>(p[0]), static_cast<uint8_t>(p[1]), 255);
 }
 

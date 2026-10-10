@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // xewe-os-modules/modules/led/src/Led/LedListener.h
 //
-// Change notifications of the led module (MIGRATION-SURVEY 2.4). Standard library plus the core's
+// Change notifications of the led module. Standard library plus the core's
 // host-includable Utils/Listeners.h, so the fan-out is host-tested (led/tests/unit/test_listeners.cpp).
 //
 //   led.add_listener(&my_listener);     // up to LED_LISTENERS_MAX, no heap
@@ -23,7 +23,7 @@
 #include <XeWeCore/Utils/Listeners.h>
 
 #ifndef LED_LISTENERS_MAX
-#define LED_LISTENERS_MAX 6              // led-os uses 4 (web, homekit, alexa, home_assistant)
+#define LED_LISTENERS_MAX 6              // an LED firmware typically needs 4 (web, HomeKit, Alexa, Home Assistant)
 #endif
 
 struct LedListener {

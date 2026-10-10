@@ -25,7 +25,7 @@ public:
 
     WebServer&                  get_server                  ()                              { return http_server; }
 
-    // core 2.1 table: `port` (u16, RESTART) and `root` (str <= 31: GET / redirects there, "" = console)
+    // settings table: `port` (u16, RESTART) and `root` (str <= 31: GET / redirects there, "" = console)
     xewe::Settings              settings                    ()                              const override;
 
     // Who owns `/` (the console is always at /console). Precedence: a handler set here (RAM only, set it

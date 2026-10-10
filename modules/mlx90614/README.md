@@ -1,7 +1,5 @@
 # mlx90614 — MLX90614 contactless I2C temperature sensor
 
-XeWe OS module · extracted 2026-10-09 from the XeWe laptop cooling pad (MIGRATION.md CP1/CP10) · Solo: Max Dokukin · Status: Draft (0.2.0)
-
 ## Overview
 
 Reads an MLX90614 infrared thermometer over I2C (`Wire`): object and ambient temperature, every
@@ -17,11 +15,11 @@ for [XeWe OS](https://github.com/xewe-labs/xewe-os), built on
   the sensor is then reported offline (NaN, JSON `null`, `Read errors: N` in status)
 - Address validated (`0x01`–`0x7F`, hex with or without `0x`, the whole token must parse)
 - `scan` is bounded: 10 ms per probe, 1.5 s in total, and it stops after 3 bus errors/timeouts in a row
-  (a bare bus without pull-ups used to block the console for tens of seconds)
+  (an unbounded scan of a bare bus without pull-ups blocks the console for tens of seconds)
 - Value mapping in `src/Mlx90614/Convert.h`, pure C++ (no Arduino), host-tested with g++
-- Settings table (core 2.1): `addr` u8 1-127, `sda`/`scl` u8 (255 = none), each its own NVS key;
-  `$mlx90614 set|get|schema`. The 0.1 blob (`mlx90614/data`) is copied to them once and removed (only
-  when it has a `schema` field of 1, FlexData `has()`); any other blob is left untouched
+- Settings table: `addr` u8 1-127, `sda`/`scl` u8 (255 = none), each its own NVS key;
+  `$mlx90614 set|get|schema`. A `data` blob stored by version 0.1 is copied to them once and removed
+  (only when it has a `schema` field of 1, FlexData `has()`); any other blob is left untouched
 - First boot and `reset`: pins and address from the `MLX90614_*` build defines (the table defaults)
 - SDA/SCL are claimed in the core pin registry (`xewe::pins`) while the bus runs; a pin another
   module holds is refused
@@ -49,7 +47,7 @@ Pass with `xewe build --define KEY=VALUE`; used on the first boot only (or after
 | `MLX90614_ADDR` | 0x5A | 0x5A |
 | `MLX90614_LISTENERS_MAX` | 4 | 4 |
 
-The C3/C6 pins are the cooling pad's wiring (on the C6, 4/5 are MTMS/MTDI: harmless with I2C
+The C3/C6 pins are the XeWe laptop cooling pad's wiring (on the C6, 4/5 are MTMS/MTDI: harmless with I2C
 pull-ups unless a JTAG-select eFuse is burnt). 255 = not configured.
 
 ### Commands
@@ -62,7 +60,7 @@ pull-ups unless a JTAG-select eFuse is burnt). 255 = not configured.
 | **`scan`** | Scan the I2C bus (bounded, see above). | `$mlx90614 scan` |
 | **`set_addr`** | Set the sensor address (hex, 0x01-0x7F); persisted. | `$mlx90614 set_addr 0x5A` |
 | **`set_pins`** | Set SDA/SCL (two different output-capable GPIOs), restart the bus; persisted. | `$mlx90614 set_pins 4 5` |
-| **`set`** / **`get`** / **`schema`** | Table rows `addr` (decimal), `sda`, `scl` (core 2.1); `set sda`/`set scl` restart the bus. | `$mlx90614 set addr 91` |
+| **`set`** / **`get`** / **`schema`** | Table rows `addr` (decimal), `sda`, `scl`; `set sda`/`set scl` restart the bus. | `$mlx90614 set addr 91` |
 | **`print_json`** | `{"module","online","object_temp","ambient_temp","i2c_address","sda_pin","scl_pin","read_errors"}` (temperatures `null` while offline) | `$mlx90614 print_json` |
 | `status` / `reset` / `enable` / `disable` | generic module commands | `$mlx90614 status` |
 
@@ -76,7 +74,7 @@ struct MyListener : Mlx90614Listener {
     void on_temperature(float object_c, float ambient_c, bool online) override { /* main loop; keep it short */ }
 } my_listener;
 mlx90614.listeners.add(&my_listener);  // xewe::ListenerSet; false when all MLX90614_LISTENERS_MAX (4) slots are taken
-                                       // (add_listener/remove_listener: 0.1 names, kept)
+                                       // (add_listener/remove_listener do the same)
 ```
 
 Listeners are called after every poll (also offline: `online = false`, both temperatures NaN), from
@@ -92,13 +90,22 @@ the main loop.
 
 Metadata and dependencies are declared in [`module.properties`](module.properties).
 
+### Settings and NVS keys
+
+| Key (namespace `mlx90614`) | Type | Default | Meaning |
+|---|---|---|---|
+| `addr` | u8 1–127 | `MLX90614_ADDR` (0x5A) | sensor I2C address (decimal in `set`; `set_addr` takes hex) |
+| `sda` | u8 | `MLX90614_SDA` | SDA GPIO, 255 = not configured; `set` restarts the bus |
+| `scl` | u8 | `MLX90614_SCL` | SCL GPIO, 255 = not configured; `set` restarts the bus |
+| `data` | FlexData blob | | written by version 0.1 only; read once at boot, copied to the rows above, then removed |
+
 ### Tests
 
 `python -m xewe test --module mlx90614` in a harness (repo [README](../../README.md)).
 Unit (`tests/unit/test_mlx90614.py`, `--unit-only`): value mapping (Python mirror), `test_convert.cpp`
 with g++ (raw → °C with the error flag, address parsing, scan error streak), header purity.
 Board (`tests/board/test_mlx90614.py`): `test_compiles` without a board; on a provisioned bare board
-`test_status`, `test_set_addr_validation`, `test_set_pins_rejects_same_pin`,
+`test_status`, `test_settings_table`, `test_set_addr_validation`, `test_set_pins_rejects_same_pin`,
 `test_settings_survive_restart` (address across `$system restart`, restored); free pins
 `XEWE_TEST_MLX_SDA`/`XEWE_TEST_MLX_SCL` for `test_scan_bare_bus_is_bounded` (10 s limit);
 `test_read_temperature` requires a sensor (`XEWE_TEST_MLX_PRESENT=1`).

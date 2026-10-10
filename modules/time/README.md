@@ -1,7 +1,5 @@
 # time — network time and automatic timezone detection
 
-XeWe OS module · created 2026-09-15 (split out of xewe-os, where it was developed from 2026-07) · Solo: Max Dokukin · Status: Active (0.3.0)
-
 ## Overview
 
 NTP time sync and timezone handling. A module for [XeWe OS](https://github.com/xewe-labs/xewe-os), built on [XeWeCore](https://github.com/xewe-labs/xewe-os-core). On first boot it
@@ -36,7 +34,7 @@ later boots: apply stored offset → SNTP sync wait (≤ 50 × 200 ms) → print
 | Command | Description | Sample Usage |
 | :--- | :--- | :--- |
 | **`set_zone`** | Set the timezone offset. | `$time set_zone GMT-08:00` |
-| **`set`** / **`get`** / **`schema`** | Settings table (core 2.1): `tz_gmt_str` (normalised, applied at once; an invalid value is put back). `set_zone` is its alias. | `$time set tz_gmt_str GMT-8` |
+| **`set`** / **`get`** / **`schema`** | Settings table: `tz_gmt_str` (normalised, applied at once; an invalid value is put back). `set_zone` is its alias. | `$time set tz_gmt_str GMT-8` |
 | **`fetch`** | Sync the current time from the network. | `$time fetch` |
 
 ### Requirements
@@ -48,6 +46,12 @@ later boots: apply stored offset → SNTP sync wait (≤ 50 × 200 ms) → print
 | Boards | ESP32-C3, ESP32-C6, ESP32-S3 (arduino-esp32 3.x) |
 
 Metadata and dependencies are declared in [`module.properties`](module.properties).
+
+### Settings and NVS keys
+
+| Key (namespace `time`) | Type | Default | Meaning |
+|---|---|---|---|
+| `tz_gmt_str` | str ≤ 9 | `GMT+00:00` | timezone offset `GMT±HH:MM`; `GMT-8` is normalised to `GMT-08:00` and applied at once; an unparsable value is put back |
 
 ### Tests
 
@@ -62,8 +66,7 @@ build/tools/.venv/bin/python -m xewe test --module time --unit-only  # unit test
 ```
 
 - `test_compiles` builds the harness firmware with this module selected; it runs without a board.
-- `test_status` (`$time status`) and `test_fetch_syncs_time` (`$time fetch`) need a board; without one they report
+- `test_status` (`$time status`), `test_fetch_syncs_time` (`$time fetch`) and `test_settings_table` (`$time schema`) need a board; without one they report
   "compiled, not run".
 - Hardware precondition: a provisioned board with WiFi connected and internet access (NTP). A freshly erased board stops at the first-boot
-  "Would you like to enable ...?" prompts (`get_yn` waits forever), so provision it by hand first
-  (CONTRACT.md section 7.2).
+  "Would you like to enable ...?" prompts, so provision it first (`xewe provision`).

@@ -21,7 +21,7 @@ static int checks   = 0;
         else      { std::printf("FAIL %s (line %d)\n", #cond, __LINE__); ++failures; } \
     } while (0)
 
-// Records every callback it does not originate itself (the LedWeb pattern).
+// Records every callback it does not originate itself (the pattern a web page listener uses).
 struct Recorder : LedListener {
     std::vector<std::string> log;
     void on_brightness(uint8_t v, const void* origin) override { if (origin != this) log.push_back("b" + std::to_string(v)); }

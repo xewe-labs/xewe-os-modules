@@ -6,12 +6,9 @@ frame checksum (`$led checksum`). The harness lock must list FastLED in [librari
 a real strip are skipped with "requires hardware". Every test that changes a setting or the mode
 restores the value it found. Unit tests: tests/unit/test_led.py (`--unit-only`).
 
-The `$led mode ...` tests and the merged status are unverified on a board: written 2026-10-09 (LM15)
-while the board was offline; the strip tests are the led-strip ones, the mode tests the led-modes ones
-with the new command syntax and the `Led:` reply prefix. 0.3.0 (core 2.1 settings table, P3-A): status
-starts with the table rows (`num_led: 60`, `brightness: 128`, `state: true`, ...; persisted values),
-`Output:` is the live state; `$led set` replies `key=value` or a core `!` line; `$led schema`, `$led get`,
-`pin_data`/`pin_clock` and `fill <rrggbb> <ms>` are new. Also unverified on a board.
+Status starts with the settings table rows (`num_led: 60`, `brightness: 128`, `state: true`, ...: the
+persisted values); `Output:` is the live state. `$led set` replies `key=value` or a core `!` line; mode
+commands reply with the `Led:` prefix.
 """
 import json
 import re
@@ -203,7 +200,7 @@ def test_on_off(serial):
 
 
 def test_2_3_x_command_names(serial):
-    # LM2/LM15: the 2.3.x strip and mode command names still work (aliases)
+    # the xewe-led-os strip and mode command names still work (aliases)
     serial.command(f"${ID} turn_off", expect=r"Led: off", timeout=5)
     serial.command(f"${ID} toggle_state", expect=r"Led: on", timeout=5)
     serial.command(f"${ID} set_state 0", expect=r"Led: off", timeout=5)
@@ -249,7 +246,7 @@ def test_settings_survive_restart(serial):
 
 
 def test_brightness_zero_not_persisted(serial):
-    # LX1 (2.3.x): `brightness 0` darkens the strip with State on, but NVS keeps the last non-zero value
+    # `brightness 0` darkens the strip with State on, but NVS keeps the last non-zero value
     before = _field(_status(serial), "brightness")
     try:
         serial.command(f"${ID} on", expect=r"Led: on", timeout=5)

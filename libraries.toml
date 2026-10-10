@@ -1,12 +1,14 @@
 # Library catalogue: Arduino libraries that modules list in depends_libraries=, pinned here.
 # `xewe setup` installs the ones its selected modules need into build/libraries/<name>,
 # unless the harness xewe.toml [libraries] pins the same name (the manifest wins).
-# Keep entries sorted; one table per library name, exactly repo and ref.
+# Keep entries sorted; one table per library name, exactly repo and ref. tools/validate.py warns
+# about a depends_libraries name that is missing here.
 
 [ArduinoJson]
 repo = "https://github.com/bblanchon/ArduinoJson"
 ref = "v7.4.3"
 
+# 3.10.3 on purpose: 3.10.4-3.10.6 add 100-230 KB of flash and new warnings (modules/led/README.md).
 [FastLED]
 repo = "https://github.com/FastLED/FastLED"
 ref = "3.10.3"

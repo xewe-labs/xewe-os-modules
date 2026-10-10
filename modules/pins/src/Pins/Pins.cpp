@@ -231,7 +231,7 @@ void Pins::pwm_setup_cmd(xewe::span<const std::string> args) {
     }
     if (!take(pin)) return;
 
-    // Core v3: ledcAttach(pin, freq, resolution)
+    // arduino-esp32 3.x LEDC API: ledcAttach(pin, freq, resolution)
     if (!ledcAttach(pin, freq, bits)) {
         os.serial.print("PWM attachment failed");
         return;
@@ -249,7 +249,7 @@ void Pins::pwm_write_cmd(xewe::span<const std::string> args) {
         return;
     }
     if (!take(pin)) return;
-    // Core v3: ledcWrite(pin, duty)
+    // arduino-esp32 3.x LEDC API: ledcWrite(pin, duty)
     ledcWrite(pin, duty);
     os.serial.print("ok");
 }

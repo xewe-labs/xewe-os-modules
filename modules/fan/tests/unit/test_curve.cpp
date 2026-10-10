@@ -135,7 +135,7 @@ int main() {
         CHECK(state && flips == 2);                          // on again only at 22.0 C
     }
 
-    // ---- colours: cold/hot selection (hex parsing moved to the core, xewe::str::parse_hex_color) ----
+    // ---- colours: cold/hot selection (hex parsing is the core's xewe::str::parse_hex_color) ----
     {
         const Rgb cold{0, 255, 255}, hot{255, 0, 0};
         CHECK(same(led_colour(def, 10.0f, cold, hot), cold));

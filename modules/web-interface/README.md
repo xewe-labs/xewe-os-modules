@@ -1,7 +1,5 @@
 # web-interface — send CLI commands to the board over HTTP
 
-XeWe OS module · created 2026-09-15 (split out of xewe-os, where it was developed from 2026-01) · Solo: Max Dokukin · Status: Active (0.3.0)
-
 ## Overview
 
 HTTP page and command endpoint for other devices on the network. A module for
@@ -14,7 +12,7 @@ driven from a browser, a script or another microcontroller board.
 ## Highlights
 
 - Routes: `GET /console` (embedded HTML page stored in flash with `PROGMEM`), `GET /` (the console unless a project takes it, see below) and `GET /cmd?c=<command>` → `200 OK` or `400 Empty Command`
-- Settings table (core 2.1): `port` (u16, default 80, takes effect after a restart) and `root` (str ≤ 31: `GET /` redirects there, e.g. `/pad`; empty = the console)
+- Settings table: `port` (u16, default 80, takes effect after a restart) and `root` (str ≤ 31: `GET /` redirects there, e.g. `/pad`; empty = the console)
 - Root hook: `web_interface.set_root(handler)` (RAM only, call from `setup()`) lets a project page own `/`; it wins over the `root` setting. `redirect_root("/pad")` is the persisted form
 - The page sends commands with `fetch('/cmd?c=' + encodeURIComponent(...))` and flashes "Command Sent" / "Error Sending" / "Connection Error"
 - `status` reports server uptime and heap usage (used / total bytes)
@@ -36,7 +34,7 @@ browser / curl → GET /cmd?c=$pins gpio_toggle 8 → WebServer (port 80) → os
 | Command | Description | Sample Usage |
 | :--- | :--- | :--- |
 | **`status`** | Server uptime and memory usage (plus the `port`/`root` lines). | `$web_interface status` |
-| **`set`** / **`get`** / **`schema`** | Settings table (core 2.1): `port`, `root`. | `$web_interface set root /pad` |
+| **`set`** / **`get`** / **`schema`** | Settings table: `port`, `root`. | `$web_interface set root /pad` |
 
 ### HTTP API
 
@@ -63,6 +61,13 @@ There is no authentication: anyone on the same network can send any command, inc
 
 Metadata and dependencies are declared in [`module.properties`](module.properties).
 
+### Settings and NVS keys
+
+| Key (namespace `web_interface`) | Type | Default | Meaning |
+|---|---|---|---|
+| `port` | u16 1–65535 | 80 | HTTP port; applies after a restart (RESTART row) |
+| `root` | str ≤ 31 | empty | `GET /` redirects here (e.g. `/pad`); empty = the console page |
+
 ### Tests
 
 `tests/board/test_web-interface.py` (board tests) and `tests/unit/test_web-interface.py` (unit test: `module.properties`
@@ -76,8 +81,7 @@ build/tools/.venv/bin/python -m xewe test --module web-interface --unit-only  # 
 ```
 
 - `test_compiles` builds the harness firmware with this module selected; it runs without a board.
-- `test_status` (`$web_interface status`) and `test_status_reports_server` (the web server block of `$web_interface status`), `test_settings_table` (`$web_interface schema`) need a board; without one they report
+- `test_status` (`$web_interface status`), `test_status_reports_server` (the web server block of `$web_interface status`) and `test_settings_table` (`$web_interface schema`) need a board; without one they report
   "compiled, not run".
-- Hardware precondition: a provisioned board with WiFi connected. Tests read the serial output only; no HTTP requests in phase 1. A freshly erased board stops at the first-boot
-  "Would you like to enable ...?" prompts (`get_yn` waits forever), so provision it by hand first
-  (CONTRACT.md section 7.2).
+- Hardware precondition: a provisioned board with WiFi connected. Tests read the serial output only; they make no HTTP requests. A freshly erased board stops at the first-boot
+  "Would you like to enable ...?" prompts, so provision it first (`xewe provision`).

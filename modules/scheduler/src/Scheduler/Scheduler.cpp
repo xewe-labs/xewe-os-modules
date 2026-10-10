@@ -66,19 +66,19 @@ void Scheduler::begin_routines_regular() {
 void Scheduler::loop() {
     if (is_disabled() || data.schedules.empty()) return;
 
-    // FIX: Get struct directly
+    // local time from the time module
     tm time_info = time_module.get_current_time();
 
-    // FIX: Verify time is synced (Year >= 1970)
+    // not synced yet: tm_year counts from 1900, so before 1970 means no time
     if (time_info.tm_year < 70) return;
 
-    // FIX: Calculate minute_of_day manually
+    // minute of the day, 0..1439
     int16_t current_minute_of_day = (time_info.tm_hour * 60) + time_info.tm_min;
 
     if (current_minute_of_day == last_processed_minute) return;
     last_processed_minute = current_minute_of_day;
 
-    // FIX: tm_wday is 0=Sunday -> 6=Saturday. Map to Scheduler's 0=Monday -> 6=Sunday
+    // tm_wday counts 0=Sunday..6=Saturday; schedule days count 0=Monday..6=Sunday
     uint8_t current_day   = (time_info.tm_wday + 6) % 7;
 
     for (const ScheduleBlock& schedule : data.schedules) {

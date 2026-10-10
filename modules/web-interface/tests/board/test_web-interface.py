@@ -1,7 +1,7 @@
 """Web Interface module tests. Run through a harness: `python -m xewe test --module web-interface`.
 
 Hardware preconditions: provisioned board (first boot done, every first-boot prompt answered),
-WiFi connected (Wifi is a requirement). No HTTP requests are made from tests in phase 1.
+WiFi connected (Wifi is a requirement). The tests make no HTTP requests.
 """
 
 ID = "web_interface"
@@ -25,6 +25,6 @@ def test_status_reports_server(serial):
 
 
 def test_settings_table(serial):
-    # core 2.1: port (restart) + root rows
+    # settings table: port (restart) + root rows
     serial.command("$web_interface get port", expect=r"port=\d+", timeout=5)
     serial.command("$web_interface schema", expect=r'\{"end":"web_interface","count":2\}', timeout=5)

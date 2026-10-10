@@ -374,7 +374,7 @@ void Fan::load() {
 
     FanStore store;
     const bool stored  = os.nvs.read_flex(id, "data", store);
-    // has(): a missing `schema` field is foreign, not the struct default (CC7)
+    // has(): a missing `schema` field is foreign, not the struct default
     const bool foreign = stored && (!store.has("schema") || store.schema != FanStore::SCHEMA);
     if (stored && !foreign) {
         for (const auto& e : store.fans) create_fan(e.pwm, e.tach, e.speed);
@@ -506,7 +506,7 @@ void Fan::load_curve() {
         default_curve();                                    // first boot: store the default curve
         save_curve();
     } else if (!stored.has("schema") || !curve_math::schema_ok(stored.schema)) {
-        // has(): a blob without a readable `schema` field is foreign too (CC7), not "schema 1 by default"
+        // has(): a blob without a readable `schema` field is foreign too, not "schema 1 by default"
         // another firmware's layout: never reinterpret it, never overwrite it at boot
         os.serial.print("Fan: curve: " + curve_math::schema_message(stored.schema));
         default_curve();
