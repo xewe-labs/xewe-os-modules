@@ -71,13 +71,13 @@ Added for this project on the owner's instruction; they bind like the rules abov
 as `X-NN`. They are not part of the WAX reference.
 
 - **X-01 The validator passes.** `tools/validate.py --harness <project>` exits 0 after every change
-  to a module, `module.properties`, `libraries.toml` or `MODULES.md`. It enforces, per module:
+  to a module, `module.properties`, `libraries.toml` or `doc/modules.md`. It enforces, per module:
   `declare` type == folder and first argument `os`; `name` and `id` as string literals in the
   `.cpp`; the required files and `include=src/<Folder>/<Folder>.h`; `test_compiles`, `test_status`
   and one behaviour test; the `repo` URL; `depends_libraries` names (never XeWeCore/XeWeOS, listed in
   `libraries.toml`); the forbidden source patterns (X-04); `requires_core` ≥ 2.1.0 when core 2.1
   features are used; setting keys of 1–15 characters, unique per module; no strays; an up-to-date
-  `MODULES.md`. The tools' rules (slug, id, folder, declare, dependencies, version, description,
+  `doc/modules.md`. The tools' rules (slug, id, folder, declare, dependencies, version, description,
   `requires_core` syntax) run first.
 - **X-02 Module layout.** `modules/<slug>/` holds `module.properties`, `src/<Folder>/`,
   `tests/board/test_<slug>.py`, optional `tests/unit/`, `README.md`, and nothing else: no `*.ino`,
@@ -104,7 +104,7 @@ as `X-NN`. They are not part of the WAX reference.
 - **X-07 Core 2.1 conventions.** Plain settings live in the settings table, never in hand-written
   NVS reads or writes; secrets carry `SECRET`. Non-row values go through `schema_extra`. Change
   events go through a `ListenerSet` with an `origin`. Every driven GPIO is claimed in `xewe::pins`
-  and released when let go. Hex colours use the core's parser. (CONTRACT.md section 3.1.)
+  and released when let go. Hex colours use the core's parser. (`doc/contract.md` section 3.1.)
 - **X-08 Libraries.** `depends_libraries` lists only Arduino libraries that are pinned in
   `libraries.toml` (sorted, one table per name, exactly `repo` and `ref`); never XeWeCore or a library
   bundled with the esp32 core. Changing a pinned `ref` needs a compile of every module that uses it
@@ -121,12 +121,12 @@ as `X-NN`. They are not part of the WAX reference.
   code: no agent or session names, dates, decision or finding ids, "was …" history, review, report
   or verification status. History lives in the xewe-labs `docs/`. Source files keep their SPDX and
   path header lines.
-- **X-12 Generated files.** Never edit `MODULES.md` by hand (`tools/validate.py --write-index`), and
+- **X-12 Generated files.** Never edit `doc/modules.md` by hand (`tools/validate.py --write-index`), and
   never edit a project's `build/modules/`, `src/Modules.h` or `XeWeModules.h`: they are rewritten
   from this repository.
 - **X-13 Docs are part of the change.** A command, setting, NVS key, build define, listener or test
   that is added or changed updates the module's `README.md` in the same change; a contract change
-  updates `CONTRACT.md` and, when the validator enforces it, `tools/validate.py`. READMEs and the
+  updates `doc/contract.md` and, when the validator enforces it, `tools/validate.py`. READMEs and the
   contract describe current behaviour only: no history, no dates, no version tags on features.
 - **X-14 Credentials.** Never open, print or copy a dotenv or key file; the tools read them. WiFi
   credentials in tests come from the environment.
