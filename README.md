@@ -43,7 +43,7 @@ modules/<slug>/
 
 1. Copy an existing module that looks like yours (`modules/pins` has no dependencies and no
    stored state; `modules/time` depends on `wifi`), or start from XeWeCore's
-   `extras/ModuleTemplate`. Rename the folder, files and class.
+   `examples/02_MyModule` (or the xewe-os template's `src/YourModule/`). Rename the folder, files and class.
 2. Fill in `module.properties` with every key, in the order of CONTRACT.md section 2:
    `repo=https://github.com/xewe-labs/xewe-os-modules/tree/main/modules/<slug>`,
    `declare=<Folder> <var>(os[, <dep var>...]);`, `depends_libraries=` for Arduino libraries
