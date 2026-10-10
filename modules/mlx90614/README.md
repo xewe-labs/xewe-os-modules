@@ -28,7 +28,7 @@ for [XeWe OS](https://github.com/xewe-labs/xewe-os), built on
 
 ```
 loop(): every 500 ms (5 s offline) → read RAM 0x07 (object), 0x06 (ambient) → raw_to_celsius → listeners
-$mlx90614 set_pins 4 5 → validate → apply_setting sda, scl (NVS) → release/claim → Wire.end/begin → poll → "Pins updated to SDA=4 SCL=5."
+$mlx90614 set_pins 4 5 → validate → apply_setting sda, scl (NVS) → release/claim → Wire.end/begin → poll → "MLX90614: pins set to SDA=4 SCL=5, sensor online"
 ```
 
 - **`Mlx90614` class** (`src/Mlx90614/`): a `xewe::Module` with id `mlx90614`, name `MLX90614`

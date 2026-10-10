@@ -176,12 +176,8 @@ bool Buttons::add(uint8_t pin,
     button.type              = static_cast<uint8_t>(type);
     button.event             = static_cast<uint8_t>(event);
 
-    pinMode(button.pin, type == ButtonInputMode::PULL_UP ? INPUT_PULLUP : INPUT_PULLDOWN);
-
-    button.last_steady_state  = digitalRead(button.pin);
-    button.last_flicker_state = button.last_steady_state;
-    button.last_debounce_time = 0;
-    button.claimed            = true;
+    button.claimed           = true;
+    arm(button);
 
     data.buttons.push_back(std::move(button));
 
@@ -189,30 +185,20 @@ bool Buttons::add(uint8_t pin,
     return true;
 }
 
-void Buttons::remove(uint32_t button_id) {
-    if (is_disabled()) return;
+bool Buttons::remove(uint32_t button_id) {
+    if (is_disabled()) return false;
 
-    const auto old_size = data.buttons.size();
-    uint8_t    pin      = 255;
-    for (const auto& button : data.buttons) if (button.id == button_id) pin = button.pin;
-
-    data.buttons.erase(
-        std::remove_if(
-            data.buttons.begin(),
-            data.buttons.end(),
-            [button_id](const ButtonData& button) {
-                return button.id == button_id;
-            }
-        ),
-        data.buttons.end()
-    );
-
-    if (data.buttons.size() == old_size) return;
+    const auto it = std::find_if(data.buttons.begin(), data.buttons.end(),
+                                 [button_id](const ButtonData& b) { return b.id == button_id; });
+    if (it == data.buttons.end()) return false;
+    const uint8_t pin = it->pin;
+    data.buttons.erase(it);
     save_to_nvs();
     // release the pin once no other mapping uses it
     const bool still_used = std::any_of(data.buttons.begin(), data.buttons.end(),
                                         [pin](const ButtonData& b) { return b.pin == pin; });
     if (!still_used) xewe::pins::release(pin, id.c_str());
+    return true;
 }
 
 void Buttons::load_from_nvs() {
@@ -222,16 +208,16 @@ void Buttons::load_from_nvs() {
         data.buttons.clear();
 
     for (auto& button : data.buttons) {
-        const auto type = static_cast<ButtonInputMode>(button.type);
-
         button.claimed = xewe::pins::claim(button.pin, id.c_str());     // refused: reported, mapping ignored
-        if (!button.claimed) continue;
-        pinMode(button.pin, type == ButtonInputMode::PULL_UP ? INPUT_PULLUP : INPUT_PULLDOWN);
-
-        button.last_steady_state  = digitalRead(button.pin);
-        button.last_flicker_state = button.last_steady_state;
-        button.last_debounce_time = 0;
+        if (button.claimed) arm(button);
     }
+}
+
+void Buttons::arm(ButtonData& button) {
+    pinMode(button.pin, static_cast<ButtonInputMode>(button.type) == ButtonInputMode::PULL_UP ? INPUT_PULLUP : INPUT_PULLDOWN);
+    button.last_steady_state  = digitalRead(button.pin);
+    button.last_flicker_state = button.last_steady_state;
+    button.last_debounce_time = 0;
 }
 
 void Buttons::save_to_nvs() {
@@ -244,100 +230,45 @@ void Buttons::button_add_cmd(xewe::span<const std::string> args) {
     if (is_disabled()) return;
 
     ButtonInputMode type;
-
-    if (args[2] == "pullup") {
-        type = ButtonInputMode::PULL_UP;
-    } else if (args[2] == "pulldown") {
-        type = ButtonInputMode::PULL_DOWN;
-    } else {
-        os.serial.print(
-            "Error: input mode must be pullup or pulldown."
-        );
+    if (args[2] == "pullup") type = ButtonInputMode::PULL_UP;
+    else if (args[2] == "pulldown") type = ButtonInputMode::PULL_DOWN;
+    else {
+        os.serial.print("! Buttons: input mode must be pullup or pulldown");
         return;
     }
 
     ButtonTriggerEvent event;
-
-    if (args[3] == "on_press") {
-        event = ButtonTriggerEvent::ON_PRESS;
-    } else if (args[3] == "on_release") {
-        event = ButtonTriggerEvent::ON_RELEASE;
-    } else if (args[3] == "on_change") {
-        event = ButtonTriggerEvent::ON_CHANGE;
-    } else {
-        os.serial.print(
-            "Error: event must be on_press, on_release, or on_change."
-        );
+    if (args[3] == "on_press") event = ButtonTriggerEvent::ON_PRESS;
+    else if (args[3] == "on_release") event = ButtonTriggerEvent::ON_RELEASE;
+    else if (args[3] == "on_change") event = ButtonTriggerEvent::ON_CHANGE;
+    else {
+        os.serial.print("! Buttons: event must be on_press, on_release or on_change");
         return;
     }
 
-    try {
-        const unsigned long pin_value = std::stoul(args[0]);
-        const unsigned long debounce  = std::stoul(args[4]);
-
-        if (pin_value > std::numeric_limits<uint8_t>::max()) {
-            os.serial.print("Error: invalid pin.");
-            return;
-        }
-
-        if (debounce > std::numeric_limits<uint32_t>::max()) {
-            os.serial.print("Error: invalid debounce value.");
-            return;
-        }
-
-        const bool added = add(
-            static_cast<uint8_t>(pin_value),
-            args[1],
-            type,
-            event,
-            static_cast<uint32_t>(debounce)
-        );
-
-        os.serial.print(added ? "Successfully added button mapping."
-                              : "Error: pin not available (claimed by another module, see $pins claims).");
-    } catch (...) {
-        os.serial.print(
-            "Error: invalid pin or debounce value."
-        );
+    uint8_t pin;
+    uint32_t debounce;
+    if (!xewe::str::parse_int(args[0], pin) || !xewe::str::parse_int(args[4], debounce)) {
+        os.serial.print("! Buttons: invalid pin or debounce value");
+        return;
     }
+
+    os.serial.print(add(pin, args[1], type, event, debounce)
+                        ? "Buttons: button mapping added"
+                        : "! Buttons: pin not available (claimed by another module, see $pins claims)");
 }
 
 void Buttons::button_remove_cmd(xewe::span<const std::string> args) {
     if (is_disabled()) return;
 
-    try {
-        const unsigned long value = std::stoul(args[0]);
-
-        if (value > std::numeric_limits<uint32_t>::max()) {
-            os.serial.print("Error: invalid button ID.");
-            return;
-        }
-
-        const uint32_t button_id = static_cast<uint32_t>(value);
-
-        const bool     exists    = std::any_of(
-            data.buttons.begin(),
-            data.buttons.end(),
-            [button_id](const ButtonData& button) {
-                return button.id == button_id;
-            }
-        );
-
-        if (!exists) {
-            os.serial.print(
-                "Error: button ID not found.\nMake sure you are removing by ID, not by pin."
-            );
-            return;
-        }
-
-        remove(button_id);
-
-        os.serial.print(
-            "Successfully removed button mapping."
-        );
-    } catch (...) {
-        os.serial.print(
-            "Error: invalid button ID."
-        );
+    uint32_t button_id;
+    if (!xewe::str::parse_int(args[0], button_id)) {
+        os.serial.print("! Buttons: invalid button id");
+        return;
     }
+    if (!remove(button_id)) {
+        os.serial.print("! Buttons: button id not found (remove takes the id, not the pin)");
+        return;
+    }
+    os.serial.print("Buttons: button mapping removed");
 }

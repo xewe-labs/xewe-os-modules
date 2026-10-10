@@ -56,11 +56,11 @@ void Scheduler::schema_extra(xewe::SchemaOut& out) const {
     }
 }
 void Scheduler::begin_routines_init() {
-    os.serial.print("Will be available after auto-reboot.");
+    os.serial.print("Scheduler: available after the automatic reboot");
 }
 
 void Scheduler::begin_routines_regular() {
-    os.serial.printf("Loaded %d schedule blocks.", load_from_nvs());
+    os.serial.printf("Scheduler: %u schedule blocks loaded", static_cast<unsigned>(load_from_nvs()));
 }
 
 void Scheduler::loop() {
@@ -179,18 +179,13 @@ void Scheduler::cli_add(xewe::span<const std::string> args) {
     std::optional<std::string> color_val = xewe::validate<std::string>(args[3], 6, 6);
 
     if (!start_val || !end_val || !day_val || !color_val) {
-        os.serial.print("Scheduler: invalid parameters or out of range (start/end 0-1439, day 0-6, color 6 chars)\n");
+        os.serial.print("! Scheduler: invalid parameters or out of range (start/end 0-1439, day 0-6, color 6 chars)");
         return;
     }
 
     std::vector<std::string> commands;
-    std::istringstream       cmd_stream(args[4]);
-    std::string              token;
-
-    while (std::getline(cmd_stream, token, '|')) {
-        if (!token.empty()) {
-            commands.push_back(token);
-        }
+    for (std::string& token : xewe::str::split_by_token(args[4], "|")) {
+        if (!token.empty()) commands.push_back(std::move(token));
     }
 
     const bool added = add(
@@ -201,20 +196,20 @@ void Scheduler::cli_add(xewe::span<const std::string> args) {
         std::move(commands)
     );
 
-    os.serial.print(added ? "Scheduler: schedule saved\n" : "Scheduler: invalid schedule\n");
+    os.serial.print(added ? "Scheduler: schedule saved" : "! Scheduler: invalid schedule");
 }
 
 void Scheduler::cli_remove(xewe::span<const std::string> args) {
     std::optional<uint8_t> target_id = xewe::validate<uint8_t>(args[0], 0, 255);
 
     if (!target_id) {
-        os.serial.print("Scheduler: invalid ID or out of bounds\n");
+        os.serial.print("! Scheduler: invalid id or out of bounds");
         return;
     }
 
     if (remove(target_id.value())) {
-        os.serial.print("Scheduler: schedule removed\n");
+        os.serial.print("Scheduler: schedule removed");
     } else {
-        os.serial.print("Scheduler: schedule not found\n");
+        os.serial.print("! Scheduler: schedule not found");
     }
 }

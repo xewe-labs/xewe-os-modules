@@ -8,7 +8,6 @@
 #include <tuple>
 #include <vector>
 #include <algorithm>
-#include <limits>
 #include <utility>
 
 #include <XeWeCore.h>
@@ -83,12 +82,15 @@ public:
                                                     ButtonTriggerEvent event,
                                                     uint32_t           debounce_interval);
 
-    void                    remove                 (uint32_t button_id);
+    // false when no mapping has this id
+    bool                    remove                 (uint32_t button_id);
 
     void                    load_from_nvs          ();
     void                    save_to_nvs            ();
 
 private:
+    // pinMode from the mapping's type, debounce state from the current level
+    void                    arm                    (ButtonData& button);
     void                    button_add_cmd         (xewe::span<const std::string> args);
     void                    button_remove_cmd      (xewe::span<const std::string> args);
 

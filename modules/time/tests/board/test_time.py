@@ -21,7 +21,7 @@ def test_fetch_syncs_time(serial):
     # "Syncing time from server..." has no line end until the sync finishes (~20 s), so wait for
     # the outcome line only.
     serial.command("$time fetch",
-                   expect=r"Current time: \d{4}-\d\d-\d\d \d\d:\d\d:\d\d|Unable to reach time server",
+                   expect=r"Current time: \d{4}-\d\d-\d\d \d\d:\d\d:\d\d|unable to reach the time server",
                    timeout=30)
 
 

@@ -38,7 +38,7 @@ sensor. A module for [XeWe OS](https://github.com/xewe-labs/xewe-os), built on
 ## How it works
 
 ```
-$fan set 3 128            → ledcWrite(3, 128) → NVS fan/data → "Speed updated."
+$fan set 3 128            → ledcWrite(3, 128) → NVS fan/data → "Fan: speed updated"
 tach ISR → pulse_count++ ; loop(): every ≥ 1 s per fan → rpm → median → EMA → displayed_rpm
 set_temperature(31.2, src) → stored with a timestamp; loop(): every 1 s →
                              curve_math::target_speed(points, t | NaN if stale) → set_all(pwm, persist=false)
@@ -84,7 +84,7 @@ pins there. No default fans: `--define FAN1_PWM=255 --define FAN2_PWM=255`.
 | `status` / `reset` / `enable` / `disable` | generic module commands; `status` lists fans and the curve | `$fan status` |
 
 `curve` is registered once per argument count (1, 2, 3) and dispatches on its first argument; any
-other combination prints `Usage: $fan curve list | add ... | remove ... | set ...`.
+other combination prints `! Fan: usage: $fan curve list | add ... | remove ... | set ...`.
 
 ### C++ API
 

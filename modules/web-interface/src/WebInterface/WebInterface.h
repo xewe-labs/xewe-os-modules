@@ -6,8 +6,6 @@
 #include <WebServer.h>
 #include <functional>
 #include <string>
-#include <sstream>
-#include <iomanip>
 
 #include <XeWeCore.h>
 #include "../Wifi/Wifi.h"

@@ -199,6 +199,8 @@ private:
 
     static void                 tach_isr_handler            (void* arg);
 
+    // a free, output-capable PWM pin and (unless NO_PIN) a different valid tach pin
+    bool                        pins_ok                     (uint8_t pwm, uint8_t tach)     const;
     FanData*                    get_fan                     (uint8_t pwm_pin)               const;
     void                        free_fan                    (FanData* fan);
     FanData*                    create_fan                  (uint8_t pwm, uint8_t tach, uint8_t speed);

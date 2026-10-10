@@ -116,7 +116,7 @@ bool Wifi::connect(bool prompt_for_credentials) {
             return true;
         } else {
             DBG_PRINTLN(Wifi, "connect(): join() failed with stored credentials");
-            os.serial.print("Stored WiFi credentials not valid.");
+            os.serial.print("! Wifi: stored credentials not valid");
             if (!prompt_for_credentials) {
                 os.serial.print("Use '$wifi reset' to reset credentials");
             }
@@ -144,7 +144,7 @@ bool Wifi::connect(bool prompt_for_credentials) {
                 continue;
             } else if (prompt_status == 3) { // Invalid
                 DBG_PRINTLN(Wifi, "connect(): invalid choice, retrying");
-                os.serial.print("Invalid choice");
+                os.serial.print("! Wifi: invalid choice");
                 continue;
             } else {
                 DBG_PRINTLN(Wifi, "connect(): attempting join() with user credentials");
@@ -176,7 +176,7 @@ bool Wifi::disconnect(bool verbose) {
     bool done = (WiFi.status() != WL_CONNECTED);
     DBG_PRINTF(Wifi, "disconnect(): %s\n", done ? "success" : "timeout/failure");
 
-    if (verbose) os.serial.print("WiFi disconnected");
+    if (verbose) os.serial.print("Wifi: disconnected");
     return done;
 }
 
@@ -198,7 +198,7 @@ bool Wifi::is_disconnected(bool verbose) const {
     bool conn = (WiFi.status() == WL_CONNECTED);
     if (verbose && !conn) {
         DBG_PRINTLN(Wifi, "is_disconnected(): true");
-        os.serial.print("Not connected to WiFi; use $wifi connect");
+        os.serial.print("! Wifi: not connected; use $wifi connect");
     }
     DBG_PRINTF(Wifi, "is_disconnected(): %s\n", !conn ? "true" : "false");
     return !conn;
@@ -255,18 +255,11 @@ std::vector<std::string> Wifi::scan(bool verbose) {
     DBG_PRINTF(Wifi, "scan(): scan complete, %d networks found\n", num_networks);
 
     std::vector<std::string> unique_ssid_list;
-    if (num_networks > 0) {
-        std::set<std::string> seen_ssids;
-        unique_ssid_list.reserve(num_networks);
-        for (int i = 0; i < num_networks; ++i) {
-            String cur = WiFi.SSID(i);
-            if (cur.isEmpty()) continue;
-            std::string ssid(cur.c_str());
-            if (seen_ssids.insert(ssid).second) {
-                unique_ssid_list.push_back(ssid);
-                DBG_PRINTF(Wifi, "scan(): adding [%s]\n", ssid.c_str());
-            }
-        }
+    for (int i = 0; i < num_networks; ++i) {
+        std::string ssid(WiFi.SSID(i).c_str());
+        if (ssid.empty() || std::find(unique_ssid_list.begin(), unique_ssid_list.end(), ssid) != unique_ssid_list.end()) continue;
+        DBG_PRINTF(Wifi, "scan(): adding [%s]\n", ssid.c_str());
+        unique_ssid_list.push_back(std::move(ssid));
     }
 
     if (verbose) {
@@ -315,7 +308,7 @@ bool Wifi::join(std::string_view ssid,
             delay(200);
         }
         WiFi.disconnect(true);
-        os.serial.printf("\nUnable to join %s\n", ssid.data());
+        os.serial.printf("\n! Wifi: unable to join %s\n", ssid.data());
         os.serial.print("Check the password\ntry moving closer to router\nand restarting the router\nRetrying");
         DBG_PRINTLN(Wifi, "join(): timeout, disconnected");
     }

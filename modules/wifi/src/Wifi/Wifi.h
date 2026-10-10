@@ -4,7 +4,7 @@
 #pragma once
 
 #include <WiFi.h>
-#include <set>
+#include <algorithm>
 
 #include <XeWeCore.h>
 

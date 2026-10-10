@@ -17,24 +17,6 @@ static_assert(sizeof(CRGB) == 3, "CRGB must be 3 packed bytes");
 
 namespace {
 
-bool parse_uint(const std::string& text, long min_value, long max_value, long& out) {
-    if (text.empty()) return false;
-    char*      end   = nullptr;
-    const long value = std::strtol(text.c_str(), &end, 10);
-    if (end == text.c_str() || *end != '\0' || value < min_value || value > max_value) return false;
-    out = value;
-    return true;
-}
-
-bool parse_long(const std::string& text, long& out) {
-    if (text.empty()) return false;
-    char*      end   = nullptr;
-    const long value = std::strtol(text.c_str(), &end, 10);
-    if (end == text.c_str() || *end != '\0') return false;
-    out = value;
-    return true;
-}
-
 // settings table defaults from the build defines (an unknown name falls back to WS2812B / GRB)
 constexpr uint8_t default_chip_id() {
     const LedChipset* c = led_chipset_by_name(LED_CHIPSET);
@@ -74,7 +56,7 @@ constexpr uint8_t CHANNEL_MAP[6][3] = {
 };
 
 constexpr const char* MODE_USAGE =
-    "Led: usage: $led mode list | set <m> | param <m> <key> <value> | color [rrggbb] | reset_params [m] | speed <n>";
+    "! Led: usage: $led mode list | set <m> | param <m> <key> <value> | color [rrggbb] | reset_params [m] | speed <n>";
 
 // Clockless chips on a run-time data pin: FastLED's RMT5 driver takes the pin as a constructor argument
 // underneath its template, so one small driver class serves every GPIO. Elsewhere (RMT4, the I2S
@@ -157,9 +139,9 @@ Led::Led(xewe::Os& host, LedConfig config_param)
 
     // ---- strip ----
     register_command({"on", "Turn the strip on (fades in)", "$led on", 0,
-                      [this](xewe::span<const std::string>) { set_state(true); os.serial.print("Led: on"); }});
+                      [this](xewe::span<const std::string>) { cli_state(true); }});
     register_command({"off", "Turn the strip off (fades out)", "$led off", 0,
-                      [this](xewe::span<const std::string>) { set_state(false); os.serial.print("Led: off"); }});
+                      [this](xewe::span<const std::string>) { cli_state(false); }});
     register_command({"brightness", "Set brightness <0-255>", "$led brightness 128", 1,
                       [this](xewe::span<const std::string> args) { cli_brightness(args); }});
     register_command({"set", "Set <key> <value> (see $led schema); chip and colorder also by name", "$led set num_led 60", 2,
@@ -170,7 +152,7 @@ Led::Led(xewe::Os& host, LedConfig config_param)
                       [this](xewe::span<const std::string> args) { cli_fill(args); }});
     register_command({"checksum", "Print the CRC-32 of the current frame", "$led checksum", 0,
                       [this](xewe::span<const std::string>) {
-                          os.serial.printf("Led frame checksum: %08lx (%u leds)",
+                          os.serial.printf("Led: frame checksum: %08lx (%u leds)",
                                            static_cast<unsigned long>(get_frame_checksum()),
                                            static_cast<unsigned>(get_length()));
                       }});
@@ -188,21 +170,13 @@ Led::Led(xewe::Os& host, LedConfig config_param)
     register_command({"set_brightness", "2.3.x name of `brightness`", "$led set_brightness 128", 1,
                       [this](xewe::span<const std::string> args) { cli_brightness(args); }});
     register_command({"set_state", "2.3.x: set on/off state <0|1>", "$led set_state 0", 1,
-                      [this](xewe::span<const std::string> args) {
-                          const bool on = args[0] != "0";
-                          set_state(on);
-                          os.serial.print(on ? "Led: on" : "Led: off");
-                      }});
+                      [this](xewe::span<const std::string> args) { cli_state(args[0] != "0"); }});
     register_command({"toggle_state", "2.3.x: on -> off, off -> on", "$led toggle_state", 0,
-                      [this](xewe::span<const std::string>) {
-                          const bool on = !get_state();
-                          set_state(on);
-                          os.serial.print(on ? "Led: on" : "Led: off");
-                      }});
+                      [this](xewe::span<const std::string>) { cli_state(!get_state()); }});
     register_command({"turn_on", "2.3.x name of `on`", "$led turn_on", 0,
-                      [this](xewe::span<const std::string>) { set_state(true); os.serial.print("Led: on"); }});
+                      [this](xewe::span<const std::string>) { cli_state(true); }});
     register_command({"turn_off", "2.3.x name of `off`", "$led turn_off", 0,
-                      [this](xewe::span<const std::string>) { set_state(false); os.serial.print("Led: off"); }});
+                      [this](xewe::span<const std::string>) { cli_state(false); }});
     register_command({"set_length", "2.3.x name of `set num_led`", "$led set_length 60", 1,
                       [this](xewe::span<const std::string> args) { set_setting("num_led", args[0]); }});
     register_command({"set_color_order", "2.3.x name of `set colorder`", "$led set_color_order GRB", 1,
@@ -221,7 +195,7 @@ void Led::begin_routines_regular() {
     const LedChipset* chip = led_chipset_by_id(stored_chip_id);
     if (chip == nullptr) {
         chip = led_chipset_by_id(default_chip_id());
-        os.serial.printf("Led: stored chip id %u is not compiled in, using %s",
+        os.serial.printf("! Led: stored chip id %u is not compiled in, using %s",
                          static_cast<unsigned>(stored_chip_id), chip->name);
     }
     claim_pins(*chip);
@@ -282,14 +256,9 @@ xewe::Settings Led::settings() const {
 
 // Mode parameters: one row per mode and parameter, changed with `$led mode param` (not `$led set`).
 void Led::schema_extra(xewe::SchemaOut& out) const {
-    const uint8_t active = get_mode();
     for (const led_fx::ModeDef& m : led_fx::MODES) {
         uint16_t values[led_fx::MAX_PARAMS];
-        load_params(m, values);
-        if (m.id == active) {
-            xewe::LockGuard lock(render_mutex);
-            std::copy(current.params, current.params + led_fx::MAX_PARAMS, values);
-        }
+        live_params(m, values);
         for (uint8_t i = 0; i < m.param_count; ++i) {
             const led_fx::ParamDef& p = m.params[i];
             char row[256];
@@ -315,7 +284,7 @@ void Led::on_setting_changed(const xewe::SettingDef& def) {
     } else if (k == "pin_data" || k == "pin_clock") {
         const int         pin   = k == "pin_data" ? pin_data : pin_clock;
         const char* const owner = xewe::pins::owner_of(pin);
-        if (owner != nullptr && id != owner) os.serial.printf("Led: GPIO %d is claimed by %s", pin, owner);
+        if (owner != nullptr && id != owner) os.serial.printf("! Led: GPIO %d is claimed by %s", pin, owner);
     }
 }
 
@@ -453,14 +422,14 @@ bool Led::set_setting(const std::string& key, const std::string& value) {
         if (chip == nullptr) {
             std::string names;
             for (const LedChipset& c : LED_CHIPSETS) names += std::string(names.empty() ? "" : ", ") + c.name;
-            os.serial.printf("Led: unknown chip '%s'; compiled in: %s", value.c_str(), names.c_str());
+            os.serial.printf("! Led: unknown chip '%s'; compiled in: %s", value.c_str(), names.c_str());
             return false;
         }
         v = std::to_string(chip->id);
     } else if (k == "colorder" && led_color_order_index(v.c_str()) >= 0) {
         v = std::to_string(led_color_order_index(v.c_str()));
     } else if (k == "pin_data" && v.size() < 4 && !pin_usable(std::atoi(v.c_str()))) {
-        os.serial.printf("Led: GPIO %s cannot drive the strip on this chip/driver", v.c_str());
+        os.serial.printf("! Led: GPIO %s cannot drive the strip on this chip/driver", v.c_str());
         return false;
     }
     return apply_setting(k, v, true);
@@ -524,13 +493,8 @@ bool Led::set_param(int mode_id, const std::string& param, int32_t value, const 
     const int index = led_fx::param_index(*mode, param.c_str());
     if (index < 0) return false;
 
-    const bool is_current = mode->id == get_mode();
-    uint16_t   values[led_fx::MAX_PARAMS];
-    load_params(*mode, values);
-    if (is_current) {
-        xewe::LockGuard lock(render_mutex);
-        std::copy(current.params, current.params + led_fx::MAX_PARAMS, values);
-    }
+    uint16_t values[led_fx::MAX_PARAMS];
+    const bool is_current = live_params(*mode, values);
     uint16_t old_values[led_fx::MAX_PARAMS];
     std::copy(values, values + led_fx::MAX_PARAMS, old_values);
     values[index] = led_fx::clamp_param(mode->params[index], value);
@@ -541,13 +505,8 @@ bool Led::set_param(int mode_id, const std::string& param, int32_t value, const 
 }
 
 bool Led::set_color(LedRgb color, const void* origin) {
-    const led_fx::ModeDef* mode;
-    uint16_t               values[led_fx::MAX_PARAMS];
-    {
-        xewe::LockGuard lock(render_mutex);
-        mode = current.def;
-        std::copy(current.params, current.params + led_fx::MAX_PARAMS, values);
-    }
+    uint16_t values[led_fx::MAX_PARAMS];
+    const led_fx::ModeDef* mode = current_mode(values);
     const int hue = led_fx::param_index(*mode, "hue");
     const int sat = led_fx::param_index(*mode, "sat");
     if (hue < 0 && sat < 0) return false;
@@ -572,13 +531,8 @@ bool Led::set_speed(int32_t value, const void* origin) {
 bool Led::reset_params(int mode_id, const void* origin) {
     const led_fx::ModeDef* mode = led_fx::find_mode(mode_id);
     if (mode == nullptr) return false;
-    const bool is_current = mode->id == get_mode();
-    uint16_t   old_values[led_fx::MAX_PARAMS];
-    load_params(*mode, old_values);
-    if (is_current) {
-        xewe::LockGuard lock(render_mutex);
-        std::copy(current.params, current.params + led_fx::MAX_PARAMS, old_values);
-    }
+    uint16_t old_values[led_fx::MAX_PARAMS];
+    const bool is_current = live_params(*mode, old_values);
     uint16_t values[led_fx::MAX_PARAMS];
     led_fx::default_params(*mode, values);
     persist_params(*mode, values);
@@ -603,13 +557,8 @@ uint16_t Led::get_param(int mode_id, const std::string& param) const {
 }
 
 uint32_t Led::get_color() const {
-    const led_fx::ModeDef* mode;
-    uint16_t               values[led_fx::MAX_PARAMS];
-    {
-        xewe::LockGuard lock(render_mutex);
-        mode = current.def;
-        std::copy(current.params, current.params + led_fx::MAX_PARAMS, values);
-    }
+    uint16_t values[led_fx::MAX_PARAMS];
+    const led_fx::ModeDef* mode = current_mode(values);
     const led_fx::Rgb c = led_fx::mode_color(*mode, values);
     return led_pack_rgb(c.r, c.g, c.b);
 }
@@ -644,6 +593,20 @@ void Led::load_params(const led_fx::ModeDef& mode, uint16_t* values) const {
     }
 }
 
+const led_fx::ModeDef* Led::current_mode(uint16_t* values) const {
+    xewe::LockGuard lock(render_mutex);
+    std::copy(current.params, current.params + led_fx::MAX_PARAMS, values);
+    return current.def;
+}
+
+bool Led::live_params(const led_fx::ModeDef& mode, uint16_t* values) const {
+    load_params(mode, values);
+    xewe::LockGuard lock(render_mutex);
+    if (current.def->id != mode.id) return false;
+    std::copy(current.params, current.params + led_fx::MAX_PARAMS, values);
+    return true;
+}
+
 void Led::persist_params(const led_fx::ModeDef& mode, const uint16_t* values) {
     for (uint8_t i = 0; i < mode.param_count; ++i) {
         os.nvs.write<uint16_t>(id, nvs_param_name(mode.id, mode.params[i].key), values[i]);
@@ -671,8 +634,8 @@ void Led::activate(const led_fx::ModeDef& mode, const uint16_t* values) {
 }
 
 const led_fx::ModeDef* Led::parse_mode(const std::string& text) const {
-    long number = 0;
-    if (parse_long(text, number)) return led_fx::find_mode(number);
+    int number = 0;
+    if (xewe::str::parse_int(text, number)) return led_fx::find_mode(number);
     const std::string wanted = fold(text);
     for (const led_fx::ModeDef& m : led_fx::MODES) {
         if (fold(m.name) == wanted) return &m;
@@ -684,13 +647,18 @@ const led_fx::ModeDef* Led::parse_mode(const std::string& text) const {
 // CLI
 // =============================================================================
 void Led::cli_brightness(xewe::span<const std::string> args) {
-    long value = 0;
-    if (!parse_uint(args[0], 0, 255, value)) {
-        os.serial.print("Led: brightness must be 0..255");
+    uint8_t value = 0;
+    if (!xewe::str::parse_int(args[0], value)) {
+        os.serial.print("! Led: brightness must be 0..255");
         return;
     }
-    set_brightness(static_cast<uint8_t>(value));
+    set_brightness(value);
     os.serial.printf("Led: brightness %u", static_cast<unsigned>(value));
+}
+
+void Led::cli_state(bool on) {
+    set_state(on);
+    os.serial.print(on ? "Led: on" : "Led: off");
 }
 
 void Led::cli_set(xewe::span<const std::string> args) {
@@ -704,13 +672,13 @@ void Led::cli_fill(xewe::span<const std::string> args) {
         return;
     }
     LedRgb color{};
-    long   fade_ms = 0;
+    int fade_ms = 0;
     if (!xewe::str::parse_hex_color(args[0], color.r, color.g, color.b)) {
-        os.serial.print("Led: fill needs a colour rrggbb (hex) or off");
+        os.serial.print("! Led: fill needs a colour rrggbb (hex) or off");
         return;
     }
-    if (args.size() == 2 && !parse_uint(args[1], 0, 60000, fade_ms)) {
-        os.serial.print("Led: fill fade must be 0..60000 ms");
+    if (args.size() == 2 && (!xewe::str::parse_int(args[1], fade_ms) || fade_ms < 0 || fade_ms > 60000)) {
+        os.serial.print("! Led: fill fade must be 0..60000 ms");
         return;
     }
     fill(color, static_cast<uint16_t>(fade_ms));
@@ -756,25 +724,25 @@ void Led::mode_list() {
 void Led::mode_set(const std::string& text) {
     const led_fx::ModeDef* mode = parse_mode(text);
     if (mode == nullptr || !set_mode(mode->id)) {
-        os.serial.printf("Led: unknown mode '%s' (see $led mode list)", text.c_str());
+        os.serial.printf("! Led: unknown mode '%s' (see $led mode list)", text.c_str());
         return;
     }
     os.serial.printf("Led: mode [%u] %s", static_cast<unsigned>(mode->id), mode->name);
 }
 
 void Led::mode_param(const std::string& text, const std::string& key, const std::string& value_text) {
-    const led_fx::ModeDef* mode  = parse_mode(text);
-    long                   value = 0;
+    const led_fx::ModeDef* mode = parse_mode(text);
+    int value = 0;
     if (mode == nullptr) {
-        os.serial.printf("Led: unknown mode '%s' (see $led mode list)", text.c_str());
+        os.serial.printf("! Led: unknown mode '%s' (see $led mode list)", text.c_str());
         return;
     }
-    if (!parse_long(value_text, value)) {
-        os.serial.print("Led: value must be a number");
+    if (!xewe::str::parse_int(value_text, value)) {
+        os.serial.print("! Led: value must be a number");
         return;
     }
-    if (!set_param(mode->id, key, static_cast<int32_t>(value))) {
-        os.serial.printf("Led: mode [%u] has no parameter '%s'", static_cast<unsigned>(mode->id), key.c_str());
+    if (!set_param(mode->id, key, value)) {
+        os.serial.printf("! Led: mode [%u] has no parameter '%s'", static_cast<unsigned>(mode->id), key.c_str());
         return;
     }
     os.serial.printf("Led: [%u] %s = %u", static_cast<unsigned>(mode->id), key.c_str(),
@@ -784,11 +752,11 @@ void Led::mode_param(const std::string& text, const std::string& key, const std:
 void Led::mode_color(const std::string& text) {
     LedRgb color{};
     if (!xewe::str::parse_hex_color(text, color.r, color.g, color.b)) {
-        os.serial.print("Led: color needs rrggbb (hex)");
+        os.serial.print("! Led: color needs rrggbb (hex)");
         return;
     }
     if (!set_color(color)) {
-        os.serial.print("Led: the current mode has no colour");
+        os.serial.print("! Led: the current mode has no colour");
         return;
     }
     os.serial.printf("Led: color %02x%02x%02x", color.r, color.g, color.b);
@@ -797,20 +765,20 @@ void Led::mode_color(const std::string& text) {
 void Led::mode_reset_params(const std::string* text) {
     const led_fx::ModeDef* mode = text == nullptr ? led_fx::find_mode(get_mode()) : parse_mode(*text);
     if (mode == nullptr || !reset_params(mode->id)) {
-        os.serial.printf("Led: unknown mode '%s' (see $led mode list)", text ? text->c_str() : "");
+        os.serial.printf("! Led: unknown mode '%s' (see $led mode list)", text ? text->c_str() : "");
         return;
     }
     os.serial.printf("Led: [%u] %s parameters reset to defaults", static_cast<unsigned>(mode->id), mode->name);
 }
 
 void Led::mode_speed(const std::string& text) {
-    long value = 0;
-    if (!parse_long(text, value)) {
-        os.serial.print("Led: speed must be a number");
+    int value = 0;
+    if (!xewe::str::parse_int(text, value)) {
+        os.serial.print("! Led: speed must be a number");
         return;
     }
-    if (!set_speed(static_cast<int32_t>(value))) {
-        os.serial.print("Led: the current mode has no speed");
+    if (!set_speed(value)) {
+        os.serial.print("! Led: the current mode has no speed");
         return;
     }
     os.serial.printf("Led: speed %u", static_cast<unsigned>(get_param(get_mode(), "speed")));
@@ -850,25 +818,25 @@ void Led::claim_pins(const LedChipset& chip) {
     int clock = chip.clocked ? pin_clock : -1;
     if (chip.clocked || !LED_RUNTIME_PINS) {
         if (data != LED_PIN_DATA || (chip.clocked && clock != LED_PIN_CLOCK)) {
-            os.serial.printf("Led: %s runs on the build pins (data GPIO %d, clock GPIO %d) in this firmware",
+            os.serial.printf("! Led: %s runs on the build pins (data GPIO %d, clock GPIO %d) in this firmware",
                              chip.name, LED_PIN_DATA, LED_PIN_CLOCK);
         }
         data  = LED_PIN_DATA;
         clock = chip.clocked ? LED_PIN_CLOCK : -1;
     } else if (!pin_usable(data)) {
-        os.serial.printf("Led: GPIO %d cannot drive the strip, using GPIO %d", data, LED_PIN_DATA);
+        os.serial.printf("! Led: GPIO %d cannot drive the strip, using GPIO %d", data, LED_PIN_DATA);
         data = LED_PIN_DATA;
     }
     if (!xewe::pins::claim(data, id.c_str())) {
         if (data == LED_PIN_DATA || !xewe::pins::claim(LED_PIN_DATA, id.c_str())) {
-            os.serial.print("Led: no free data pin, the strip stays dark");
+            os.serial.print("! Led: no free data pin, the strip stays dark");
             return;
         }
         data = LED_PIN_DATA;
     }
     if (clock >= 0 && !xewe::pins::claim(clock, id.c_str())) {
         xewe::pins::release(data, id.c_str());
-        os.serial.print("Led: clock pin refused, the strip stays dark");
+        os.serial.print("! Led: clock pin refused, the strip stays dark");
         return;
     }
     active_data_pin  = static_cast<int8_t>(data);
@@ -888,7 +856,7 @@ void Led::start_render_task() {
     if (xTaskCreatePinnedToCore(&Led::render_task_entry, "led_render", config.render_task_stack_size,
                                 this, config.render_task_priority, &render_task_handle, core) != pdPASS) {
         render_task_handle = nullptr;
-        os.serial.print("Led: failed to start the render task");
+        os.serial.print("! Led: failed to start the render task");
     }
 }
 

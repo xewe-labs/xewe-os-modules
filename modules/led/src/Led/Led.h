@@ -202,6 +202,10 @@ private:
 
     // modes
     void               load_params             (const led_fx::ModeDef& mode, uint16_t* values) const;
+    // the running mode and its parameter values, read under the render mutex
+    const led_fx::ModeDef* current_mode(uint16_t* values) const;
+    // load_params, then the running values when `mode` is the current one; true when it is
+    bool               live_params             (const led_fx::ModeDef& mode, uint16_t* values) const;
     void               persist_params          (const led_fx::ModeDef& mode, const uint16_t* values);
     void               activate                (const led_fx::ModeDef& mode, const uint16_t* values);   // with cross-fade
     void               notify_params           (const led_fx::ModeDef& mode, const uint16_t* old_values,
@@ -210,6 +214,7 @@ private:
     std::string        nvs_param_name          (uint8_t mode_id, const char* param) const;
 
     // CLI
+    void               cli_state               (bool on);   // set_state, then "Led: on|off"
     void               cli_brightness          (xewe::span<const std::string> args);
     void               cli_set                 (xewe::span<const std::string> args);
     void               cli_fill                (xewe::span<const std::string> args);

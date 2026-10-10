@@ -24,7 +24,7 @@ Time::Time(xewe::Os& host,
         "Get current time from the web",
         "$time fetch",
         0,
-        [this](xewe::span<const std::string> args) { cli_fetch(args); }
+        [this](xewe::span<const std::string>) { get_time_from_web_init(); sync_and_print(); }
     });
 }
 
@@ -38,7 +38,7 @@ xewe::Settings Time::settings() const {
 void Time::on_setting_changed(const xewe::SettingDef&) {
     std::string normalized_gmt;
     if (!xewe::str::parse_gmt_offset(tz_gmt_str, normalized_gmt)) {
-        os.serial.print("! $time: invalid timezone, use GMT+HH:MM (e.g. GMT-08:00); kept " + active_tz_string);
+        os.serial.print("! Time: invalid timezone, use GMT+HH:MM (e.g. GMT-08:00); kept " + active_tz_string);
         apply_setting("tz_gmt_str", active_tz_string);             // put the last good value back
         return;
     }
@@ -107,7 +107,7 @@ void Time::begin_routines_init() {
             return;
         }
     } else {
-        os.serial.print("Unable to reach timezone server.\nCheck your internet connection.\n");
+        os.serial.print("! Time: unable to reach a timezone server; check the internet connection");
     }
 
     while (true) {
@@ -124,18 +124,7 @@ void Time::begin_routines_init() {
 
 void Time::begin_routines_regular() {
     apply_timezone(tz_gmt_str);             // loaded by the core (table default GMT+00:00)
-    if (get_time_from_web_wait(true)) {
-        print_current_time();
-    } else {
-        os.serial.print("Unable to reach time server.\nCheck your internet connection.\nTo retry: $time fetch");
-        time_set = false;
-    }
-}
-
-void Time::reset(bool verbose,
-                 bool do_restart,
-                 bool keep_enabled) {
-    Module::reset(verbose, do_restart, keep_enabled);   // wipes the namespace, reloads tz_gmt_str
+    sync_and_print();
 }
 
 std::string Time::status(bool verbose) const {
@@ -166,12 +155,9 @@ std::string Time::get_current_time_str() const {
 }
 
 void Time::print_current_time() {
-    if (is_disabled()) os.serial.print("Time module disabled");
-    if (!time_set) os.serial.print("Time is not set");
-
     os.serial.print("Current time: " + get_current_time_str());
 }
-void Time::get_time_from_web_init(const bool verbose) {
+void Time::get_time_from_web_init() {
     esp_netif_sntp_deinit();
 
     esp_sntp_config_t sntp_cfg = ESP_NETIF_SNTP_DEFAULT_CONFIG_MULTIPLE(
@@ -211,20 +197,15 @@ void Time::cli_set_timezone(xewe::span<const std::string> args) {
     std::string normalized_gmt;
     // alias of `$time set tz_gmt_str <offset>`, kept with its own messages
     if (xewe::str::parse_gmt_offset(args[0], normalized_gmt) && apply_setting("tz_gmt_str", normalized_gmt)) {
-        os.serial.print("Timezone updated.");
+        os.serial.print("Time: timezone set to " + tz_gmt_str);
     } else {
-        os.serial.print("Invalid format. Use GMT±HH:MM (e.g., GMT-08:00).");
+        os.serial.print("! Time: invalid timezone, use GMT+HH:MM (e.g. GMT-08:00)");
     }
 }
 
-void Time::cli_fetch(xewe::span<const std::string> args) {
-    get_time_from_web_init(true);
-    if (get_time_from_web_wait(true)) {
-        print_current_time();
-    } else {
-        os.serial.print("Unable to reach time server.\nCheck your internet connection.");
-        time_set = false;
-    }
+void Time::sync_and_print() {
+    if (get_time_from_web_wait(true)) print_current_time();
+    else os.serial.print("! Time: unable to reach the time server; check the internet connection, then $time fetch");
 }
 
 void Time::fetch_tz_task(void* pvParameters) {

@@ -27,9 +27,9 @@ def test_add_then_remove(serial):
     if not pin:
         pytest.skip("needs XEWE_TEST_BUTTONS_PIN (a free GPIO)")
     serial.command(f'$buttons add {pin} "$system status" pullup on_press 50',
-                   expect=r"Successfully added button mapping\.", timeout=5)
+                   expect=r"Buttons: button mapping added", timeout=5)
     # the table lists ID | Pin | ...; the new mapping has the highest id
     serial.send(f"${ID} status")
     ids = [int(m[1]) for line in serial.collect() if (m := re.match(r"^\|\s*(\d+)\s*\|", line.strip()))]
     assert ids, "no button id in status table"
-    serial.command(f"$buttons remove {max(ids)}", expect=r"Successfully removed button mapping\.", timeout=5)
+    serial.command(f"$buttons remove {max(ids)}", expect=r"Buttons: button mapping removed", timeout=5)

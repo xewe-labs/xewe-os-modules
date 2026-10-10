@@ -4,9 +4,9 @@
 | Slug | Name | Id | Version | Description | Depends on | Requires core |
 |---|---|---|---|---|---|---|
 | [`buttons`](modules/buttons) | Buttons | `buttons` | 0.3.0 | Binds commands to physical buttons with software debouncing | - | `>=2.1.0,<3.0.0` |
-| [`fan`](modules/fan) | Fan | `fan` | 0.2.0 | 4-wire PWM fans with tachometer RPM and a temperature curve fed by any sensor | - | `>=2.1.0,<3.0.0` |
+| [`fan`](modules/fan) | Fan | `fan` | 0.3.0 | 4-wire PWM fans with tachometer RPM and a temperature curve fed by any sensor | - | `>=2.1.0,<3.0.0` |
 | [`led`](modules/led) | Led | `led` | 0.3.0 | Addressable LED strip and its modes: FastLED, 50 fps render task, 7 modes (one file each), fades | - | `>=2.1.0,<3.0.0` |
-| [`mlx90614`](modules/mlx90614) | MLX90614 | `mlx90614` | 0.2.0 | MLX90614 contactless I2C temperature sensor (object and ambient) with temperature listeners | - | `>=2.1.0,<3.0.0` |
+| [`mlx90614`](modules/mlx90614) | MLX90614 | `mlx90614` | 0.3.0 | MLX90614 contactless I2C temperature sensor (object and ambient) with temperature listeners | - | `>=2.1.0,<3.0.0` |
 | [`pins`](modules/pins) | Pins | `pins` | 0.3.0 | GPIO, ADC, PWM and I2C access from the command line | - | `>=2.1.0,<3.0.0` |
 | [`scheduler`](modules/scheduler) | Scheduler | `schedule` | 0.3.0 | Runs stored commands on a weekly schedule | time | `>=2.1.0,<3.0.0` |
 | [`time`](modules/time) | Time | `time` | 0.3.0 | NTP time sync and timezone handling | wifi | `>=2.1.0,<3.0.0` |

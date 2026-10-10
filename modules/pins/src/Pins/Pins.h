@@ -18,6 +18,8 @@ private:
     // core pin registry: a pin is claimed for `pins` on first use; refused (and reported)
     // when another module holds it, so `$pins` never reconfigures a fan, sensor or button pin
     bool                        take                        (int pin);
+    // parses a <pin> argument (printing the error) and takes it
+    bool                        take_arg                    (const std::string& arg, int& pin);
 
     void                        claims_cmd                  (xewe::span<const std::string> args);
     void                        release_cmd                 (xewe::span<const std::string> args);

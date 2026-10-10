@@ -29,9 +29,6 @@ public:
     void                  begin_routines_init     ()  override;
     void                  begin_routines_regular  ()  override;
 
-    void                  reset                   (bool verbose      = false,
-                                                   bool do_restart   = true,
-                                                   bool keep_enabled = true) override;
     std::string           status                  (bool verbose = false)     const override;
     // settings table: `tz_gmt_str` (str <= 9, "GMT+00:00"); an offset stored by an earlier version loads unchanged
     xewe::Settings        settings                ()                         const override;
@@ -50,12 +47,13 @@ private:
     std::string           active_tz_string        {"GMT+00:00"};
     std::string           tz_gmt_str              {"GMT+00:00"};     // table row
 
-    void                  get_time_from_web_init  (const bool verbose = true);
+    void                  get_time_from_web_init  ();
     bool                  get_time_from_web_wait  (const bool verbose = true);
     void                  apply_timezone          (std::string_view gmt_offset_str);
 
     void                  cli_set_timezone        (xewe::span<const std::string> args);
-    void                  cli_fetch               (xewe::span<const std::string> args);
+    // waits for SNTP, then prints the time or how to retry
+    void                  sync_and_print          ();
 
     struct TzRace {
         std::atomic<bool> abort   {false};

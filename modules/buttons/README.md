@@ -24,7 +24,7 @@ loop: digitalRead → stable for debounce_ms? → state changed? → event match
 ```
 
 - **`Buttons` class** (`src/Buttons/`) — a `xewe::Module` with id `buttons`; no first-boot setup; can be disabled.
-- **API** — `add(pin, command, type, event, debounce)`, `remove(id)`, `load_from_nvs()`, `save_to_nvs()`.
+- **API** — `add(pin, command, type, event, debounce)`, `remove(id)` (false when no mapping has that id), `load_from_nvs()`, `save_to_nvs()`.
 
 ### Commands
 

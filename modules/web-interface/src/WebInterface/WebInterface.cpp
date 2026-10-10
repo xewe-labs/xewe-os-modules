@@ -47,36 +47,19 @@ void WebInterface::loop () {
 std::string WebInterface::status (const bool verbose) const {
     if (is_disabled()) return Module::status(verbose);
 
-    std::ostringstream out;
-    out << Module::status(false) << '\n';
+    const unsigned long uptime_s = millis() / 1000UL;
+    const uint32_t free_heap = ESP.getFreeHeap();
+    const uint32_t total_heap = ESP.getHeapSize();
+    const uint32_t used_heap = total_heap - free_heap;
+    const float heap_usage = total_heap ? (used_heap * 100.0f) / total_heap : 0.0f;
 
-    unsigned long uptime_s = millis() / 1000UL;
-    int days  = static_cast<int>(uptime_s / 86400UL);
-    int hours = static_cast<int>((uptime_s % 86400UL) / 3600UL);
-    int mins  = static_cast<int>((uptime_s % 3600UL) / 60UL);
-    int secs  = static_cast<int>(uptime_s % 60UL);
+    const std::string out = Module::status(false) + "\n" + xewe::str::format(
+        "Uptime: %lud %02lu:%02lu:%02lu\nMemory usage: %.2f%% (%lu / %lu bytes)",
+        uptime_s / 86400UL, (uptime_s % 86400UL) / 3600UL, (uptime_s % 3600UL) / 60UL, uptime_s % 60UL,
+        heap_usage, static_cast<unsigned long>(used_heap), static_cast<unsigned long>(total_heap));
 
-    uint32_t free_heap  = ESP.getFreeHeap();
-    uint32_t total_heap = ESP.getHeapSize();
-    uint32_t used_heap  = total_heap - free_heap;
-    float heap_usage    = (total_heap ? (used_heap * 100.0f) / total_heap : 0.0f);
-
-    out << "--- Web Server Status ---\n";
-    out << "  - Uptime:       "
-        << days << "d "
-        << std::setw(2) << std::setfill('0') << hours << ':'
-        << std::setw(2) << std::setfill('0') << mins  << ':'
-        << std::setw(2) << std::setfill('0') << secs  << '\n';
-    out << "  - Memory Usage: "
-        << std::fixed << std::setprecision(2) << heap_usage << "% ("
-        << used_heap << " / " << total_heap << " bytes)\n";
-    out << "-------------------------\n";
-
-    if (verbose) {
-        os.serial.print(out.str());
-    }
-
-    return out.str();
+    if (verbose) os.serial.print(out);
+    return out;
 }
 
 void WebInterface::serve_root() {

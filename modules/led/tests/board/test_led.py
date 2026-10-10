@@ -56,7 +56,7 @@ def _output(text: str) -> tuple:
 
 
 def _checksum(serial) -> str:
-    return serial.command(f"${ID} checksum", expect=r"Led frame checksum: ([0-9a-f]{8})", timeout=5)[1]
+    return serial.command(f"${ID} checksum", expect=r"Led: frame checksum: ([0-9a-f]{8})", timeout=5)[1]
 
 
 def test_compiles(compiled):

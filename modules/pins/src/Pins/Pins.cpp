@@ -108,6 +108,14 @@ bool Pins::take(int pin) {
     return xewe::pins::claim(pin, id.c_str());      // false: out of range or held by another module (reported)
 }
 
+bool Pins::take_arg(const std::string& arg, int& pin) {
+    if (!xewe::str::parse_int(arg, pin)) {
+        os.serial.print("! Pins: invalid <pin>");
+        return false;
+    }
+    return take(pin);
+}
+
 void Pins::claims_cmd(xewe::span<const std::string>) {
     int n = 0;
     for (int gpio = 0; gpio < xewe::pins::kMaxGpio; ++gpio) {
@@ -122,14 +130,14 @@ void Pins::claims_cmd(xewe::span<const std::string>) {
 void Pins::release_cmd(xewe::span<const std::string> args) {
     int pin;
     if (!xewe::str::parse_int(args[0], pin)) {
-        os.serial.print("Error: invalid <pin>");
+        os.serial.print("! Pins: invalid <pin>");
         return;
     }
     if (xewe::pins::release(pin, id.c_str())) {
         os.serial.print("ok");
     } else {
         const char* owner = xewe::pins::owner_of(pin);
-        os.serial.printf("Error: GPIO %d is %s", pin, owner ? (std::string("held by ") + owner).c_str() : "not claimed");
+        os.serial.printf("! Pins: GPIO %d is %s", pin, owner ? (std::string("held by ") + owner).c_str() : "not claimed");
     }
 }
 
@@ -144,11 +152,7 @@ void Pins::gpio_read_cmd(xewe::span<const std::string> args) {
     if (is_disabled(true)) return;
 
     int pin;
-    if (!xewe::str::parse_int(args[0], pin)) {
-        os.serial.print("Error: invalid <pin>");
-        return;
-    }
-    if (!take(pin)) return;
+    if (!take_arg(args[0], pin)) return;
     pinMode(pin, INPUT);
     os.serial.print(std::to_string(static_cast<int>(digitalRead(pin))));
 }
@@ -158,7 +162,7 @@ void Pins::gpio_write_cmd(xewe::span<const std::string> args) {
 
     int pin, lvl;
     if (!xewe::str::parse_int(args[0], pin) || !xewe::str::parse_int(args[1], lvl)) {
-        os.serial.print("Error: invalid <pin> or <level>");
+        os.serial.print("! Pins: invalid <pin> or <level>");
         return;
     }
     if (!take(pin)) return;
@@ -171,11 +175,7 @@ void Pins::gpio_toggle_cmd(xewe::span<const std::string> args) {
     if (is_disabled(true)) return;
 
     int pin;
-    if (!xewe::str::parse_int(args[0], pin)) {
-        os.serial.print("Error: invalid <pin>");
-        return;
-    }
-    if (!take(pin)) return;
+    if (!take_arg(args[0], pin)) return;
     pinMode(pin, OUTPUT);
     int new_state = !digitalRead(pin);
     digitalWrite(pin, new_state);
@@ -186,11 +186,7 @@ void Pins::gpio_mode_cmd(xewe::span<const std::string> args) {
     if (is_disabled(true)) return;
 
     int pin;
-    if (!xewe::str::parse_int(args[0], pin)) {
-        os.serial.print("Error: invalid <pin>");
-        return;
-    }
-    if (!take(pin)) return;
+    if (!take_arg(args[0], pin)) return;
     const std::string& m = args[1];
 
     if      (m == "out") pinMode(pin, OUTPUT);
@@ -200,7 +196,7 @@ void Pins::gpio_mode_cmd(xewe::span<const std::string> args) {
 #endif
     else if (m == "in_pullup")   pinMode(pin, INPUT_PULLUP);
     else {
-        os.serial.print("Valid modes: in | in_pullup | in_pulldown | out");
+        os.serial.print("! Pins: valid modes: in | in_pullup | in_pulldown | out");
         return;
     }
     os.serial.print("ok");
@@ -210,11 +206,7 @@ void Pins::adc_read_cmd(xewe::span<const std::string> args) {
     if (is_disabled(true)) return;
 
     int pin;
-    if (!xewe::str::parse_int(args[0], pin)) {
-        os.serial.print("Error: invalid <pin>");
-        return;
-    }
-    if (!take(pin)) return;
+    if (!take_arg(args[0], pin)) return;
     os.serial.print(std::to_string(analogRead(pin)));
 }
 
@@ -226,14 +218,14 @@ void Pins::pwm_setup_cmd(xewe::span<const std::string> args) {
     if (!xewe::str::parse_int(args[0], pin) ||
         !xewe::str::parse_int(args[1], freq) ||
         !xewe::str::parse_int(args[2], bits)) {
-        os.serial.print("Error: required <pin> <freq_hz> <res_bits>");
+        os.serial.print("! Pins: required <pin> <freq_hz> <res_bits>");
         return;
     }
     if (!take(pin)) return;
 
     // arduino-esp32 3.x LEDC API: ledcAttach(pin, freq, resolution)
     if (!ledcAttach(pin, freq, bits)) {
-        os.serial.print("PWM attachment failed");
+        os.serial.print("! Pins: PWM attachment failed");
         return;
     }
     os.serial.print("ok");
@@ -245,7 +237,7 @@ void Pins::pwm_write_cmd(xewe::span<const std::string> args) {
     uint8_t pin;
     uint32_t duty;
     if (!xewe::str::parse_int(args[0], pin) || !xewe::str::parse_int(args[1], duty)) {
-        os.serial.print("Error: required <pin> <duty_value>");
+        os.serial.print("! Pins: required <pin> <duty_value>");
         return;
     }
     if (!take(pin)) return;
@@ -259,11 +251,11 @@ void Pins::pwm_stop_cmd(xewe::span<const std::string> args) {
 
     uint8_t pin;
     if (!xewe::str::parse_int(args[0], pin)) {
-        os.serial.print("Error: required <pin>");
+        os.serial.print("! Pins: required <pin>");
         return;
     }
     if (xewe::pins::owner_of(pin) && id != xewe::pins::owner_of(pin)) {
-        os.serial.printf("Error: GPIO %u is held by %s", static_cast<unsigned>(pin), xewe::pins::owner_of(pin));
+        os.serial.printf("! Pins: GPIO %u is held by %s", static_cast<unsigned>(pin), xewe::pins::owner_of(pin));
         return;
     }
     ledcWrite(pin, 0);
@@ -277,7 +269,7 @@ void Pins::i2c_scan_cmd(xewe::span<const std::string> args) {
 
     int sda, scl;
     if (!xewe::str::parse_int(args[0], sda) || !xewe::str::parse_int(args[1], scl)) {
-        os.serial.print("Error: required <sda_pin> <scl_pin>");
+        os.serial.print("! Pins: required <sda_pin> <scl_pin>");
         return;
     }
 
