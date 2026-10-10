@@ -4,7 +4,7 @@
 //
 // Unit test of the modes (src/Led/modes/Registry.h, every mode file, fx/Math.h; no Arduino): built
 // and run by unit/test_led.py with g++ -std=c++17 -Wall -Wextra -Werror. Prints one line per check,
-// then "PASSED|FAILED: <n> check(s), <f> failure(s)" (CONTRACT.md "Unit tests"); exits non-zero on a
+// then "PASSED|FAILED: <n> check(s), <f> failure(s)" (doc/contract.md section 4, C++ unit tests); exits non-zero on a
 // failure. Modes are looked up by their stable id (find_mode), never by registry position.
 #include <cstdio>
 #include <cstdint>

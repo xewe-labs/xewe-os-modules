@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate every module of this repo (CONTRACT.md section 5).
+"""Validate every module of this repo (doc/contract.md section 5).
 
 A thin wrapper: the module.properties rules come from xewe-os-tools (`xewe.modules.registry.validate`);
 this file adds only the repo-policy rules. Run it with a Python that has xewe-os-tools
@@ -24,7 +24,7 @@ from pathlib import Path
 EXIT_OK, EXIT_FAIL, EXIT_USAGE, EXIT_NOT_SETUP = 0, 1, 2, 3
 
 REPO = Path(__file__).resolve().parents[1]
-INDEX = "MODULES.md"
+INDEX = "doc/modules.md"
 CATALOGUE = "libraries.toml"
 REPO_URL = "https://github.com/xewe-labs/xewe-os-modules/tree/main/modules/{slug}"
 LIBRARY_RE = re.compile(r"^[A-Za-z0-9_.\- ]+$")
@@ -69,7 +69,7 @@ def render_index(registry) -> str:
     for m in registry.all:
         p = m.props
         deps = ", ".join(m.deps) or "-"
-        cells = [f"[`{m.slug}`](modules/{m.dir.name})", p.get("name", ""), f"`{p.get('id', '')}`",
+        cells = [f"[`{m.slug}`](../modules/{m.dir.name})", p.get("name", ""), f"`{p.get('id', '')}`",
                  p.get("version", ""), p.get("description", ""), deps, f"`{p.get('requires_core', '')}`"]
         rows.append("| " + " | ".join(c.replace("|", "\\|") for c in cells) + " |\n")
     return INDEX_HEADER + "".join(rows)
@@ -298,7 +298,7 @@ def read_harness(path: Path) -> tuple[str | None, set[str]]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(description="Validate the modules of this repo (CONTRACT.md section 5).")
+    ap = argparse.ArgumentParser(description="Validate the modules of this repo (doc/contract.md section 5).")
     ap.add_argument("--harness", type=Path, metavar="DIR",
                     help="xewe-os harness: its xewe.toml gives [core] ref and [libraries]")
     ap.add_argument("--write-index", action="store_true", help=f"rewrite {INDEX} and exit")

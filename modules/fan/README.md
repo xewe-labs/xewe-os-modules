@@ -114,7 +114,7 @@ mlx90614.listeners.add(&link);
 |---|---|
 | Modules | none |
 | Libraries | XeWeCore >=2.1.0,<3.0.0; ArduinoJson (`depends_libraries`, pinned in `libraries.toml`; a project lists it in its `xewe.toml` `[libraries]`) |
-| Boards | ESP32-C3, ESP32-C6, ESP32-S3 (arduino-esp32 3.3.12) |
+| Boards | ESP32-C3, ESP32-C6, ESP32-S3 (arduino-esp32 3.x) |
 
 Metadata and dependencies are declared in [`module.properties`](module.properties).
 
@@ -138,14 +138,14 @@ caller's task (the curve target from `loop()`); keep them short.
 ### Tests
 
 `python -m xewe test --module fan` in a harness (repo [README](../../README.md)).
-Unit (`tests/unit/test_fan.py`, `--unit-only`): builds `test_curve.cpp` with g++ (≥ 72 checks), checks
+Unit (`tests/unit/test_fan.py`, `--unit-only`): builds `test_curve.cpp` with g++ (≥ 78 checks), checks
 `Curve.h` stays pure, the properties against the source, and that 64-bit tach maths, the shared-pin
 refusal and the schema-mismatch rule stay in the source (`test_r1_fixes_kept`).
 Board (`tests/board/test_fan.py`): `test_compiles` runs without a board; on a provisioned bare board
 `test_status`, `test_set_rejects_out_of_range`, `test_settings_table`, `test_argc_error`, `test_curve_add_remove`,
 `test_curve_set_rejects_bad_specs`, `test_temperature_drives_curve`, `test_settings_survive_restart`
-(`$system restart`); free pins `XEWE_TEST_FAN_PIN` (`test_add_set_remove`) and
-`XEWE_TEST_FAN_PIN2` (`test_shared_pin_refused`); `test_rpm_reading` requires a real fan
+(`$system restart`), `test_failsafe_when_no_temperature` (restart, then `stale_ms` without a reading); free pins `XEWE_TEST_FAN_PIN` (`test_add_set_remove`) and
+`XEWE_TEST_FAN_PIN2` (`test_shared_pin_refused`); `test_rpm_reading` and `test_failsafe_spins_fans` require a real fan
 (`XEWE_TEST_FAN_PWM_PIN`, `XEWE_TEST_FAN_TACH_PIN`).
 
 ## Known issues

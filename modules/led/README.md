@@ -5,7 +5,7 @@
 Owns the strip and what it shows: chipset, pins, length, colour order, a pixel buffer, brightness
 with on/off fades, a FreeRTOS render task that pushes frames through
 [FastLED](https://github.com/FastLED/FastLED) at 50 fps, and seven effect modes (the catalogue of xewe-led-os)
-with with clamped, persisted parameters and a 900 ms cross-fade on every change. Each mode is
+with clamped, persisted parameters and a 900 ms cross-fade on every change. Each mode is
 one header in `src/Led/modes/`; `modes/Registry.h` is the one list, so a mode is added or removed with
 one file and one line. A module for [XeWe OS](https://github.com/xewe-labs/xewe-os), built on
 [XeWeCore](https://github.com/xewe-labs/xewe-os-core).
@@ -126,7 +126,8 @@ are unique, and every key fits NVS. Removing a mode is the reverse; the other id
 | xewe-led-os names | `set_brightness N`, `set_state 0\|1`, `toggle_state`, `turn_on`, `turn_off`, `set_length N`, `set_color_order XYZ`, `set_mode <m>`, `set_mode_param <m> <key> <value>`: aliases with the same handlers as above. | `$led set_mode 5` |
 
 `mode` is registered once per argument count (1, 2 and 4) and dispatches on its first argument; any
-other combination prints `Led: usage: $led mode list | set <m> | ...`. Replies start with `Led:`.
+other combination prints `! Led: usage: $led mode list | set <m> | ...`. Replies start with `Led:`,
+errors with `! Led:`.
 
 ### NVS keys (namespace `led`)
 
@@ -141,7 +142,7 @@ other combination prints `Led: usage: $led mode list | set <m> | ...`. Replies s
 | `pin_data` | u8 | data GPIO 0–48 (applies after restart) |
 | `pin_clock` | u8 | clock GPIO 0–48, APA102 (applies after restart) |
 | `mode_id` | u8 | current mode id |
-| `m:<id>:<key>` | u16 | one per mode parameter (27 today; longest `m:2:min_bright`, 14 chars) |
+| `m:<id>:<key>` | u16 | one per mode parameter (27; longest `m:2:min_bright`, 14 chars) |
 
 The first eight are the settings table rows (`Led::settings()`): the core loads them before begin
 (out of range: default + one `!` line) and `$led reset` reloads the defaults.
@@ -197,7 +198,7 @@ led.set_brightness(200, &my_listener);       // origin: my_listener skips this e
 |---|---|
 | Modules | none |
 | Libraries | XeWeCore >=2.1.0,<3.0.0 (settings table, `ListenerSet`, `pins`, `str::parse_hex_color`, host-includable `Color.h`); FastLED 3.10.3 (`depends_libraries`, pinned in `libraries.toml`, installed by `xewe setup`; a project's `xewe.toml` `[libraries]` pin wins) |
-| Boards | ESP32-C3, ESP32-C6, ESP32-S3 (arduino-esp32 3.3.12) |
+| Boards | ESP32-C3, ESP32-C6, ESP32-S3 (arduino-esp32 3.x) |
 
 FastLED 3.10.3 compiles on all three chips with core 3.3.12; on the S3 its I2S parallel driver adds 6
 `-Wdeprecated-declarations` warnings from FastLED's own sources. 3.10.4–3.10.6 add ~100–230 KB of
@@ -220,7 +221,7 @@ types, RESTART rows, no hand-written NVS reads), the pin claims, that the mode h
 and that setters notify outside the lock and never from the render task.
 
 ```sh
-build/tools/.venv/bin/python -m xewe test --module led              # lock chip
+build/tools/.venv/bin/python -m xewe test --module led              # the manifest's chip
 build/tools/.venv/bin/python -m xewe test --module led --all-chips  # c3, c6, s3
 build/tools/.venv/bin/python -m xewe test --module led --unit-only  # unit tests only, no build
 ```
@@ -236,5 +237,5 @@ build/tools/.venv/bin/python -m xewe test --module led --unit-only  # unit tests
   `$led set pin_data <gpio>` moves it.
 - `pin_clock` has no effect on APA102 (template pins: build pins only); there is no run-time clocked
   driver.
-- Not yet checked on real strips: chip timing, colour order, flicker with WiFi active, and the power
+- Not checked on real strips: chip timing, colour order, flicker with WiFi active, and the power
   estimate.

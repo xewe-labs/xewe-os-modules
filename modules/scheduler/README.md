@@ -65,7 +65,7 @@ matches the C++ source; developer machine, no build), run through an xewe-os har
 [README](../../README.md)):
 
 ```sh
-build/tools/.venv/bin/python -m xewe test --module scheduler              # lock chip
+build/tools/.venv/bin/python -m xewe test --module scheduler              # the manifest's chip
 build/tools/.venv/bin/python -m xewe test --module scheduler --all-chips  # c3, c6, s3
 build/tools/.venv/bin/python -m xewe test --module scheduler --unit-only  # unit tests only, no build
 ```

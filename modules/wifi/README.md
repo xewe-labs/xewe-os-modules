@@ -68,7 +68,7 @@ module's `src/Wifi/Config.h` as one marked block to the project's `Config.h`; ed
 - **`loop()` blocks while disconnected.** It runs `while (WiFi.status() != WL_CONNECTED)` with a
   5 s "Disable and reset WiFi module?" prompt (`get_yn`) and a reconnect attempt per pass. This
   breaks the "loop must not block" rule: the CLI and every other module stall until WiFi is back.
-  The fix is a non-blocking reconnect state machine (CONTRACT.md section 6).
+  The fix is a non-blocking reconnect state machine ([contract](../../doc/contract.md#6-known-limits), section 6).
 - Set `XEWE_MODULE_WIFI_DEBUG` to 1 only on a bench: it prints credentials to serial.
   Credentials are stored in NVS unencrypted.
 
@@ -79,7 +79,7 @@ matches the C++ source; developer machine, no build), run through an xewe-os har
 [README](../../README.md)):
 
 ```sh
-build/tools/.venv/bin/python -m xewe test --module wifi              # lock chip
+build/tools/.venv/bin/python -m xewe test --module wifi              # the manifest's chip
 build/tools/.venv/bin/python -m xewe test --module wifi --all-chips  # c3, c6, s3
 build/tools/.venv/bin/python -m xewe test --module wifi --unit-only  # unit tests only, no build
 ```

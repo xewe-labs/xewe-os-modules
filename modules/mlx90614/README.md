@@ -18,8 +18,8 @@ for [XeWe OS](https://github.com/xewe-labs/xewe-os), built on
   (an unbounded scan of a bare bus without pull-ups blocks the console for tens of seconds)
 - Value mapping in `src/Mlx90614/Convert.h`, pure C++ (no Arduino), host-tested with g++
 - Settings table: `addr` u8 1-127, `sda`/`scl` u8 (255 = none), each its own NVS key;
-  `$mlx90614 set|get|schema`. A `data` blob stored by version 0.1 is copied to them once and removed
-  (only when it has a `schema` field of 1, FlexData `has()`); any other blob is left untouched
+  `$mlx90614 set|get|schema`. An older `data` blob is copied to them once and removed (only when
+  it has a `schema` field of 1, FlexData `has()`); any other blob is left untouched
 - First boot and `reset`: pins and address from the `MLX90614_*` build defines (the table defaults)
 - SDA/SCL are claimed in the core pin registry (`xewe::pins`) while the bus runs; a pin another
   module holds is refused
@@ -95,7 +95,7 @@ the main loop.
 |---|---|
 | Modules | none |
 | Libraries | XeWeCore >=2.1.0,<3.0.0; ArduinoJson (`depends_libraries`, pinned in `libraries.toml`); Wire (esp32 core) |
-| Boards | ESP32-C3, ESP32-C6, ESP32-S3 (arduino-esp32 3.3.12) |
+| Boards | ESP32-C3, ESP32-C6, ESP32-S3 (arduino-esp32 3.x) |
 
 Metadata and dependencies are declared in [`module.properties`](module.properties).
 
@@ -106,7 +106,7 @@ Metadata and dependencies are declared in [`module.properties`](module.propertie
 | `addr` | u8 1–127 | `MLX90614_ADDR` (0x5A) | sensor I2C address (decimal in `set`; `set_addr` takes hex) |
 | `sda` | u8 | `MLX90614_SDA` | SDA GPIO, 255 = not configured; `set` restarts the bus |
 | `scl` | u8 | `MLX90614_SCL` | SCL GPIO, 255 = not configured; `set` restarts the bus |
-| `data` | FlexData blob | | written by version 0.1 only; read once at boot, copied to the rows above, then removed |
+| `data` | FlexData blob | | older layout; read once at boot, copied to the rows above, then removed |
 
 ### Tests
 
@@ -123,4 +123,4 @@ Board (`tests/board/test_mlx90614.py`): `test_compiles` without a board; on a pr
 
 - The PEC byte is read but not checked (the error flag and the 3-byte rule catch the bus glitches
   seen so far).
-- `scan` still blocks the console for up to ~1.5 s by design.
+- `scan` blocks the console for up to 1.5 s.

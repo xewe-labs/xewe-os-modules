@@ -49,7 +49,7 @@ in that order. Read it as described below before doing anything else in the repo
 
 The ready-made modules of XeWe OS: one directory per module under `modules/<slug>/`, each a C++ class
 on XeWeCore plus the metadata and tests that `xewe-os-tools` needs to install, order and test it.
-Human documentation: `README.md` (what the modules are, how a project uses them), `CONTRACT.md` (the
+Human documentation: `README.md` (what the modules are, how a project uses them), `doc/contract.md` (the
 normative specification), `modules/<slug>/README.md`. Project rules are X-01 … X-14 at the end of
 `RULES.md`. Organization rules: `https://github.com/xewe-labs/.github/blob/main/AGENTS.md`; they apply
 where this file is silent. XeWeCore's own reference is its `doc/` (settings: `doc/os/settings.md`,
@@ -60,9 +60,9 @@ modules and listeners: `doc/os/module.md`, pin registry: `doc/utils/pins.md`).
 - `modules/<slug>/`: `module.properties`, `src/<Folder>/<Folder>.h` + `.cpp` (plus pure headers
   such as `Curve.h`, `Convert.h`, led's `modes/` and `fx/`), `tests/board/test_<slug>.py`,
   optional `tests/unit/`, `README.md`. Nothing else (X-02).
-- `tools/validate.py`: the tools' validator plus the repository rules (CONTRACT.md section 5).
+- `tools/validate.py`: the tools' validator plus the repository rules (doc/contract.md section 5).
 - `libraries.toml`: the catalogue of Arduino libraries the modules may list in `depends_libraries`.
-- `MODULES.md`: generated from the `module.properties` files; never edit it by hand (X-12).
+- `doc/modules.md`: generated from the `module.properties` files; never edit it by hand (X-12).
 - No module is an Arduino library and nothing here is compiled on its own: modules are compiled
   inside an xewe-os project ("harness").
 
@@ -98,12 +98,12 @@ build/tools/.venv/bin/python -m xewe test --module <slug> --chip c3             
 ```
 
 - **Validator** after every change to a module (X-01). `--write-index` after any `module.properties`
-  change, then validate again (the `index` rule compares `MODULES.md`).
+  change, then validate again (the `index` rule compares `doc/modules.md`).
 - **Unit tests** run on the developer machine: the `@pytest.mark.unit` tests in `tests/unit/` and
   the C++ files they build with g++. led's host builds need XeWeCore's `src/`: `XEWE_CORE_SOURCE`, the
   core checkout next to this repo, or the project's `build/libraries/XeWeCore`.
 - **Compile.** Without a board, `test_compiles` really builds and every serial test reports
-  "compiled, not run"; the run exits 0. The full gate (CONTRACT.md section 4): each changed module
+  "compiled, not run"; the run exits 0. The full gate (doc/contract.md section 4): each changed module
   alone (`xewe modules select <slug>`, `xewe test --module <slug> --all-chips`), then all modules
   together (`--modules all`, `xewe build --all-chips`, `xewe test`). Never run `setup --modules` in
   the template itself; it rewrites `xewe.toml`.
@@ -116,17 +116,17 @@ build/tools/.venv/bin/python -m xewe test --module <slug> --chip c3             
    (depends on `wifi`, one settings row), `modules/fan` (settings table, blobs, listeners, pin
    claims, a pure header with C++ unit tests). Or start from XeWeCore's `examples/02_MyModule`.
    Rename the directory, folder, files and class.
-2. Fill `module.properties` with every key in the CONTRACT.md section 2 order:
+2. Fill `module.properties` with every key in the doc/contract.md section 2 order:
    `repo=https://github.com/xewe-labs/xewe-os-modules/tree/main/modules/<slug>`,
    `include=src/<Folder>/<Folder>.h`, `declare=<Folder> <var>(os[, <dep var>...]);`,
    `requires_core=>=2.1.0,<3.0.0`. A library in `depends_libraries` gets a table in `libraries.toml`
    (sorted, exactly `repo` and `ref`).
-3. Write the class to CONTRACT.md section 3 (the C++ rules are X-04 … X-06): `host` parameter,
+3. Write the class to doc/contract.md section 3 (the C++ rules are X-04 … X-06): `host` parameter,
    `[this]` captures, `xewe::span`, a `status()` override, `reset()` when it holds state or pins.
 4. Settings go in a table (`settings()`); values that are not rows in `schema_extra`; changes that
    other code needs go through a `ListenerSet` with an `origin`; driven GPIOs are claimed in
-   `xewe::pins` (CONTRACT.md section 3.1).
-5. Tests: `tests/board/test_<slug>.py` from the template (CONTRACT.md section 4) with
+   `xewe::pins` (doc/contract.md section 3.1).
+5. Tests: `tests/board/test_<slug>.py` from the template (doc/contract.md section 4) with
    `test_compiles`, `test_status` and one behaviour test whose regex comes from the module's real
    output; `tests/unit/test_<slug>.py` with at least `test_properties_match_source`; pure logic in a
    header with a C++ unit test.
@@ -170,7 +170,7 @@ before 1.0 MINOR for breaking), update its README in the same change, keep store
 - **fan, mlx90614.** Curve and conversion maths live in `Curve.h` / `Convert.h` (pure, host-tested);
   the `.cpp` calls them. mlx90614 copies an older `data` blob into its table rows once
   (`migrate_blob`).
-- **wifi.** `loop()` blocks while disconnected (CONTRACT.md section 6); do not copy that pattern.
+- **wifi.** `loop()` blocks while disconnected (doc/contract.md section 6); do not copy that pattern.
   `-DDEBUG_Wifi=1` prints credentials; bench only.
 - **web-interface.** No authentication: every command is reachable over HTTP on the local network.
 - **time, scheduler.** The scheduler's id is `schedule`; its member for the time dependency is

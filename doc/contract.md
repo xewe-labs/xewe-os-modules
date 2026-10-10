@@ -20,11 +20,13 @@ xewe-os-modules/
 │       ├── tests/board/test_<slug>.py   # pytest on the ESP32 through `xewe test` (required)
 │       ├── tests/unit/                  # optional: developer-machine tests (`unit` pytest, C++ for g++)
 │       └── README.md
+├── doc/
+│   ├── contract.md         # this file
+│   └── modules.md          # generated index: `tools/validate.py --write-index`
 ├── libraries.toml          # library catalogue: repo and ref of every depends_libraries name
 ├── tools/validate.py       # the tools' validator plus the repository rules (section 5)
-├── MODULES.md              # generated index: `tools/validate.py --write-index`
 ├── README.md               # what the modules are and how a project uses them
-├── CONTRACT.md             # this file
+├── .github/workflows/      # CI: tests.yml
 ├── .agents/                # agent workspace: AGENTS.md (how to work here), RULES.md (hard rules)
 ├── LICENSE.txt             # GPL-3.0-only, one file for the repository
 └── .gitignore              # __pycache__/, *.pyc, .pytest_cache/, build/, .venv/, .DS_Store
@@ -42,7 +44,7 @@ How the tools read the repository (`xewe.modules.registry`):
   become part of the key).
 - **Install.** Only `modules/<slug>/src/<folder>/` is compiled: it is copied to
   `build/modules/src/<folder>/` of the project (the generated Arduino library `XeWeModules`), with
-  `.git` skipped. `include=src/<Folder>/<Folder>.h` becomes `#include "<Folder>/<Folder>.h"` in
+  `.git` and `__pycache__` skipped. `include=src/<Folder>/<Folder>.h` becomes `#include "<Folder>/<Folder>.h"` in
   `XeWeModules.h`, which the project's generated `src/Modules.h` includes; the `declare=` line is
   copied into `src/Modules.h` verbatim, in dependency order.
 - **Tests.** `xewe modules generate` copies `tests/board/` and `tests/unit/` to the project's
@@ -72,7 +74,7 @@ and `depends_libraries`, which they accept as legacy keys; any other key is a T 
 | `slug` | Directory name, `--modules` value, `depends_modules` target | T: `^[a-z0-9][a-z0-9-]*$`, unique, equals the directory name |
 | `id` | CLI group (`$<id>`) **and** NVS namespace. It never changes once released | T: `^[a-z][a-z0-9_]*$`, ≤ 15 characters, unique. R `id-source`: the literal `"<id>"` appears in the `.cpp` |
 | `version` | The module's semver: MINOR for added commands, MAJOR for removed or changed ones (before 1.0: MINOR for breaking changes) | T: `X.Y.Z` |
-| `description` | One line, shown in `xewe modules list` and `MODULES.md` | T: non-empty, ≤ 100 characters |
+| `description` | One line, shown in `xewe modules list` and `doc/modules.md` | T: non-empty, ≤ 100 characters |
 | `repo` | Browse URL | R `repo`: exactly `https://github.com/xewe-labs/xewe-os-modules/tree/main/modules/<slug>` |
 | `folder` | The one installed folder, named like the class | T: `^[A-Z][A-Za-z0-9]*$`, unique, `src/<folder>/` exists. R `files`: `src/<folder>/<folder>.h` and `.cpp` exist |
 | `include` | Header that the generated `XeWeModules.h` includes | T: starts with `src/<folder>/`, the file exists. R `files`: exactly `src/<folder>/<folder>.h` |
@@ -85,7 +87,7 @@ and `depends_libraries`, which they accept as legacy keys; any other key is a T 
 parse. A module that uses a settings table, `xewe::ListenerSet`, `xewe::SchemaOut` or the pin registry
 needs core 2.1 and declares `>=2.1.0,<3.0.0` (R `core21`). Every module in this repository does.
 
-The repository tag (`v0.3.0`) is what a project's `xewe.toml` pins; a module's `version` is
+The repository tag (`vX.Y.Z`) is what a project's `xewe.toml` pins; a module's `version` is
 informational plus the promise for its commands.
 
 Example, `modules/wifi/module.properties`:
@@ -94,7 +96,7 @@ Example, `modules/wifi/module.properties`:
 name=Wifi
 slug=wifi
 id=wifi
-version=0.3.0
+version=0.4.0
 description=Connects to a local WiFi network and keeps the connection alive
 repo=https://github.com/xewe-labs/xewe-os-modules/tree/main/modules/wifi
 folder=Wifi
@@ -230,8 +232,8 @@ precedence.
   load at boot. The module never reads or writes a table key by hand; the exception is a runtime
   setter that persists a value the user changed by other means (led `brightness`, `state`).
 - **Keeping existing commands.** A module that already owns `set` (fan: `$fan set <pin> <speed>`)
-  keeps it and forwards a non-numeric first argument to `apply_setting(key, value, true)`. Older
-  command names (`set_addr`, `set_pins`, `set_zone`) stay and call `apply_setting`.
+  keeps it and forwards a non-numeric first argument to `apply_setting(key, value, true)`. Commands
+  that set rows under their own name (`set_addr`, `set_pins`, `set_zone`) call `apply_setting`.
 - **`status`** starts from `Module::status(false)`, which prints one `key: value` line per row, and
   adds only what a row cannot show (connection state, a hex address, live readings).
 - **Values that are not rows** (mode parameters, fans, curve points, schedule blocks, button
@@ -444,7 +446,8 @@ compiles with only its dependencies. **Together:** `--modules all`, then `xewe b
 
 ## 5. Validator: `tools/validate.py`
 
-`xewe modules validate` (`xewe.modules.registry.validate()`) implements the T rules of section 2.
+`xewe modules validate` (`xewe.modules.registry.validate()`) implements the T rules of section 2;
+it also checks the `tests/` layout that R `files` checks.
 `tools/validate.py` imports `xewe.modules.registry`, runs `validate(Registry.load(repo_root),
 core_ref)`, and adds the repository rules below. It needs a Python with `xewe-os-tools` installed,
 which is a project's venv:
@@ -472,10 +475,10 @@ Without the tools it exits 3 with `xewe-os-tools not importable; run with
 | `config` | if `src/<folder>/Config.h` exists: only comment and preprocessor lines, no `#include`; each `#define` name matches `^XEWE_MODULE_<SLUG_UPPER>_[A-Z0-9_]+$` and sits inside `#ifndef` of that name, which has a comment line above it. No file in `src/<folder>/` other than `Config.h` defines a `XEWE_MODULE_` macro |
 | `stray` (module) | no `*.ino` anywhere in the module, no `scripts/` and no `LICENSE.txt` in its directory |
 | `stray` (repository) | no `module.properties` other than `modules/<slug>/module.properties`, no `*.ino` outside `modules/`, no `xewe-os-module-*` directory at the root or under `modules/` |
-| `index` | `MODULES.md` equals what `--write-index` would write |
+| `index` | `doc/modules.md` equals what `--write-index` would write |
 
 `--harness DIR` reads `DIR/xewe.toml` for `[core] ref` (passed to the T `requires_core` check) and
-`[libraries]`. `--write-index` rewrites `MODULES.md` (a header comment saying it is generated, then
+`[libraries]`. `--write-index` rewrites `doc/modules.md` (a header comment saying it is generated, then
 one row per module: slug, name, id, version, description, dependencies, `requires_core`) and exits.
 
 **Output.** One line per finding, in the tools' format: `error: <slug>: <message>` or

@@ -37,7 +37,7 @@ project's build. To write a module of your own inside a sketch, start at level 2
 | [web-interface](modules/web-interface) | An HTTP page and command endpoint for other devices on the network | wifi |
 | [wifi](modules/wifi) | Joins a WiFi network and keeps the connection alive | |
 
-[MODULES.md](MODULES.md) is the generated index with ids, versions and the XeWeCore range each module
+[doc/modules.md](doc/modules.md) is the generated index with ids, versions and the XeWeCore range each module
 needs. Each module's README lists its commands, settings, NVS keys, build defines and tests.
 
 ## Using modules in a project
@@ -65,10 +65,10 @@ After a build the modules' commands are on the console: `$help` lists them, `$<i
 module's state, and `$system schema` prints every module's settings as JSON lines.
 
 Compile-time values (a pin a driver needs as a constant, a buffer size, listener slots) live in
-the project's `Config.h`: `./setup.sh` appends each selected module's `src/<Folder>/Config.h` there
-as one marked block (`XEWE_MODULE_<SLUG>_<VAR>` defines), and the user edits the numbers.
-First-boot defaults that end up in NVS (a strip length, a fan's pins) stay `--define` values:
-`xewe build --define LED_COUNT=30`. Each module README lists both.
+the project's `Config.h`: `./setup.sh` and `xewe modules select` append each selected module's
+`src/<Folder>/Config.h` there once, as one marked block (`XEWE_MODULE_<SLUG>_<VAR>` defines), and
+the user edits the numbers. First-boot defaults that end up in NVS (a strip length, a fan's pins)
+stay `--define` values: `xewe build --define LED_COUNT=30`. Each module README lists both.
 
 ## How a module is built
 
@@ -87,6 +87,6 @@ released. Settings are declared once in a table and the core provides `$<id> set
 them. Modules that announce changes (led, fan, mlx90614) offer listeners, and every module claims the
 GPIOs it drives in the core's pin registry, so two modules cannot drive the same pin.
 
-[CONTRACT.md](CONTRACT.md) is the full specification every module follows. Contributors and agents
+[doc/contract.md](doc/contract.md) is the full specification every module follows. Contributors and agents
 start at [`.agents/AGENTS.md`](.agents/AGENTS.md), which covers adding a module, the validator and
 the tests.

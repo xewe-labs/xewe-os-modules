@@ -4,7 +4,7 @@
 
 HTTP page and command endpoint for other devices on the network. A module for
 [XeWe OS](https://github.com/xewe-labs/xewe-os), built on [XeWeCore](https://github.com/xewe-labs/xewe-os-core). It starts an HTTP server on
-port 80 that serves a small dark-themed page with one input box, and accepts CLI commands from
+the `port` setting (default 80) that serves a small dark-themed page with one input box, and accepts CLI commands from
 any device on the local network at `GET /cmd?c=<command>`. Each command is echoed to the serial
 console and run through the same command line as serial input, so every installed module can be
 driven from a browser, a script or another microcontroller board.
@@ -15,13 +15,13 @@ driven from a browser, a script or another microcontroller board.
 - Settings table: `port` (u16, default 80, takes effect after a restart) and `root` (str ≤ 31: `GET /` redirects there, e.g. `/pad`; empty = the console)
 - Root hook: `web_interface.set_root(handler)` (RAM only, call from `setup()`) lets a project page own `/`; it wins over the `root` setting. `redirect_root("/pad")` is the persisted form
 - The page sends commands with `fetch('/cmd?c=' + encodeURIComponent(...))` and flashes "Command Sent" / "Error Sending" / "Connection Error"
-- `status` reports server uptime and heap usage (used / total bytes)
-- Requires the Wifi module and prints the page URL (`http://<local ip>`) once the server starts
+- `status` adds `Uptime: <d>d HH:MM:SS` and `Memory usage: <pct>% (<used> / <total> bytes)`
+- Requires the Wifi module and prints the page URL (`http://<local ip>`, plus `:<port>` when it is not 80) once the server starts
 
 ## How it works
 
 ```
-browser / curl → GET /cmd?c=$pins gpio_toggle 8 → WebServer (port 80) → os.cli.execute(command) → module callback
+browser / curl → GET /cmd?c=$pins gpio_toggle 8 → WebServer → os.cli.execute(command) → module callback
 ```
 
 - **`WebInterface` class** (`src/WebInterface/`) — a `xewe::Module` with id `web_interface`; requires Wifi (`add_requirement(wifi)`), cannot be disabled; `loop()` calls `handleClient()`.
@@ -75,13 +75,13 @@ matches the C++ source; developer machine, no build), run through an xewe-os har
 [README](../../README.md)):
 
 ```sh
-build/tools/.venv/bin/python -m xewe test --module web-interface              # lock chip
+build/tools/.venv/bin/python -m xewe test --module web-interface              # the manifest's chip
 build/tools/.venv/bin/python -m xewe test --module web-interface --all-chips  # c3, c6, s3
 build/tools/.venv/bin/python -m xewe test --module web-interface --unit-only  # unit tests only, no build
 ```
 
 - `test_compiles` builds the harness firmware with this module selected; it runs without a board.
-- `test_status` (`$web_interface status`), `test_status_reports_server` (the web server block of `$web_interface status`) and `test_settings_table` (`$web_interface schema`) need a board; without one they report
+- `test_status` (`$web_interface status`), `test_status_reports_server` (the `Uptime` and `Memory usage` lines of `$web_interface status`) and `test_settings_table` (`$web_interface schema`) need a board; without one they report
   "compiled, not run".
 - Hardware precondition: a provisioned board with WiFi connected. Tests read the serial output only; they make no HTTP requests. A freshly erased board stops at the first-boot
   "Would you like to enable ...?" prompts, so provision it first (`xewe provision`).

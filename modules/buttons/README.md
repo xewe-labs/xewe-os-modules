@@ -11,7 +11,7 @@ prompt.
 
 ## Highlights
 
-- Per-button software debouncing: a state change is accepted only after it has been stable for the mapping's interval (default 50 ms) (`Buttons::loop`)
+- Per-button software debouncing: a state change is accepted only after it has been stable for the mapping's `<debounce_ms>` (`Buttons::loop`)
 - Three trigger events (`on_press`, `on_release`, `on_change`) and two input modes (`pullup`, `pulldown`); "pressed" is derived from the input mode
 - Mappings are `FlexData` records persisted as one NVS entry (`buttons/data`); runtime-only debounce state is not stored
 - `$buttons status` prints a table of active mappings (ID, pin, command, debounce, type, event)
@@ -64,7 +64,7 @@ matches the C++ source; developer machine, no build), run through an xewe-os har
 [README](../../README.md)):
 
 ```sh
-build/tools/.venv/bin/python -m xewe test --module buttons              # lock chip
+build/tools/.venv/bin/python -m xewe test --module buttons              # the manifest's chip
 build/tools/.venv/bin/python -m xewe test --module buttons --all-chips  # c3, c6, s3
 build/tools/.venv/bin/python -m xewe test --module buttons --unit-only  # unit tests only, no build
 ```
