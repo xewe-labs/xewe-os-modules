@@ -77,7 +77,7 @@ def test_chipset_table_matches_add_leds():
     assert sorted((int(i), n) for i, n in cases) == sorted((int(i), n) for i, n, _ in table)
     for _, name, clocked in table:   # clocked: FastLED's template pins incl. the clock; clockless: run-time data pin
         line = next(l for l in cpp.splitlines() if re.search(rf"c = (&FastLED\.addLeds|add_clockless)<{name}[,>]", l))
-        assert ("LED_PIN_CLOCK" in line) == (clocked == "true"), name
+        assert ("XEWE_MODULE_LED_PIN_CLOCK" in line) == (clocked == "true"), name
         assert ("add_clockless" in line) == (clocked == "false"), name
 
 
@@ -149,9 +149,10 @@ def test_no_positional_mode_lookup():
 
 @pytest.mark.unit
 def test_mode_headers_pure():
-    # fx/, modes/, Pixel.h and LedListener.h compile on the host: standard headers, the core's
-    # host-includable Color.h / Listeners.h and each other only
-    pure = [*sorted((SRC / "fx").glob("*.h")), *sorted(MODES_DIR.glob("*.h")), SRC / "Pixel.h", SRC / "LedListener.h"]
+    # fx/, modes/, Pixel.h, LedListener.h and Config.h compile on the host: standard headers, the
+    # core's host-includable Color.h / Listeners.h and each other only
+    pure = [*sorted((SRC / "fx").glob("*.h")), *sorted(MODES_DIR.glob("*.h")), SRC / "Pixel.h", SRC / "LedListener.h",
+            SRC / "Config.h"]
     for f in pure:
         for inc in re.findall(r'^#include\s+([<"][^>"]+[>"])', f.read_text(), re.M):
             if inc.startswith("<"):
@@ -178,8 +179,9 @@ def test_setters_notify_listeners():
     header = (SRC / "Led.h").read_text()
     assert '#include "LedListener.h"' in header and '#include "modes/Registry.h"' in header
     listener_h = (SRC / "LedListener.h").read_text()
-    assert re.search(r"LED_LISTENERS_MAX 6\b", listener_h)
-    assert "xewe::ListenerSet<LedListener, LED_LISTENERS_MAX>" in listener_h and "class LedListenerSet" not in listener_h
+    assert re.search(r"XEWE_MODULE_LED_LISTENERS_MAX 6\b", (SRC / "Config.h").read_text())  # the knob lives in Config.h
+    assert '#include "Config.h"' in listener_h
+    assert "xewe::ListenerSet<LedListener, XEWE_MODULE_LED_LISTENERS_MAX>" in listener_h and "class LedListenerSet" not in listener_h
 
 
 @pytest.mark.unit
@@ -249,7 +251,7 @@ def test_settings_table():
         row = re.search(rf'\("{key}",.*?\)(,\n|\n)', body, re.S)[0]
         assert "RESTART" in row, f"{key} applies after a restart"
     assert "RESTART" not in re.search(r'\("num_led",[^\n]*', body)[0], "num_led applies live"
-    assert re.search(r'\("pin_data", 0, 48, LED_PIN_DATA,', body) and re.search(r'\("pin_clock", 0, 48, LED_PIN_CLOCK,', body)
+    assert re.search(r'\("pin_data", 0, 48, XEWE_MODULE_LED_PIN_DATA,', body) and re.search(r'\("pin_clock", 0, 48, XEWE_MODULE_LED_PIN_CLOCK,', body)
     # loaded by the core: no hand-written read of a table key; writes only in set_brightness / set_state
     for key in keys:
         assert not re.search(rf'nvs\.read<[^>]+>\(id, "{key}"', cpp), f"hand-written NVS read of {key}"

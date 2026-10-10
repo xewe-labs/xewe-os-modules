@@ -50,7 +50,7 @@ set_temperature(31.2, src) → stored with a timestamp; loop(): every 1 s →
   manual control. Once active, `set`/`set_all` are momentary (the next curve tick overwrites them);
   `$fan curve set none` empties the curve and hands control back.
 
-### Build defines
+### First-boot defaults (`--define`)
 
 Pass with `xewe build --define KEY=VALUE`. Used on the first boot only (or after `$fan reset`); then
 the fans live in NVS and change with `$fan add/remove`. 255 = no fan / no tachometer.

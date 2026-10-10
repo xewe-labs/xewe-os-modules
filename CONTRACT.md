@@ -16,6 +16,7 @@ xewe-os-modules/
 │       ├── module.properties
 │       ├── src/<Folder>/<Folder>.h
 │       ├── src/<Folder>/<Folder>.cpp
+│       ├── src/<Folder>/Config.h        # optional: compile-time knobs (section 3.2)
 │       ├── tests/board/test_<slug>.py   # pytest on the ESP32 through `xewe test` (required)
 │       ├── tests/unit/                  # optional: developer-machine tests (`unit` pytest, C++ for g++)
 │       └── README.md
@@ -260,6 +261,45 @@ lists the registry.
 **Hex colours** use the core's `xewe::str::parse_hex_color` / `to_hex_color`; no module keeps its own
 copy.
 
+### 3.2 Compile-time configuration
+
+A module whose code needs a value as a constant ships `src/<Folder>/Config.h`. What qualifies: a
+template argument (a FastLED pin, a `ListenerSet` size), a buffer size, a pin the driver needs as a
+constant, a debug switch. What does not: anything a settings table or a first-boot routine stores in
+NVS (a strip length, a sensor address, the fans of the first boot). Those keep their `#ifndef`
+defaults in the module header and are overridden per build with `xewe build --define KEY=VALUE`.
+
+The file is pure preprocessor: comments, `#if`/`#ifndef`/`#define`/`#endif`, no `#include`. Every
+define is named `XEWE_MODULE_<SLUG>_<VAR>` (the slug in upper case, `-` as `_`: `LED`,
+`WEB_INTERFACE`, `MLX90614`), wrapped in `#ifndef` of the same name, with one comment line above
+the `#ifndef` saying what it is and the unit. A chip-conditional default tests `XEWE_CHIP_C3`,
+`XEWE_CHIP_C6` or `XEWE_CHIP_S3`, which `xewe build` defines in `XeWeBuildInfo.h`; the core's
+`CONFIG_IDF_TARGET_*` comes from `sdkconfig.h` and is not visible where the project's `Config.h` is
+read. No other file under `src/` defines a `XEWE_MODULE_` macro (R `config`).
+
+The module's main header and every pure sub-header that needs a knob include it relatively
+(`#include "Config.h"`); a pure sub-header stays host-compilable because the file has no includes.
+
+How it reaches the user: `xewe modules generate` (run by `./setup.sh` and `xewe modules select`)
+appends the file, without its header, as one marked block to the project's `Config.h` once
+(`// ---- <slug> (xewe modules generate) ----` … `// ---- end <slug> ----`) and never touches it
+again; the user edits the numbers there. `xewe build` passes the project's `Config.h` to every
+translation unit with `-include`, so a value set there wins over the module's default in the sketch
+and in the module sources alike. A `--define` of the same name wins over both, because `Config.h`
+includes `<XeWeBuildInfo.h>` first.
+
+```cpp
+// modules/mlx90614/src/Mlx90614/Config.h
+#pragma once
+
+// Listener slots of the temperature fan-out (xewe::ListenerSet, no heap).
+#ifndef XEWE_MODULE_MLX90614_LISTENERS_MAX
+#define XEWE_MODULE_MLX90614_LISTENERS_MAX 4
+#endif
+```
+
+Renaming or removing a define of `Config.h` is a breaking change (MINOR before 1.0).
+
 ## 4. Tests
 
 Every module has `tests/board/test_<slug>.py` (board tests) and may have `tests/unit/` (unit tests:
@@ -429,6 +469,7 @@ Without the tools it exits 3 with `xewe-os-tools not importable; run with
 | `depends_libraries` | each name matches `^[A-Za-z0-9_.\- ]+$` and is not `XeWeCore`/`XeWeOS`. With `--harness`: a name in neither `libraries.toml` nor the harness `[libraries]` is an error. A name missing from `libraries.toml` is otherwise a warning |
 | `source` | no line of any file in `src/<folder>/` matches `\bcli\s*\(`, `<XeWeOS\.h>`, `xewe::os::`, `ModuleController`, `\bcontroller\b`, `xewe_cli`, `this->os\b` or `std::span` (comments included); the header contains `#include <XeWeCore.h>` |
 | `core21` | a module whose `src/` (`.h`, `.hpp`, `.cpp`, `.tpp`) uses `SettingDef`, `ListenerSet`, `SchemaOut` or `xewe::pins::` declares `requires_core` with a lower bound ≥ `2.1.0`; every `xewe::setting<...>("key", ...)` key is 1–15 characters without whitespace, quote or backslash, and unique within the module |
+| `config` | if `src/<folder>/Config.h` exists: only comment and preprocessor lines, no `#include`; each `#define` name matches `^XEWE_MODULE_<SLUG_UPPER>_[A-Z0-9_]+$` and sits inside `#ifndef` of that name, which has a comment line above it. No file in `src/<folder>/` other than `Config.h` defines a `XEWE_MODULE_` macro |
 | `stray` (module) | no `*.ino` anywhere in the module, no `scripts/` and no `LICENSE.txt` in its directory |
 | `stray` (repository) | no `module.properties` other than `modules/<slug>/module.properties`, no `*.ino` outside `modules/`, no `xewe-os-module-*` directory at the root or under `modules/` |
 | `index` | `MODULES.md` equals what `--write-index` would write |

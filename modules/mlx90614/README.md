@@ -37,7 +37,17 @@ $mlx90614 set_pins 4 5 → validate → apply_setting sda, scl (NVS) → release
 - `Wire` is owned by this module: another module that also calls `Wire.begin` on other pins would
   move the bus.
 
-### Build defines
+### In Config.h
+
+Compile-time values, `XEWE_MODULE_MLX90614_<VAR>`. `./setup.sh` (and `xewe modules select`) appends
+the module's `src/Mlx90614/Config.h` as one marked block to the project's `Config.h`; edit the
+numbers there.
+
+| Define | Default | Meaning |
+|---|---|---|
+| `XEWE_MODULE_MLX90614_LISTENERS_MAX` | 4 | listener slots |
+
+### First-boot defaults (`--define`)
 
 Pass with `xewe build --define KEY=VALUE`; used on the first boot only (or after `$mlx90614 reset`).
 
@@ -45,7 +55,6 @@ Pass with `xewe build --define KEY=VALUE`; used on the first boot only (or after
 |---|---|---|
 | `MLX90614_SDA` / `MLX90614_SCL` | 4 / 5 | 8 / 9 |
 | `MLX90614_ADDR` | 0x5A | 0x5A |
-| `MLX90614_LISTENERS_MAX` | 4 | 4 |
 
 The C3/C6 pins are the XeWe laptop cooling pad's wiring (on the C6, 4/5 are MTMS/MTDI: harmless with I2C
 pull-ups unless a JTAG-select eFuse is burnt). 255 = not configured.
@@ -73,7 +82,7 @@ mlx90614.is_online();  mlx90614.get_error_count();  mlx90614.set_i2c_address(0x5
 struct MyListener : Mlx90614Listener {
     void on_temperature(float object_c, float ambient_c, bool online) override { /* main loop; keep it short */ }
 } my_listener;
-mlx90614.listeners.add(&my_listener);  // xewe::ListenerSet; false when all MLX90614_LISTENERS_MAX (4) slots are taken
+mlx90614.listeners.add(&my_listener);  // xewe::ListenerSet; false when all XEWE_MODULE_MLX90614_LISTENERS_MAX (4) slots are taken
                                        // (add_listener/remove_listener do the same)
 ```
 

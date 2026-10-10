@@ -102,7 +102,7 @@ bool pin_usable(int pin) {
 #if LED_RUNTIME_PINS && defined(_FL_VALID_PIN_MASK)
     return pin >= 0 && pin < 64 && ((uint64_t(_FL_VALID_PIN_MASK) >> pin) & 1u);
 #else
-    return pin == LED_PIN_DATA;
+    return pin == XEWE_MODULE_LED_PIN_DATA;
 #endif
 }
 
@@ -110,13 +110,13 @@ bool pin_usable(int pin) {
 template <template <uint8_t, EOrder> class CHIP>
 CLEDController* add_clockless(int pin, CRGB* leds, int count) {
 #if LED_RUNTIME_PINS
-    if (pin != LED_PIN_DATA) {
-        constexpr LedTiming t = clockless_timing(static_cast<const CHIP<LED_PIN_DATA, RGB>*>(nullptr));
+    if (pin != XEWE_MODULE_LED_PIN_DATA) {
+        constexpr LedTiming t = clockless_timing(static_cast<const CHIP<XEWE_MODULE_LED_PIN_DATA, RGB>*>(nullptr));
         return &FastLED.addLeds(new LedRmtController(pin, t.t1, t.t2, t.t3), leds, count);   // once, at begin
     }
 #endif
     (void)pin;
-    return &FastLED.addLeds<CHIP, LED_PIN_DATA, RGB>(leds, count);
+    return &FastLED.addLeds<CHIP, XEWE_MODULE_LED_PIN_DATA, RGB>(leds, count);
 }
 
 }  // namespace
@@ -132,8 +132,8 @@ Led::Led(xewe::Os& host, LedConfig config_param)
     , config(config_param)
     , brightness(config_param.brightness_fade_ms)
 {
-    frame        = new LedRgb[LED_STRIP_NUM_LEDS_MAX]();
-    out          = new uint8_t[LED_STRIP_NUM_LEDS_MAX * 3]();
+    frame        = new LedRgb[XEWE_MODULE_LED_NUM_LEDS_MAX]();
+    out          = new uint8_t[XEWE_MODULE_LED_NUM_LEDS_MAX * 3]();
     render_mutex = xSemaphoreCreateMutex();
     led_fx::default_params(*current.def, current.params);
 
@@ -243,13 +243,13 @@ xewe::Settings Led::settings() const {
     static constexpr xewe::SettingDef table[] = {
         xewe::setting<&Led::stored_chip_id>  ("chip", 0, 45, default_chip_id(), "Chip id (2.3.x ids); by name: $led set chip WS2812B",
                                               xewe::SettingDef::RESTART),
-        xewe::setting<&Led::num_led>         ("num_led", 1, LED_STRIP_NUM_LEDS_MAX, LED_COUNT, "Strip length"),
+        xewe::setting<&Led::num_led>         ("num_led", 1, XEWE_MODULE_LED_NUM_LEDS_MAX, LED_COUNT, "Strip length"),
         xewe::setting<&Led::color_order>     ("colorder", 0, 5, default_color_order(), "Colour order RGB=0 RBG GRB GBR BRG BGR=5"),
         xewe::setting<&Led::voltage>         ("voltage", 1, 48, LED_VOLTAGE, "Supply voltage, V (power estimate)"),
         xewe::setting<&Led::brightness_saved>("brightness", 1, 255, 128, "Brightness (last non-zero)"),
         xewe::setting<&Led::state_saved>     ("state", true, "On at boot"),
-        xewe::setting<&Led::pin_data>        ("pin_data", 0, 48, LED_PIN_DATA, "Data GPIO", xewe::SettingDef::RESTART),
-        xewe::setting<&Led::pin_clock>       ("pin_clock", 0, 48, LED_PIN_CLOCK, "Clock GPIO (APA102)", xewe::SettingDef::RESTART),
+        xewe::setting<&Led::pin_data>        ("pin_data", 0, 48, XEWE_MODULE_LED_PIN_DATA, "Data GPIO", xewe::SettingDef::RESTART),
+        xewe::setting<&Led::pin_clock>       ("pin_clock", 0, 48, XEWE_MODULE_LED_PIN_CLOCK, "Clock GPIO (APA102)", xewe::SettingDef::RESTART),
     };
     return {table, this};
 }
@@ -436,7 +436,7 @@ bool Led::set_setting(const std::string& key, const std::string& value) {
 }
 
 uint16_t Led::get_length() const     { return num_led; }
-uint16_t Led::get_max_length() const { return LED_STRIP_NUM_LEDS_MAX; }
+uint16_t Led::get_max_length() const { return XEWE_MODULE_LED_NUM_LEDS_MAX; }
 uint16_t Led::get_fps() const        { return fps.load(); }
 
 void Led::fill(LedRgb color, uint16_t fade_ms) {
@@ -797,7 +797,7 @@ bool Led::add_leds(uint8_t chip_id) {
     const int       pin  = active_data_pin;
     CLEDController* c    = nullptr;
     switch (chip_id) {
-        case 0:  c = &FastLED.addLeds<APA102, LED_PIN_DATA, LED_PIN_CLOCK, RGB>(leds, num_led); break;
+        case 0:  c = &FastLED.addLeds<APA102, XEWE_MODULE_LED_PIN_DATA, XEWE_MODULE_LED_PIN_CLOCK, RGB>(leds, num_led); break;
         case 19: c = add_clockless<SK6812>(pin, leds, num_led); break;
         case 38: c = add_clockless<WS2811>(pin, leds, num_led); break;
         case 40: c = add_clockless<WS2812>(pin, leds, num_led); break;
@@ -817,22 +817,22 @@ void Led::claim_pins(const LedChipset& chip) {
     int data  = pin_data;
     int clock = chip.clocked ? pin_clock : -1;
     if (chip.clocked || !LED_RUNTIME_PINS) {
-        if (data != LED_PIN_DATA || (chip.clocked && clock != LED_PIN_CLOCK)) {
+        if (data != XEWE_MODULE_LED_PIN_DATA || (chip.clocked && clock != XEWE_MODULE_LED_PIN_CLOCK)) {
             os.serial.printf("! Led: %s runs on the build pins (data GPIO %d, clock GPIO %d) in this firmware",
-                             chip.name, LED_PIN_DATA, LED_PIN_CLOCK);
+                             chip.name, XEWE_MODULE_LED_PIN_DATA, XEWE_MODULE_LED_PIN_CLOCK);
         }
-        data  = LED_PIN_DATA;
-        clock = chip.clocked ? LED_PIN_CLOCK : -1;
+        data  = XEWE_MODULE_LED_PIN_DATA;
+        clock = chip.clocked ? XEWE_MODULE_LED_PIN_CLOCK : -1;
     } else if (!pin_usable(data)) {
-        os.serial.printf("! Led: GPIO %d cannot drive the strip, using GPIO %d", data, LED_PIN_DATA);
-        data = LED_PIN_DATA;
+        os.serial.printf("! Led: GPIO %d cannot drive the strip, using GPIO %d", data, XEWE_MODULE_LED_PIN_DATA);
+        data = XEWE_MODULE_LED_PIN_DATA;
     }
     if (!xewe::pins::claim(data, id.c_str())) {
-        if (data == LED_PIN_DATA || !xewe::pins::claim(LED_PIN_DATA, id.c_str())) {
+        if (data == XEWE_MODULE_LED_PIN_DATA || !xewe::pins::claim(XEWE_MODULE_LED_PIN_DATA, id.c_str())) {
             os.serial.print("! Led: no free data pin, the strip stays dark");
             return;
         }
-        data = LED_PIN_DATA;
+        data = XEWE_MODULE_LED_PIN_DATA;
     }
     if (clock >= 0 && !xewe::pins::claim(clock, id.c_str())) {
         xewe::pins::release(data, id.c_str());

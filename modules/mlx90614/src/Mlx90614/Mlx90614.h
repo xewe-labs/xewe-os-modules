@@ -11,17 +11,18 @@
 #pragma once
 
 #include <XeWeCore.h>
-// Generated per build by `xewe build` (MLX90614_* values passed with --define). Unconditional on
-// purpose: a __has_include() guard makes arduino-cli drop the generated library.
+// Generated per build by `xewe build` (the MLX90614_* first-boot values passed with --define).
+// Unconditional on purpose: a __has_include() guard makes arduino-cli drop the generated library.
 #include <XeWeBuildInfo.h>
 #include <sdkconfig.h>
 
 #include <cmath>
 #include <string>
 
+#include "Config.h"   // XEWE_MODULE_MLX90614_LISTENERS_MAX, set in the project's Config.h
 #include "Convert.h"
 
-// ---- Build-time defaults = the table defaults (first boot, `reset`); then NVS (`$mlx90614 set_pins/set_addr`,
+// ---- First-boot defaults = the table defaults (first boot, `reset`); then NVS (`$mlx90614 set_pins/set_addr`,
 // `$mlx90614 set sda|scl|addr <value>`). Must be constants: the table is checked at compile time.
 // 255 = pin not configured. C3/C6: the XeWe cooling pad's wiring; S3: free, non-strapping GPIOs.
 #if defined(CONFIG_IDF_TARGET_ESP32S3)
@@ -40,9 +41,6 @@
 #endif
 #ifndef MLX90614_ADDR
 #define MLX90614_ADDR 0x5A
-#endif
-#ifndef MLX90614_LISTENERS_MAX
-#define MLX90614_LISTENERS_MAX 4
 #endif
 
 
@@ -102,8 +100,8 @@ public:
     // {"module","online","object_temp"|null,"ambient_temp"|null,"i2c_address","sda_pin","scl_pin","read_errors"}
     std::string                 get_json                    ()                              const;
 
-    // up to MLX90614_LISTENERS_MAX, no heap (core ListenerSet): listeners.add(&l) / remove(&l)
-    xewe::ListenerSet<Mlx90614Listener, MLX90614_LISTENERS_MAX> listeners;
+    // up to XEWE_MODULE_MLX90614_LISTENERS_MAX, no heap (core ListenerSet): listeners.add(&l) / remove(&l)
+    xewe::ListenerSet<Mlx90614Listener, XEWE_MODULE_MLX90614_LISTENERS_MAX> listeners;
     // the same as listeners.add / listeners.remove
     bool                        add_listener                (Mlx90614Listener* l)           { return listeners.add(l); }
     bool                        remove_listener             (Mlx90614Listener* l)           { return listeners.remove(l); }

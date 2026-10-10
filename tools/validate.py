@@ -189,6 +189,7 @@ def check_module(m, libraries: set[str] | None, catalogue: frozenset[str] | set[
         if header.is_file() and "#include <XeWeCore.h>" not in header.read_text(encoding="utf-8"):
             err(f"source: {header.name} must contain '#include <XeWeCore.h>'")
         check_core21(src, p.get("requires_core", ""), err)
+        check_config(src, m.slug, err)
 
     # stray (inside the module)
     for f in sorted(m.dir.rglob("*.ino")):
@@ -197,6 +198,57 @@ def check_module(m, libraries: set[str] | None, catalogue: frozenset[str] | set[
         if (m.dir / name).exists():
             err(f"stray: {name} (one LICENSE.txt for the repo; no per-module scripts)")
     return problems
+
+
+CONFIG_DEFINE_RE = re.compile(r"^#\s*define\s+([A-Za-z_]\w*)")
+CONFIG_COND_RE = re.compile(r"^#\s*(ifndef|ifdef|if|elif|else|endif)\b\s*([A-Za-z_]\w*)?")
+
+
+def check_config(src: Path, slug: str, err) -> None:
+    """Rule config: `src/<Folder>/Config.h` (optional) is pure preprocessor without includes; every
+    define there is `XEWE_MODULE_<SLUG>_<VAR>` inside `#ifndef` of the same name, with a comment line
+    above that `#ifndef`; no other file under src/ defines a `XEWE_MODULE_` macro."""
+    prefix = "XEWE_MODULE_" + slug.upper().replace("-", "_") + "_"
+    name_re = re.compile(rf"^{re.escape(prefix)}[A-Z0-9_]+$")
+    config = src / "Config.h"
+    if config.is_file():
+        lines = config.read_text(encoding="utf-8", errors="replace").splitlines()
+        stack: list[str | None] = []   # the macro of each open `#ifndef NAME`, None for other conditionals
+        for n, line in enumerate(lines, 1):
+            text = line.strip()
+            if not text or text.startswith("//"):
+                continue
+            if not text.startswith("#"):
+                err(f"config: Config.h:{n}: only comment and preprocessor lines are allowed")
+                continue
+            if re.match(r"^#\s*include\b", text):
+                err(f"config: Config.h:{n}: no #include (the file must stay pure preprocessor)")
+                continue
+            cond = CONFIG_COND_RE.match(text)
+            if cond:
+                kind, name = cond.group(1), cond.group(2)
+                if kind in ("ifndef", "ifdef", "if"):
+                    stack.append(name if kind == "ifndef" else None)
+                    if kind == "ifndef" and name and name_re.match(name):
+                        above = lines[n - 2].strip() if n >= 2 else ""
+                        if not above.startswith("//"):
+                            err(f"config: Config.h:{n}: #ifndef {name} needs a comment line above it (what it is, unit)")
+                elif kind == "endif":
+                    if stack:
+                        stack.pop()
+                continue
+            define = CONFIG_DEFINE_RE.match(text)
+            if define:
+                name = define.group(1)
+                if not name_re.match(name):
+                    err(f"config: Config.h:{n}: define '{name}' must match {prefix}<VAR> ([A-Z0-9_]+)")
+                elif name not in stack:
+                    err(f"config: Config.h:{n}: #define {name} must sit inside #ifndef {name}")
+    for f in sorted(x for x in src.rglob("*") if x.is_file() and x != config):
+        for n, line in enumerate(f.read_text(encoding="utf-8", errors="replace").splitlines(), 1):
+            define = CONFIG_DEFINE_RE.match(line.strip())
+            if define and define.group(1).startswith("XEWE_MODULE_"):
+                err(f"config: {f.relative_to(src.parent.parent)}:{n}: '{define.group(1)}' is defined outside Config.h")
 
 
 def check_core21(src: Path, requires_core: str, err) -> None:

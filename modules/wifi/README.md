@@ -54,11 +54,14 @@ Metadata and dependencies are declared in [`module.properties`](module.propertie
 | `ssid` | str ≤ 32 | empty | network name, used by `$wifi connect` and at boot |
 | `psw` | str ≤ 63 | empty | password; a SECRET row, never printed (`********`) |
 
-### Build defines
+### In Config.h
+
+Compile-time values, `XEWE_MODULE_WIFI_<VAR>`. `./setup.sh` (and `xewe modules select`) appends the
+module's `src/Wifi/Config.h` as one marked block to the project's `Config.h`; edit the value there.
 
 | Define | Default | Meaning |
 |---|---|---|
-| `DEBUG_Wifi` | 0 | 1 prints debug output, including the credentials (bench only) |
+| `XEWE_MODULE_WIFI_DEBUG` | 0 | 1 prints debug output, including the credentials (bench only) |
 
 ### Known issues
 
@@ -66,7 +69,7 @@ Metadata and dependencies are declared in [`module.properties`](module.propertie
   5 s "Disable and reset WiFi module?" prompt (`get_yn`) and a reconnect attempt per pass. This
   breaks the "loop must not block" rule: the CLI and every other module stall until WiFi is back.
   The fix is a non-blocking reconnect state machine (CONTRACT.md section 6).
-- Set `-DDEBUG_Wifi=1` for debug output only on a bench: it prints credentials to serial.
+- Set `XEWE_MODULE_WIFI_DEBUG` to 1 only on a bench: it prints credentials to serial.
   Credentials are stored in NVS unencrypted.
 
 ### Tests

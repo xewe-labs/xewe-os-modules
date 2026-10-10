@@ -14,7 +14,7 @@
 struct LedChipset {
     uint8_t     id;
     const char* name;
-    bool        clocked;   // needs LED_PIN_CLOCK
+    bool        clocked;   // needs XEWE_MODULE_LED_PIN_CLOCK
 };
 
 inline constexpr LedChipset LED_CHIPSETS[] = {

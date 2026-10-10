@@ -12,7 +12,7 @@ one file and one line. A module for [XeWe OS](https://github.com/xewe-labs/xewe-
 
 ## Highlights
 
-- No first-boot questions: defaults come from build defines, `$led set <key> <value>` changes them; the strip settings are a settings table (`Led::settings()`: validated `set`, `get`, `schema`, status lines, loaded before begin); one NVS namespace `led` holds them, `mode_id` and every mode parameter (`m:<mode id>:<key>`). Key names and types match xewe-led-os, so a device moved from it keeps its strip settings
+- No first-boot questions: defaults come from the `LED_*` build defines, `$led set <key> <value>` changes them; the strip settings are a settings table (`Led::settings()`: validated `set`, `get`, `schema`, status lines, loaded before begin); one NVS namespace `led` holds them, `mode_id` and every mode parameter (`m:<mode id>:<key>`). Key names and types match xewe-led-os, so a device moved from it keeps its strip settings
 - `$led schema` lists the table rows and every mode parameter (`"group":"mode:<name>"`, `"set":"$led mode param <id> <key> <v>"`); `$system schema` includes them
 - Modes are pure functions over an RGB buffer (`modes/*.h`, shared maths in `fx/Math.h`): no Arduino, no FastLED, so they compile and run on the developer machine (`tests/unit/test_effects.cpp`, a pinned CRC per mode)
 - Modes are found by a **stable id** declared in the mode file, never by position: removing a mode never renumbers the others or their stored parameters
@@ -27,30 +27,41 @@ render task (50 fps): lock → fill override | current mode (fading? previous + 
                       → CRC-32 → brightness scale + colour order into the CRGB output buffer → unlock → FastLED.show()
 $led mode set 5       → find_mode(5) → load params (defaults ← NVS, clamped) → prepare state (main loop)
                       → swap under the render mutex (old → previous, new → current, fade armed) → NVS mode_id → listeners
-$led set num_led 30   → names translated (chip, colorder) → core table: u16 in [1, LED_STRIP_NUM_LEDS_MAX]
+$led set num_led 30   → names translated (chip, colorder) → core table: u16 in [1, XEWE_MODULE_LED_NUM_LEDS_MAX]
                       → member + NVS → on_setting_changed → applied on the next frame (old tail sent black once)
 ```
 
 - **`Led` class** (`src/Led/`) — a `xewe::Module` with id `led` (`declare=Led led(os);`); cannot be disabled and needs no init setup, so it begins without prompts.
-- **Pins are settings.** `pin_data`/`pin_clock` default to `LED_PIN_DATA`/`LED_PIN_CLOCK` and apply after a restart (RESTART rows). Clockless chips (WS281x, SK6812) start on any GPIO FastLED can drive: the build pin uses FastLED's own driver, another pin a small copy of FastLED 3.10.3's RMT5 `ClocklessController` with the pin as a constructor argument (`LedRmtController`, Led.cpp). APA102 takes both pins as FastLED template arguments, so it always runs on the build pins (a different stored pair prints one line at boot); so do all chips when FastLED does not use its RMT5 driver. The pins are claimed in the core's registry (`xewe::pins::claim(pin, "led")`) at begin and released by `$led reset`; a pin held by another module falls back to the build pin, and a strapping pin gets the core's warning. `chip` also applies after a restart; `num_led`, `colorder`, `brightness` and `state` apply at once.
+- **Pins are settings.** `pin_data`/`pin_clock` default to `XEWE_MODULE_LED_PIN_DATA`/`XEWE_MODULE_LED_PIN_CLOCK` and apply after a restart (RESTART rows). Clockless chips (WS281x, SK6812) start on any GPIO FastLED can drive: the build pin uses FastLED's own driver, another pin a small copy of FastLED 3.10.3's RMT5 `ClocklessController` with the pin as a constructor argument (`LedRmtController`, Led.cpp). APA102 takes both pins as FastLED template arguments, so it always runs on the build pins (a different stored pair prints one line at boot); so do all chips when FastLED does not use its RMT5 driver. The pins are claimed in the core's registry (`xewe::pins::claim(pin, "led")`) at begin and released by `$led reset`; a pin held by another module falls back to the build pin, and a strapping pin gets the core's warning. `chip` also applies after a restart; `num_led`, `colorder`, `brightness` and `state` apply at once.
 - **Allocation rule.** A mode's state and the two fade buffers are sized on the main loop (`prepare` in `set_mode`/`set_param`/...); the render task only reallocates when the strip length changed since.
 - **Colour** — `mode color <rrggbb>` converts to HSV and sets the current mode's `hue`/`sat`; Rainbow and Christmas Lights have no colour. Hue → colour per mode: Color Fade, Brightness Fade and Rainbow use `hsv_rainbow()`, a local re-implementation of FastLED 3.10.3 `hsv2rgb_rainbow` (bit-exact for all 2²⁴ inputs); Solid, Pulse and the status colour use `hsv_spectrum()`, which calls core `xewe::color::hsv_to_rgb` (`<XeWeCore/Utils/Color.h>`, host-includable); Color Fade Two Zone uses a six-sector `hsv()`.
 - Frames are close to, not bit-identical with, FastLED-rendered ones: noise is value noise instead of FastLED's Perlin `inoise8/16`. Christmas Lights' flicker offsets are seeded from `esp_random() ^ millis()` at every mode start.
 
-### Build defines
+### In Config.h
 
-Pass with `xewe build --define KEY=VALUE` (release-matrix columns use the same names). Strings carry their quotes.
+Compile-time values, `XEWE_MODULE_LED_<VAR>`. `./setup.sh` (and `xewe modules select`) appends the
+module's `src/Led/Config.h` as one marked block to the project's `Config.h`; edit the numbers there.
+`xewe build` passes `Config.h` to every translation unit, so the module sources see the edited values.
 
 | Define | Default | Meaning |
 |---|---|---|
-| `LED_PIN_DATA` | S3: 48, C3/C6: 8 | data pin; default of `pin_data` (C3/C6 GPIO 8 is a strapping pin: the core warns) |
-| `LED_PIN_CLOCK` | S3: 12, C6: 21, C3: 4 | clock pin (APA102 only); default of `pin_clock` |
-| `LED_STRIP_NUM_LEDS_MAX` | 2000 | buffer size (6 B RAM per LED: frame + output) |
+| `XEWE_MODULE_LED_PIN_DATA` | S3: 48, C3/C6: 8 | data pin: FastLED's template pin for the built-in driver and APA102; default of `pin_data` (C3/C6 GPIO 8 is a strapping pin: the core warns) |
+| `XEWE_MODULE_LED_PIN_CLOCK` | S3: 12, C6: 21, C3: 4 | clock pin (APA102 only); default of `pin_clock` |
+| `XEWE_MODULE_LED_NUM_LEDS_MAX` | 2000 | buffer size (6 B RAM per LED: frame + output) |
+| `XEWE_MODULE_LED_LISTENERS_MAX` | 6 | listener slots |
+
+### First-boot defaults (`--define`)
+
+Defaults of the settings table, stored in NVS on the first boot and changed with `$led set`. Pass
+with `xewe build --define KEY=VALUE` (release-matrix columns use the same names). Strings carry
+their quotes.
+
+| Define | Default | Meaning |
+|---|---|---|
 | `LED_COUNT` | 60 | default length |
 | `LED_CHIPSET` | `"WS2812B"` | default chip, a name from the table below |
 | `LED_COLOR_ORDER` | `"GRB"` | default colour order |
 | `LED_VOLTAGE` | 5 | supply voltage, for the power estimate only |
-| `LED_LISTENERS_MAX` | 6 | listener slots |
 
 ### Chipsets
 
@@ -122,7 +133,7 @@ other combination prints `Led: usage: $led mode list | set <m> | ...`. Replies s
 | Key | Type | Meaning |
 |---|---|---|
 | `chip` | u8 | chip id 0–45 (applies after restart) |
-| `num_led` | u16 | length 1–`LED_STRIP_NUM_LEDS_MAX` |
+| `num_led` | u16 | length 1–`XEWE_MODULE_LED_NUM_LEDS_MAX` |
 | `colorder` | u8 | colour order index (RGB=0 … BGR=5) |
 | `voltage` | u8 | supply voltage 1–48 |
 | `brightness` | u8 | last non-zero brightness 1–255 (a stored 0 is reported once and replaced by 128) |
@@ -167,11 +178,11 @@ struct MyListener : LedListener {
     void on_mode(uint8_t mode_id, const void* origin) override      { if (origin != this) dirty = true; }
     // also on_color(uint32_t rrggbb, origin), on_param(mode_id, key, value, origin); default bodies are no-ops
 };
-led.add_listener(&my_listener);              // false when all LED_LISTENERS_MAX (6) slots are taken
+led.add_listener(&my_listener);              // false when all XEWE_MODULE_LED_LISTENERS_MAX (6) slots are taken
 led.set_brightness(200, &my_listener);       // origin: my_listener skips this echo
 ```
 
-- The set is the core's `xewe::ListenerSet<LedListener, LED_LISTENERS_MAX>` (`LedListeners`): 6 pointers, no heap; `remove_listener()` frees a slot.
+- The set is the core's `xewe::ListenerSet<LedListener, XEWE_MODULE_LED_LISTENERS_MAX>` (`LedListeners`): 6 pointers, no heap; `remove_listener()` frees a slot.
 - Setters call the listeners only when a value changed, after NVS and outside the render mutex, in the
   task that called the setter (the main loop: CLI, web handlers, buttons, scheduler). The render task
   never calls a listener. `set_state(true)` from off also reports the restored brightness; a mode

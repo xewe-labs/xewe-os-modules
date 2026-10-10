@@ -5,7 +5,7 @@
 // Change notifications of the led module. Standard library plus the core's
 // host-includable Utils/Listeners.h, so the fan-out is host-tested (led/tests/unit/test_listeners.cpp).
 //
-//   led.add_listener(&my_listener);     // up to LED_LISTENERS_MAX, no heap
+//   led.add_listener(&my_listener);     // up to XEWE_MODULE_LED_LISTENERS_MAX, no heap
 //
 // Led calls on_brightness/on_state from the strip setters and on_mode/on_color/on_param from the mode
 // setters (Led::notify_listeners is the fan-out). Every callback carries the `origin` pointer the caller
@@ -22,9 +22,7 @@
 
 #include <XeWeCore/Utils/Listeners.h>
 
-#ifndef LED_LISTENERS_MAX
-#define LED_LISTENERS_MAX 6              // an LED firmware typically needs 4 (web, HomeKit, Alexa, Home Assistant)
-#endif
+#include "Config.h"   // XEWE_MODULE_LED_LISTENERS_MAX
 
 struct LedListener {
     virtual ~LedListener() = default;
@@ -42,7 +40,7 @@ struct LedListener {
 
 // the core's fixed-size set (core >= 2.1): add (no duplicates, false when full or null), remove, fan-out
 // in slot order; a slot freed by remove() is reused by the next add()
-using LedListeners = xewe::ListenerSet<LedListener, LED_LISTENERS_MAX>;
+using LedListeners = xewe::ListenerSet<LedListener, XEWE_MODULE_LED_LISTENERS_MAX>;
 
 // rrggbb as LedListener::on_color and Led::get_color() report it
 constexpr uint32_t led_pack_rgb(uint8_t r, uint8_t g, uint8_t b) {

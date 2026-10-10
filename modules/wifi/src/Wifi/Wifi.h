@@ -8,8 +8,11 @@
 
 #include <XeWeCore.h>
 
+#include "Config.h"   // XEWE_MODULE_WIFI_DEBUG, set in the project's Config.h
+
+// The core's DBG_PRINTF(Wifi, ...) reads DEBUG_Wifi; a -DDEBUG_Wifi=1 on the command line still wins.
 #ifndef DEBUG_Wifi
-#define DEBUG_Wifi 0
+#define DEBUG_Wifi XEWE_MODULE_WIFI_DEBUG
 #endif
 
 

@@ -347,7 +347,7 @@ def test_checksum_changes_with_mode(serial):
 
 
 def test_strip_shows_colour(serial):
-    pytest.skip("requires hardware: an LED strip on LED_PIN_DATA and a camera/eye to check the colour")
+    pytest.skip("requires hardware: an LED strip on XEWE_MODULE_LED_PIN_DATA and a camera/eye to check the colour")
 
 
 def test_effects_look_right(serial):

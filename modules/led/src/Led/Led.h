@@ -19,39 +19,22 @@
 #include <freertos/task.h>
 
 #include <XeWeCore.h>
-// Generated per build by `xewe build` (LED_* values passed with --define). Unconditional on purpose:
-// a __has_include() guard makes arduino-cli drop the generated library and the defaults below win.
+// Generated per build by `xewe build` (the LED_* first-boot values passed with --define). Unconditional
+// on purpose: a __has_include() guard makes arduino-cli drop the generated library and the defaults
+// below win.
 #include <XeWeBuildInfo.h>
 
+// Compile-time values (pins, buffer size, listener slots): XEWE_MODULE_LED_*, set in the project's
+// Config.h. Clockless chips start on any usable GPIO; APA102 always uses the compile-time pins (Led.cpp).
+#include "Config.h"
 #include "Pixel.h"
 #include "Chipsets.h"
 #include "Brightness.h"
 #include "LedListener.h"
 #include "modes/Registry.h"
 
-// ---- Build-time defaults (override per build: xewe build --define LED_PIN_DATA=13 ...) -------------
-// The pins are the defaults of the `pin_data`/`pin_clock` settings (`$led set pin_data 5`, after a
-// restart). Clockless chips start on any usable GPIO; APA102 always uses these build pins (Led.cpp).
-#ifndef LED_PIN_DATA
-#  if defined(CONFIG_IDF_TARGET_ESP32S3)
-#    define LED_PIN_DATA 48          // S3 SuperMini / DevKitC-1 v1.0 on-board WS2812B
-#  else
-#    define LED_PIN_DATA 8           // C6 SuperMini on-board WS2812B; C3: any free GPIO
-#  endif
-#endif
-#ifndef LED_PIN_CLOCK
-#  if defined(CONFIG_IDF_TARGET_ESP32S3)
-#    define LED_PIN_CLOCK 12
-#  elif defined(CONFIG_IDF_TARGET_ESP32C6)
-#    define LED_PIN_CLOCK 21
-#  else
-#    define LED_PIN_CLOCK 4
-#  endif
-#endif
-#ifndef LED_STRIP_NUM_LEDS_MAX
-#define LED_STRIP_NUM_LEDS_MAX 2000      // buffer size; `$led set num_led` accepts 1..this
-#endif
-// Defaults of the settings table, used until `$led set <key> <value>` stores a value in NVS (namespace `led`).
+// ---- First-boot defaults of the settings table (override per build: xewe build --define LED_COUNT=30 ...),
+// used until `$led set <key> <value>` stores a value in NVS (namespace `led`).
 #ifndef LED_COUNT
 #define LED_COUNT 60
 #endif
@@ -124,7 +107,7 @@ public:
     uint16_t           get_param               (int mode_id, const std::string& param) const;
     uint32_t           get_color               () const;                          // rrggbb of the current mode (status `Color:`)
 
-    // ---- change listeners (LedListener.h, xewe::ListenerSet): up to LED_LISTENERS_MAX (6), no heap ----
+    // ---- change listeners (LedListener.h, xewe::ListenerSet): up to XEWE_MODULE_LED_LISTENERS_MAX (6), no heap ----
     bool               add_listener            (LedListener* listener);           // false when full
     bool               remove_listener         (LedListener* listener);
     template <typename F>
@@ -144,9 +127,9 @@ private:
     LedBrightness      brightness;
 
     // Buffers are allocated in Led.cpp, so the class layout does not depend on LED_* macros
-    // (a sketch TU that saw a different LED_STRIP_NUM_LEDS_MAX would otherwise break the ODR).
-    LedRgb*            frame                   = nullptr;   // LED_STRIP_NUM_LEDS_MAX pixels, logical RGB
-    uint8_t*           out                     = nullptr;   // LED_STRIP_NUM_LEDS_MAX * 3, CRGB-compatible output
+    // (a sketch TU that saw a different XEWE_MODULE_LED_NUM_LEDS_MAX would otherwise break the ODR).
+    LedRgb*            frame                   = nullptr;   // XEWE_MODULE_LED_NUM_LEDS_MAX pixels, logical RGB
+    uint8_t*           out                     = nullptr;   // XEWE_MODULE_LED_NUM_LEDS_MAX * 3, CRGB-compatible output
 
     const LedChipset*  chipset                 = nullptr;   // active (registered with FastLED)
     int8_t             active_data_pin         = -1;        // claimed GPIOs (xewe::pins), -1 none
