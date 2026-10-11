@@ -41,10 +41,10 @@ Direct hardware access without writing code.
 | **`pwm_write`** | Set the duty cycle (max `2^bits - 1`). | `$pins pwm_write <pin> <duty>` |
 | **`pwm_stop`** | Stop PWM (duty 0) and detach the timer. | `$pins pwm_stop <pin>` |
 | **`i2c_scan`** | Init I2C on the given pins and scan 0x01-0x77. | `$pins i2c_scan <sda> <scl>` |
-| **`claims`** | Every GPIO in the core pin registry with its owner (`GPIO 3: fan`), strapping pins marked. | `$pins claims` |
+| **`claims`** | Every GPIO in the core pin registry with its owner (`GPIO 3: buttons`), strapping pins marked. | `$pins claims` |
 | **`release`** | Free a GPIO that `$pins` claimed. | `$pins release 9` |
 
-Pin registry: every command claims its pin for `pins` on first use and refuses a pin another module holds (`! GPIO 3 already claimed by fan, refused for pins`), so `$pins` cannot reconfigure a fan, sensor or button pin. `pwm_stop` and `release` free it; `i2c_scan` frees its two pins after the scan.
+Pin registry: every command claims its pin for `pins` on first use and refuses a pin another module holds (`! GPIO 3 already claimed by buttons, refused for pins`), so `$pins` cannot reconfigure a fan, sensor or button pin. `pwm_stop` and `release` free it; `i2c_scan` frees its two pins after the scan.
 
 ### Requirements
 

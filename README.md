@@ -28,14 +28,14 @@ project's build. To write a module of your own inside a sketch, start at level 2
 | Module | What it does | Needs |
 |---|---|---|
 | [buttons](modules/buttons) | Binds CLI commands to physical buttons, with software debouncing | |
-| [fan](modules/fan) | 4-wire PWM fans, tachometer RPM, and a temperature → speed curve that any sensor can feed | |
-| [led](modules/led) | An addressable LED strip (FastLED, 50 fps render task) and seven effect modes with cross-fades | |
-| [mlx90614](modules/mlx90614) | MLX90614 contactless I2C thermometer (object and ambient), with temperature listeners | |
 | [pins](modules/pins) | GPIO, ADC, PWM and I2C access from the command line | |
 | [scheduler](modules/scheduler) | Runs stored commands on a weekly schedule | time |
 | [time](modules/time) | NTP time sync and automatic timezone detection | wifi |
 | [web-interface](modules/web-interface) | An HTTP page and command endpoint for other devices on the network | wifi |
 | [wifi](modules/wifi) | Joins a WiFi network and keeps the connection alive | |
+
+The unfinished `fan`, `led` and `mlx90614` modules are parked outside the repository until they are
+ready.
 
 [doc/modules.md](doc/modules.md) is the generated index with ids, versions and the XeWeCore range each module
 needs. Each module's README lists its commands, settings, NVS keys, build defines and tests.
@@ -58,8 +58,8 @@ Select modules with `./setup.sh --modules wifi,time` or `xewe modules select wif
 - copy each module's `src/<Folder>/` into the generated library `build/modules/` (`XeWeModules`);
 - write `src/Modules.h`, which declares one object per module, dependencies first
   (`Wifi wifi(os);`, then `Time time_module(os, wifi);`);
-- install the Arduino libraries the modules need (FastLED for `led`, ArduinoJson for `fan` and
-  `mlx90614`) from [libraries.toml](libraries.toml), unless the project's `xewe.toml` pins them itself.
+- install the Arduino libraries the modules list in `depends_libraries` from
+  [libraries.toml](libraries.toml), unless the project's `xewe.toml` pins them itself.
 
 After a build the modules' commands are on the console: `$help` lists them, `$<id> status` shows a
 module's state, and `$system schema` prints every module's settings as JSON lines.
@@ -67,8 +67,8 @@ module's state, and `$system schema` prints every module's settings as JSON line
 Compile-time values (a pin a driver needs as a constant, a buffer size, listener slots) live in
 the project's `Config.h`: `./setup.sh` and `xewe modules select` append each selected module's
 `src/<Folder>/Config.h` there once, as one marked block (`XEWE_MODULE_<SLUG>_<VAR>` defines), and
-the user edits the numbers. First-boot defaults that end up in NVS (a strip length, a fan's pins)
-stay `--define` values: `xewe build --define LED_COUNT=30`. Each module README lists both.
+the user edits the numbers. First-boot defaults that end up in NVS stay
+`--define` values: `xewe build --define KEY=VALUE`. Each module README lists both.
 
 ## How a module is built
 
@@ -84,8 +84,8 @@ modules/<slug>/
 
 A module's `id` is its command group (`$wifi ...`) and its NVS namespace, so it never changes once
 released. Settings are declared once in a table and the core provides `$<id> set|get|schema` for
-them. Modules that announce changes (led, fan, mlx90614) offer listeners, and every module claims the
-GPIOs it drives in the core's pin registry, so two modules cannot drive the same pin.
+them. Modules that announce changes offer listeners, and every module claims the GPIOs it drives in
+the core's pin registry, so two modules cannot drive the same pin.
 
 [doc/contract.md](doc/contract.md) is the full specification every module follows. Contributors and agents
 start at [`.agents/AGENTS.md`](.agents/AGENTS.md), which covers adding a module, the validator and

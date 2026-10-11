@@ -57,9 +57,9 @@ modules and listeners: `doc/os/module.md`, pin registry: `doc/utils/pins.md`).
 
 ### Layout
 
-- `modules/<slug>/`: `module.properties`, `src/<Folder>/<Folder>.h` + `.cpp` (plus pure headers
-  such as `Curve.h`, `Convert.h`, led's `modes/` and `fx/`), `tests/board/test_<slug>.py`,
-  optional `tests/unit/`, `README.md`. Nothing else (X-02).
+- `modules/<slug>/`: `module.properties`, `src/<Folder>/<Folder>.h` + `.cpp` (plus pure headers for
+  host-tested logic), `tests/board/test_<slug>.py`, optional `tests/unit/`, `README.md`. Nothing
+  else (X-02).
 - `tools/validate.py`: the tools' validator plus the repository rules (doc/contract.md section 5).
 - `libraries.toml`: the catalogue of Arduino libraries the modules may list in `depends_libraries`.
 - `doc/modules.md`: generated from the `module.properties` files; never edit it by hand (X-12).
@@ -91,7 +91,7 @@ The harness for this workspace is a copy of the xewe-os template with every modu
 `XEWE_MODULES_SOURCE` pointing here. With `H=<harness>` and `XEWE_HOME` set as the harness expects:
 
 ```sh
-$H/build/tools/.venv/bin/python tools/validate.py --harness $H        # expect "9 modules, 0 errors"
+$H/build/tools/.venv/bin/python tools/validate.py --harness $H        # expect "6 modules, 0 errors"
 cd $H && XEWE_NO_BOARD=1 build/tools/.venv/bin/python -m xewe modules generate
 XEWE_NO_BOARD=1 build/tools/.venv/bin/python -m xewe test --unit-only            # module unit tests
 build/tools/.venv/bin/python -m xewe test --module <slug> --chip c3              # compile + test_compiles
@@ -100,8 +100,9 @@ build/tools/.venv/bin/python -m xewe test --module <slug> --chip c3             
 - **Validator** after every change to a module (X-01). `--write-index` after any `module.properties`
   change, then validate again (the `index` rule compares `doc/modules.md`).
 - **Unit tests** run on the developer machine: the `@pytest.mark.unit` tests in `tests/unit/` and
-  the C++ files they build with g++. led's host builds need XeWeCore's `src/`: `XEWE_CORE_SOURCE`, the
-  core checkout next to this repo, or the project's `build/libraries/XeWeCore`.
+  the C++ files they build with g++. C++ host builds that include core headers need XeWeCore's
+  `src/`: `XEWE_CORE_SOURCE`, the core checkout next to this repo, or the project's
+  `build/libraries/XeWeCore`.
 - **Compile.** Without a board, `test_compiles` really builds and every serial test reports
   "compiled, not run"; the run exits 0. The full gate (doc/contract.md section 4): each changed module
   alone (`xewe modules select <slug>`, `xewe test --module <slug> --all-chips`), then all modules
@@ -113,8 +114,8 @@ build/tools/.venv/bin/python -m xewe test --module <slug> --chip c3             
 ### Adding a module
 
 1. Copy the closest module: `modules/pins` (no dependencies, no stored state), `modules/time`
-   (depends on `wifi`, one settings row), `modules/fan` (settings table, blobs, listeners, pin
-   claims, a pure header with C++ unit tests). Or start from XeWeCore's `examples/02_MyModule`.
+   (depends on `wifi`, one settings row), `modules/buttons` (a stored blob, `schema_extra` rows, pin
+   claims). Or start from XeWeCore's `examples/02_MyModule`.
    Rename the directory, folder, files and class.
 2. Fill `module.properties` with every key in the doc/contract.md section 2 order:
    `repo=https://github.com/xewe-labs/xewe-os-modules/tree/main/modules/<slug>`,
@@ -143,16 +144,15 @@ before 1.0 MINOR for breaking), update its README in the same change, keep store
   `xewe::setting<&Class::member>("key", ...)`, returned by `settings()` as `{table, this}`. The core
   loads them before `begin_routines_required` and owns `$<id> set|get|schema`. Apply changes in
   `on_setting_changed(def)` (runs while disabled too; not at the boot load). `SECRET` for
-  credentials, `RESTART` for rows that apply after a reboot. A module that owns `set` already (fan)
+  credentials, `RESTART` for rows that apply after a reboot. A module that owns `set` already
   forwards non-numeric first arguments to `apply_setting`. Older alias commands call
   `apply_setting`.
 - **`schema_extra`.** Rows with `"group"` and a `"set"` hint for values that are not table rows
-  (led mode parameters, fan fans and curve, scheduler blocks, button mappings). Without a table the
-  core registers no `schema` command; the module registers its own (scheduler, buttons).
-- **Listeners.** `xewe::ListenerSet<Iface, N>` (fixed size, no heap): led `LedListener` (6),
-  fan `FanListener` (4), mlx90614 `Mlx90614Listener` (4). Every event carries `const void* origin`
-  (`nullptr` from the CLI) so a listener drops its own echo; callbacks run in the caller's task,
-  outside any render lock; keep them short.
+  (scheduler blocks, button mappings). Without a table the core registers no `schema` command; the
+  module registers its own (scheduler, buttons).
+- **Listeners.** `xewe::ListenerSet<Iface, N>` (fixed size, no heap). Every event carries
+  `const void* origin` (`nullptr` from the CLI) so a listener drops its own echo; callbacks run in the
+  caller's task, outside any render lock; keep them short.
 - **Pin claims.** `xewe::pins::claim(gpio, id.c_str())` before configuring a GPIO, `release` when
   done (`remove`, a pin change, `reset`). A refused claim aborts the operation; the core prints it.
   `$pins claims` shows the registry.
@@ -161,15 +161,6 @@ before 1.0 MINOR for breaking), update its README in the same change, keep store
 
 ### Module notes
 
-- **led.** The render task (`led_render`, 50 fps) holds `render_mutex` while rendering; modes render
-  under it and must not block, allocate, write NVS or print. Buffers are sized on the main loop
-  (`prepare`). Mode ids, parameter keys and `m:<id>:<key>` NVS keys are stored: never renumber or
-  rename (`m:<id>:<key>` ≤ 15 characters, so a parameter key is ≤ 10). The source must not contain
-  the word `controller` (R `source`): FastLED's controller classes are referred to by name only in
-  code (`CLEDController`, `LedRmtController`). Adding a mode: led README "Adding a mode".
-- **fan, mlx90614.** Curve and conversion maths live in `Curve.h` / `Convert.h` (pure, host-tested);
-  the `.cpp` calls them. mlx90614 copies an older `data` blob into its table rows once
-  (`migrate_blob`).
 - **wifi.** `loop()` blocks while disconnected (doc/contract.md section 6); do not copy that pattern.
   `-DDEBUG_Wifi=1` prints credentials; bench only.
 - **web-interface.** No authentication: every command is reachable over HTTP on the local network.

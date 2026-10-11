@@ -108,9 +108,8 @@ requires_core=>=2.1.0,<3.0.0
 ```
 
 The scheduler's id (`schedule`) differs from its slug; that is allowed. The declares in this
-repository: `Buttons buttons(os);`, `Fan fan(os);`, `Led led(os);`, `Mlx90614 mlx90614(os);`,
-`Pins pins(os);`, `Scheduler scheduler(os, time_module);`, `Time time_module(os, wifi);`,
-`WebInterface web_interface(os, wifi);`, `Wifi wifi(os);`.
+repository: `Buttons buttons(os);`, `Pins pins(os);`, `Scheduler scheduler(os, time_module);`,
+`Time time_module(os, wifi);`, `WebInterface web_interface(os, wifi);`, `Wifi wifi(os);`.
 
 ## 3. C++ contract
 
@@ -143,8 +142,8 @@ third-party global name (for example a user's own `Time`) fails at compile time;
 Every module passes `has_cli_commands = true`, so `$<id> status` exists for `test_status`. Commands
 go through `register_command(Command{name, description, sample_usage, arg_count, fn})`, where `fn`
 takes `xewe::span<const std::string>` (never `std::span`) and `sample_usage` is the literal
-`"$<id> <cmd> ..."`. A command registered once per argument count (led `mode`, fan `curve`) dispatches
-on its first argument; the core picks the registration whose count matches.
+`"$<id> <cmd> ..."`. A command registered once per argument count dispatches on its first argument;
+the core picks the registration whose count matches.
 
 **Constructor parameters never reuse a member name.** `Module::os` is a protected member. A
 constructor parameter also named `os` hides it in the constructor body: command lambdas written there
@@ -230,22 +229,22 @@ precedence.
 - **Applying a change.** `on_setting_changed(def)` runs after `set`/`apply_setting` stored a row. It
   also runs while the module is disabled, so check before touching hardware. It is not called by the
   load at boot. The module never reads or writes a table key by hand; the exception is a runtime
-  setter that persists a value the user changed by other means (led `brightness`, `state`).
-- **Keeping existing commands.** A module that already owns `set` (fan: `$fan set <pin> <speed>`)
-  keeps it and forwards a non-numeric first argument to `apply_setting(key, value, true)`. Commands
-  that set rows under their own name (`set_addr`, `set_pins`, `set_zone`) call `apply_setting`.
+  setter that persists a value the user changed by other means.
+- **Keeping existing commands.** A module that already owns `set` keeps it and forwards a
+  non-numeric first argument to `apply_setting(key, value, true)`. Commands that set rows under
+  their own name (time `set_zone`) call `apply_setting`.
 - **`status`** starts from `Module::status(false)`, which prints one `key: value` line per row, and
   adds only what a row cannot show (connection state, a hex address, live readings).
-- **Values that are not rows** (mode parameters, fans, curve points, schedule blocks, button
-  mappings) are reported by overriding `schema_extra`: one row per value with a `"group"` and a
-  `"set"` command hint. The core registers `schema` only for modules with a table; a module with only
-  extra rows (scheduler, buttons) registers its own `schema` command that prints them (`print_schema`)
-  and the `{"end":"<id>","count":N}` line.
+- **Values that are not rows** (schedule blocks, button mappings) are reported by overriding
+  `schema_extra`: one row per value with a `"group"` and a `"set"` command hint. The core registers
+  `schema` only for modules with a table; a module with only extra rows (scheduler, buttons)
+  registers its own `schema` command that prints them (`print_schema`) and the
+  `{"end":"<id>","count":N}` line.
 - **Stored FlexData blobs.** A blob carries a `schema` field and is accepted only when
   `has("schema")` is true and the value matches; a missing field is not the struct default. A blob
   from another layout is never reinterpreted and never overwritten at boot. When table rows replace
-  an older blob (mlx90614 `data`), the module reads it once, copies the values with
-  `apply_setting`, then removes it with `os.nvs.remove`.
+  an older blob, the module reads it once, copies the values with `apply_setting`, then removes it
+  with `os.nvs.remove`.
 
 **Listeners.** A module that announces changes to other code exposes
 `xewe::ListenerSet<Iface, N>` (fixed size, default 4, no heap) and passes a `const void* origin` with
@@ -268,12 +267,12 @@ copy.
 A module whose code needs a value as a constant ships `src/<Folder>/Config.h`. What qualifies: a
 template argument (a FastLED pin, a `ListenerSet` size), a buffer size, a pin the driver needs as a
 constant, a debug switch. What does not: anything a settings table or a first-boot routine stores in
-NVS (a strip length, a sensor address, the fans of the first boot). Those keep their `#ifndef`
-defaults in the module header and are overridden per build with `xewe build --define KEY=VALUE`.
+NVS (a strip length, a sensor address). Those keep their `#ifndef` defaults in the module header and
+are overridden per build with `xewe build --define KEY=VALUE`.
 
 The file is pure preprocessor: comments, `#if`/`#ifndef`/`#define`/`#endif`, no `#include`. Every
-define is named `XEWE_MODULE_<SLUG>_<VAR>` (the slug in upper case, `-` as `_`: `LED`,
-`WEB_INTERFACE`, `MLX90614`), wrapped in `#ifndef` of the same name, with one comment line above
+define is named `XEWE_MODULE_<SLUG>_<VAR>` (the slug in upper case, `-` as `_`: `WIFI`,
+`WEB_INTERFACE`), wrapped in `#ifndef` of the same name, with one comment line above
 the `#ifndef` saying what it is and the unit. A chip-conditional default tests `XEWE_CHIP_C3`,
 `XEWE_CHIP_C6` or `XEWE_CHIP_S3`, which `xewe build` defines in `XeWeBuildInfo.h`; the core's
 `CONFIG_IDF_TARGET_*` comes from `sdkconfig.h` and is not visible where the project's `Config.h` is
@@ -291,12 +290,12 @@ and in the module sources alike. A `--define` of the same name wins over both, b
 includes `<XeWeBuildInfo.h>` first.
 
 ```cpp
-// modules/mlx90614/src/Mlx90614/Config.h
+// modules/wifi/src/Wifi/Config.h
 #pragma once
 
-// Listener slots of the temperature fan-out (xewe::ListenerSet, no heap).
-#ifndef XEWE_MODULE_MLX90614_LISTENERS_MAX
-#define XEWE_MODULE_MLX90614_LISTENERS_MAX 4
+// Debug output of the module (0 or 1). 1 prints every step, credentials included: bench only.
+#ifndef XEWE_MODULE_WIFI_DEBUG
+#define XEWE_MODULE_WIFI_DEBUG 0
 #endif
 ```
 
@@ -396,8 +395,7 @@ Rules:
   first boot done and every first-boot prompt answered (`xewe provision`).
 
 **C++ unit tests (optional).** Logic that does not touch hardware (effect frames, curve maths, value
-conversion) is tested in C++ on the developer machine. `led` (`test_effects.cpp`,
-`test_listeners.cpp`), `fan` (`test_curve.cpp`) and `mlx90614` (`test_convert.cpp`) do this.
+conversion) is tested in C++ on the developer machine.
 
 - **Pure header.** The logic lives in `src/<Folder>/<Thing>.h`, which the module's `.cpp` calls
   instead of keeping its own copy. Pure means standard headers only (`<cstdint>`, `<cmath>`,
