@@ -19,12 +19,15 @@ xewe-os-modules/
 │       ├── src/<Folder>/Config.h        # optional: compile-time knobs (section 3.2)
 │       ├── tests/board/test_<slug>.py   # pytest on the ESP32 through `xewe test` (required)
 │       ├── tests/unit/                  # optional: developer-machine tests (`unit` pytest, C++ for g++)
+│       ├── releases/<version>/          # notes.txt and testcard.md of the module's release (README "Releasing")
 │       └── README.md
 ├── doc/
 │   ├── contract.md         # this file
 │   └── modules.md          # generated index: `tools/validate.py --write-index`
 ├── libraries.toml          # library catalogue: repo and ref of every depends_libraries name
 ├── tools/validate.py       # the tools' validator plus the repository rules (section 5)
+├── scripts/release.sh      # releases one module (tag <slug>/X.Y.Z) or the set (tag X.Y.Z)
+├── releases/<version>/     # notes.txt of the set release
 ├── README.md               # what the modules are and how a project uses them
 ├── .github/workflows/      # CI: tests.yml
 ├── .agents/                # agent workspace: AGENTS.md (how to work here), RULES.md (hard rules)
@@ -83,12 +86,14 @@ and `depends_libraries`, which they accept as legacy keys; any other key is a T 
 | `depends_libraries` | Comma-separated Arduino library names. Libraries bundled with the esp32 core (WiFi, WebServer, Wire, ...) and XeWeCore are **not** listed | R `depends_libraries`: see section 5 |
 | `requires_core` | XeWeCore range, `>=X.Y.Z,<X.Y.Z` | T: `^>=\s*X.Y.Z(\s*,\s*<\s*X.Y.Z)?$`, checked against the harness `[core] ref` when that is a version. R `core21`: see section 5 |
 
-`requires_core` uses the comma form with full versions, `>=2.1.0,<3.0.0`; `>=2.1.0 <3` does not
+`requires_core` uses the comma form with full versions, `>=3.0.0,<4.0.0`; `>=3.0.0 <4` does not
 parse. A module that uses a settings table, `xewe::ListenerSet`, `xewe::SchemaOut` or the pin registry
-needs core 2.1 and declares `>=2.1.0,<3.0.0` (R `core21`). Every module in this repository does.
+needs core 2.1 or later (R `core21`). Every module in this repository declares `>=3.0.0,<4.0.0`.
 
-The repository tag (`vX.Y.Z`) is what a project's `xewe.toml` pins; a module's `version` is
-informational plus the promise for its commands.
+Each module is released on its own under the tag `<slug>/X.Y.Z` (for example `wifi/3.0.0`), with
+`version=X.Y.Z` in its `module.properties`. The repository-wide set tag `X.Y.Z` marks a commit where
+every module is released at that version; it is what a project's `xewe.toml` `[modules] ref` pins.
+A module's `version` is the promise for its commands.
 
 Example, `modules/wifi/module.properties`:
 
@@ -96,7 +101,7 @@ Example, `modules/wifi/module.properties`:
 name=Wifi
 slug=wifi
 id=wifi
-version=0.4.0
+version=3.0.0
 description=Connects to a local WiFi network and keeps the connection alive
 repo=https://github.com/xewe-labs/xewe-os-modules/tree/main/modules/wifi
 folder=Wifi
@@ -104,7 +109,7 @@ include=src/Wifi/Wifi.h
 declare=Wifi wifi(os);
 depends_modules=
 depends_libraries=
-requires_core=>=2.1.0,<3.0.0
+requires_core=>=3.0.0,<4.0.0
 ```
 
 The scheduler's id (`schedule`) differs from its slug; that is allowed. The declares in this
@@ -487,10 +492,14 @@ the rule or key name. The last line is `N modules, E errors, W warnings`. **Exit
 
 ## 6. Known limits
 
-1. **wifi `loop()` blocks** while disconnected (`while (WiFi.status() != WL_CONNECTED)` with a 5 s
-   `get_yn` prompt per pass), which breaks the "loop must not block" rule: the console and every
-   other module stall until WiFi is back. The fix is a non-blocking reconnect state machine. The wifi
-   README lists it under Known issues.
+1. **wifi waits for the network, by design.** While wifi is enabled and disconnected, its `loop()`
+   does not return until WiFi is back: each pass is a 5 s `get_yn` prompt ("Disable and reset WiFi
+   module?", default no) and a reconnect with the stored credentials (3 × 10 s, then a 10 s "reset
+   credentials?" prompt), up to about 45 s, repeated. A boot with stored credentials waits once the
+   same way (up to 30 s plus the prompt). The console and every other module wait meanwhile. This is
+   the one sanctioned exception to "`loop()` must not block": the modules built on wifi (time,
+   web-interface, and scheduler through time) need the network, so the device holds until it is
+   back instead of running them offline. The wifi README describes it under Known issues.
 2. **First-boot prompts.** A freshly erased board waits at "Would you like to enable …?" (`get_yn`
    without a timeout). Board tests therefore assume a provisioned board; `xewe provision` answers
    the prompts.

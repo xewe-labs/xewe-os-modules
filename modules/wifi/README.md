@@ -65,10 +65,15 @@ module's `src/Wifi/Config.h` as one marked block to the project's `Config.h`; ed
 
 ### Known issues
 
-- **`loop()` blocks while disconnected.** It runs `while (WiFi.status() != WL_CONNECTED)` with a
-  5 s "Disable and reset WiFi module?" prompt (`get_yn`) and a reconnect attempt per pass. This
-  breaks the "loop must not block" rule: the CLI and every other module stall until WiFi is back.
-  The fix is a non-blocking reconnect state machine ([contract](../../doc/contract.md#6-known-limits), section 6).
+- **`loop()` waits for the network, by design.** While the module is enabled and disconnected,
+  `loop()` does not return until WiFi is back. Each pass is a 5 s "Disable and reset WiFi module?"
+  prompt (`get_yn`, default no), then a reconnect with the stored credentials: 3 attempts of 10 s
+  and a 10 s "reset credentials?" prompt, so up to about 45 s, repeated until connected. A boot
+  with stored credentials waits the same way once (`begin_routines_regular`, up to 30 s plus the
+  prompt). The CLI and every other module wait meanwhile. This is intended: time, web-interface
+  and scheduler (through time) need the network, so the device holds until it is back instead of
+  running them offline. Answering yes to the prompt (and confirming) disables the module and its
+  dependents, which ends the wait ([contract](../../doc/contract.md#6-known-limits), section 6).
 - Set `XEWE_MODULE_WIFI_DEBUG` to 1 only on a bench: it prints credentials to serial.
   Credentials are stored in NVS unencrypted.
 

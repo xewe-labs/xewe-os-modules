@@ -58,13 +58,17 @@ modules and listeners: `doc/os/module.md`, pin registry: `doc/utils/pins.md`).
 ### Layout
 
 - `modules/<slug>/`: `module.properties`, `src/<Folder>/<Folder>.h` + `.cpp` (plus pure headers for
-  host-tested logic), `tests/board/test_<slug>.py`, optional `tests/unit/`, `README.md`. Nothing
-  else (X-02).
+  host-tested logic), `tests/board/test_<slug>.py`, optional `tests/unit/`, `README.md`, and
+  `releases/<version>/` once released. Nothing else (X-02).
 - `tools/validate.py`: the tools' validator plus the repository rules (doc/contract.md section 5).
 - `libraries.toml`: the catalogue of Arduino libraries the modules may list in `depends_libraries`.
 - `doc/modules.md`: generated from the `module.properties` files; never edit it by hand (X-12).
 - No module is an Arduino library and nothing here is compiled on its own: modules are compiled
   inside an xewe-os project ("harness").
+- `scripts/release.sh` releases one module (tag `<slug>/X.Y.Z`, files in
+  `modules/<slug>/releases/<version>/`) or the set (tag `X.Y.Z`, `releases/<version>/notes.txt`)
+  that projects pin (README "Releasing"). Agents may run `--dry-run` only, and `--prepare` only on a
+  scratch copy unless asked; the owner commits, tags and pushes.
 
 ### How a project installs a module
 
@@ -120,7 +124,7 @@ build/tools/.venv/bin/python -m xewe test --module <slug> --chip c3             
 2. Fill `module.properties` with every key in the doc/contract.md section 2 order:
    `repo=https://github.com/xewe-labs/xewe-os-modules/tree/main/modules/<slug>`,
    `include=src/<Folder>/<Folder>.h`, `declare=<Folder> <var>(os[, <dep var>...]);`,
-   `requires_core=>=2.1.0,<3.0.0`. A library in `depends_libraries` gets a table in `libraries.toml`
+   `requires_core=>=3.0.0,<4.0.0`. A library in `depends_libraries` gets a table in `libraries.toml`
    (sorted, exactly `repo` and `ref`).
 3. Write the class to doc/contract.md section 3 (the C++ rules are X-04 … X-06): `host` parameter,
    `[this]` captures, `xewe::span`, a `status()` override, `reset()` when it holds state or pins.
@@ -161,7 +165,7 @@ before 1.0 MINOR for breaking), update its README in the same change, keep store
 
 ### Module notes
 
-- **wifi.** `loop()` blocks while disconnected (doc/contract.md section 6); do not copy that pattern.
+- **wifi.** `loop()` waits for the network while disconnected, by design (doc/contract.md section 6); no other module may block.
   `-DDEBUG_Wifi=1` prints credentials; bench only.
 - **web-interface.** No authentication: every command is reachable over HTTP on the local network.
 - **time, scheduler.** The scheduler's id is `schedule`; its member for the time dependency is
