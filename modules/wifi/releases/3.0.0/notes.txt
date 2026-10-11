@@ -1,0 +1,51 @@
+wifi 3.0.0
+
+Joins a Wi-Fi network and keeps the connection alive. On first boot it scans and asks for a
+network on the console; the name and password are stored in NVS and used on every later
+boot. The time, web-interface and scheduler modules build on it.
+
+3.0.0 follows 0.4.0 (untagged; v0.2.0 shipped it as 0.2.0). It is part of the xewe-os-modules
+3.0.0 set; projects get it through the set tag: xewe.toml [modules] ref = "3.0.0".
+
+CHANGED SINCE 0.2.0
+
+- Settings table: ssid (str <= 32) and psw (str <= 63, SECRET: printed as ********), with
+  $wifi set|get|schema; $wifi connect and the boot join use them.
+- Debug output is XEWE_MODULE_WIFI_DEBUG in the project's Config.h (src/Wifi/Config.h,
+  appended by setup); it was DEBUG_Wifi.
+- Replies follow one style ("Wifi: disconnected", errors "! Wifi: ...").
+- The waiting reconnect is documented as intended behaviour (see below).
+- Same NVS keys as 0.2.0 (wifi/ssid, wifi/psw).
+- The source is formatted with the tools' clang-format style (layout only).
+- Commits: df801b4, 3032fc2, ac2bdaa, 78f0088, 4c4fe65, b91ef4f, 423987b, then the 3.0.0 work,
+  format and prepare commits.
+
+REQUIREMENTS
+
+- XeWeCore >=3.0.0,<4.0.0 (requires_core). ESP32-C3, C6 or S3 with arduino-esp32 3.x; built with
+  esp32 core 3.3.12.
+- Modules: none; time and web-interface require it (scheduler through time). Libraries:
+  none outside the esp32 core (WiFi).
+
+SETTINGS AND COMMANDS
+
+- $wifi connect, $wifi disconnect, $wifi scan, $wifi set|get|schema (ssid, psw).
+- Settings: ssid, psw. NVS: wifi/ssid, wifi/psw (stored unencrypted).
+- Config.h: XEWE_MODULE_WIFI_DEBUG (0; 1 prints credentials, bench only).
+
+KNOWN BEHAVIOUR
+
+- Waits for the network, by design. While the module is enabled and disconnected, loop()
+  does not return until Wi-Fi is back: each pass is a 5 s "Disable and reset WiFi module?"
+  prompt (default no) and a reconnect with the stored credentials (3 attempts of 10 s, then
+  a 10 s "reset credentials?" prompt), up to about 45 s, repeated. A boot with stored
+  credentials waits the same way once. The console and the other modules wait meanwhile.
+  This is intended: the modules built on wifi need the network, so the device holds until it
+  is back instead of running them offline. Answering yes (and confirming) disables the
+  module and its dependents. Not a bug, and no change is planned.
+- First boot waits at the network prompt until answered; xewe provision answers it.
+
+TESTING
+
+What was tested on which commits, and what was not: modules/wifi/releases/3.0.0/testcard.md
+(attached to this release).

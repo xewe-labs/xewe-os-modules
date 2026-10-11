@@ -1,0 +1,40 @@
+pins 3.0.0
+
+GPIO, ADC, PWM and I2C from the command line: eleven $pins commands read and write levels,
+set pin modes, read the ADC, drive PWM, scan an I2C bus and list the core pin registry, so
+hardware can be probed without writing or flashing code. Stateless; nothing in NVS.
+
+3.0.0 follows 0.3.0 (untagged; v0.2.0 shipped it as 0.2.0). It is part of the xewe-os-modules
+3.0.0 set; projects get it through the set tag: xewe.toml [modules] ref = "3.0.0".
+
+CHANGED SINCE 0.2.0
+
+- Pin registry: every command claims its pin for pins on first use and refuses a pin another
+  module holds, so $pins cannot reconfigure a button or sensor pin.
+- New commands: $pins claims (every claimed GPIO with its owner, strapping pins marked) and
+  $pins release <pin>. pwm_stop releases the pin; i2c_scan frees its two pins after the scan.
+- Arguments are parsed with xewe::str::parse_int; replies "! Pins: ..." on bad input.
+- The source is formatted with the tools' clang-format style (layout only).
+- Commits: df801b4, 3032fc2, ac2bdaa, 78f0088, 4c4fe65, 423987b, 06394d1, then the 3.0.0 work,
+  format and prepare commits.
+
+REQUIREMENTS
+
+- XeWeCore >=3.0.0,<4.0.0 (requires_core). ESP32-C3, C6 or S3 with arduino-esp32 3.x; built with
+  esp32 core 3.3.12.
+- Modules: none. Libraries: none outside the esp32 core (Wire).
+
+SETTINGS AND COMMANDS
+
+- $pins gpio_read|gpio_write|gpio_toggle|gpio_mode, adc_read, pwm_setup|pwm_write|pwm_stop,
+-   i2c_scan <sda> <scl>, claims, release <pin>. Usage in the module README.
+- No settings, no NVS.
+
+KNOWN BEHAVIOUR
+
+- Commands write to the pin they are given (within the registry's rules): use them on a bench.
+
+TESTING
+
+What was tested on which commits, and what was not: modules/pins/releases/3.0.0/testcard.md
+(attached to this release).

@@ -3,9 +3,9 @@
 
 | Slug | Name | Id | Version | Description | Depends on | Requires core |
 |---|---|---|---|---|---|---|
-| [`buttons`](../modules/buttons) | Buttons | `buttons` | 0.3.0 | Binds commands to physical buttons with software debouncing | - | `>=2.1.0,<3.0.0` |
-| [`pins`](../modules/pins) | Pins | `pins` | 0.3.0 | GPIO, ADC, PWM and I2C access from the command line | - | `>=2.1.0,<3.0.0` |
-| [`scheduler`](../modules/scheduler) | Scheduler | `schedule` | 0.3.0 | Runs stored commands on a weekly schedule | time | `>=2.1.0,<3.0.0` |
-| [`time`](../modules/time) | Time | `time` | 0.3.0 | NTP time sync and timezone handling | wifi | `>=2.1.0,<3.0.0` |
-| [`web-interface`](../modules/web-interface) | Web Interface | `web_interface` | 0.3.0 | HTTP page and command endpoint for other devices on the network | wifi | `>=2.1.0,<3.0.0` |
-| [`wifi`](../modules/wifi) | Wifi | `wifi` | 0.4.0 | Connects to a local WiFi network and keeps the connection alive | - | `>=2.1.0,<3.0.0` |
+| [`buttons`](../modules/buttons) | Buttons | `buttons` | 3.0.0 | Binds commands to physical buttons with software debouncing | - | `>=3.0.0,<4.0.0` |
+| [`pins`](../modules/pins) | Pins | `pins` | 3.0.0 | GPIO, ADC, PWM and I2C access from the command line | - | `>=3.0.0,<4.0.0` |
+| [`scheduler`](../modules/scheduler) | Scheduler | `schedule` | 3.0.0 | Runs stored commands on a weekly schedule | time | `>=3.0.0,<4.0.0` |
+| [`time`](../modules/time) | Time | `time` | 3.0.0 | NTP time sync and timezone handling | wifi | `>=3.0.0,<4.0.0` |
+| [`web-interface`](../modules/web-interface) | Web Interface | `web_interface` | 3.0.0 | HTTP page and command endpoint for other devices on the network | wifi | `>=3.0.0,<4.0.0` |
+| [`wifi`](../modules/wifi) | Wifi | `wifi` | 3.0.0 | Connects to a local WiFi network and keeps the connection alive | - | `>=3.0.0,<4.0.0` |
