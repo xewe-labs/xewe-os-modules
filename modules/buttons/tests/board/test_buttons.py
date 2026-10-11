@@ -4,13 +4,14 @@ Hardware preconditions: provisioned board (first boot done, every first-boot pro
 The add/remove test configures one pin as an input (pull-up); choose a free pin with
 XEWE_TEST_BUTTONS_PIN (skipped when unset).
 """
+
 import os
 import re
 
 import pytest
 
 ID = "buttons"
-NAME = "Buttons"          # module.properties name == C++ name argument
+NAME = "Buttons"  # module.properties name == C++ name argument
 
 
 def test_compiles(compiled):
@@ -19,17 +20,30 @@ def test_compiles(compiled):
 
 
 def test_status(serial):
-    serial.command(f"${ID} status", expect=rf"{NAME} module (enabled|disabled)", timeout=5)
+    serial.command(
+        f"${ID} status", expect=rf"{NAME} module (enabled|disabled)", timeout=5
+    )
 
 
 def test_add_then_remove(serial):
     pin = os.environ.get("XEWE_TEST_BUTTONS_PIN")
     if not pin:
         pytest.skip("needs XEWE_TEST_BUTTONS_PIN (a free GPIO)")
-    serial.command(f'$buttons add {pin} "$system status" pullup on_press 50',
-                   expect=r"Buttons: button mapping added", timeout=5)
+    serial.command(
+        f'$buttons add {pin} "$system status" pullup on_press 50',
+        expect=r"Buttons: button mapping added",
+        timeout=5,
+    )
     # the table lists ID | Pin | ...; the new mapping has the highest id
     serial.send(f"${ID} status")
-    ids = [int(m[1]) for line in serial.collect() if (m := re.match(r"^\|\s*(\d+)\s*\|", line.strip()))]
+    ids = [
+        int(m[1])
+        for line in serial.collect()
+        if (m := re.match(r"^\|\s*(\d+)\s*\|", line.strip()))
+    ]
     assert ids, "no button id in status table"
-    serial.command(f"$buttons remove {max(ids)}", expect=r"Buttons: button mapping removed", timeout=5)
+    serial.command(
+        f"$buttons remove {max(ids)}",
+        expect=r"Buttons: button mapping removed",
+        timeout=5,
+    )

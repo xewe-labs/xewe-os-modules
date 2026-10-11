@@ -3,10 +3,11 @@
 Hardware preconditions: provisioned board (first boot done, every first-boot prompt answered).
 adc_read only reads; the pin is XEWE_TEST_PINS_ADC_PIN (default 1, an ADC1 pin on C3/C6/S3).
 """
+
 import os
 
 ID = "pins"
-NAME = "Pins"          # module.properties name == C++ name argument
+NAME = "Pins"  # module.properties name == C++ name argument
 
 
 def test_compiles(compiled):
@@ -15,7 +16,9 @@ def test_compiles(compiled):
 
 
 def test_status(serial):
-    serial.command(f"${ID} status", expect=rf"{NAME} module (enabled|disabled)", timeout=5)
+    serial.command(
+        f"${ID} status", expect=rf"{NAME} module (enabled|disabled)", timeout=5
+    )
 
 
 def test_adc_read(serial):

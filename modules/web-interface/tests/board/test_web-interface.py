@@ -5,7 +5,7 @@ WiFi connected (Wifi is a requirement). The tests make no HTTP requests.
 """
 
 ID = "web_interface"
-NAME = "Web Interface"          # module.properties name == C++ name argument
+NAME = "Web Interface"  # module.properties name == C++ name argument
 
 
 def test_compiles(compiled):
@@ -14,7 +14,9 @@ def test_compiles(compiled):
 
 
 def test_status(serial):
-    serial.command(f"${ID} status", expect=rf"{NAME} module (enabled|disabled)", timeout=5)
+    serial.command(
+        f"${ID} status", expect=rf"{NAME} module (enabled|disabled)", timeout=5
+    )
 
 
 def test_status_reports_server(serial):
@@ -26,4 +28,8 @@ def test_status_reports_server(serial):
 def test_settings_table(serial):
     # settings table: port (restart) + root rows
     serial.command("$web_interface get port", expect=r"port=\d+", timeout=5)
-    serial.command("$web_interface schema", expect=r'\{"end":"web_interface","count":2\}', timeout=5)
+    serial.command(
+        "$web_interface schema",
+        expect=r'\{"end":"web_interface","count":2\}',
+        timeout=5,
+    )

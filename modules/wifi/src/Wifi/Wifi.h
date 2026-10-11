@@ -8,57 +8,53 @@
 
 #include <XeWeCore.h>
 
-#include "Config.h"   // XEWE_MODULE_WIFI_DEBUG, set in the project's Config.h
+#include "Config.h" // XEWE_MODULE_WIFI_DEBUG, set in the project's Config.h
 
-// The core's DBG_PRINTF(Wifi, ...) reads DEBUG_Wifi; a -DDEBUG_Wifi=1 on the command line still wins.
+// The core's DBG_PRINTF(Wifi, ...) reads DEBUG_Wifi; a -DDEBUG_Wifi=1 on the command line still
+// wins.
 #ifndef DEBUG_Wifi
 #define DEBUG_Wifi XEWE_MODULE_WIFI_DEBUG
 #endif
 
-
 class Wifi : public xewe::Module {
 public:
-    explicit                 Wifi                    (xewe::Os& host);
+    explicit Wifi(xewe::Os& host);
 
     // xewe::Module hooks
-    void                     begin_routines_required ()        override;
-    void                     begin_routines_init     ()        override;
-    void                     begin_routines_regular  ()        override;
+    void begin_routines_required() override;
+    void begin_routines_init() override;
+    void begin_routines_regular() override;
 
-    void                     loop                    ()                               override;
+    void loop() override;
 
-    void                     reset                   (const bool verbose      = false,
-                                                      const bool do_restart   = true,
-                                                      const bool keep_enabled = true) override;
+    void reset(const bool verbose = false, const bool do_restart = true,
+        const bool keep_enabled = true) override;
 
-    std::string              status                  (const bool verbose = false)     const override;
+    std::string status(const bool verbose = false) const override;
 
     // settings table: `ssid` (str 32) and `psw` (str 63, SECRET: never printed). Credentials stored
-    // by an earlier version load unchanged (same NVS keys). `$wifi set ssid "My Net"` + `$wifi connect`.
-    xewe::Settings           settings                ()                               const override;
+    // by an earlier version load unchanged (same NVS keys). `$wifi set ssid "My Net"` + `$wifi
+    // connect`.
+    xewe::Settings settings() const override;
 
     // connection API
-    bool                     connect                 (bool prompt_for_credentials);
-    bool                     disconnect              (bool verbose = false);
-    bool                     is_connected            (bool verbose = false)           const;
-    bool                     is_disconnected         (bool verbose = false)           const;
+    bool connect(bool prompt_for_credentials);
+    bool disconnect(bool verbose = false);
+    bool is_connected(bool verbose = false) const;
+    bool is_disconnected(bool verbose = false) const;
 
-    std::string              get_local_ip            ()                               const;
-    std::string              get_ssid                ()                               const;
-    std::string              get_mac_address         ()                               const;
+    std::string get_local_ip() const;
+    std::string get_ssid() const;
+    std::string get_mac_address() const;
 
 private:
-    std::vector<std::string> scan                    (bool verbose);
+    std::vector<std::string> scan(bool verbose);
 
-    bool                     join                    (std::string_view ssid,
-                                                      std::string_view password,
-                                                      uint16_t         timeout_ms  = 15000,
-                                                      uint8_t          retry_count = 1);
-    bool                     read_stored_credentials (std::string& ssid,
-                                                      std::string& password);
-    uint8_t                  prompt_credentials      (std::string& ssid,
-                                                      std::string& password);
+    bool join(std::string_view ssid, std::string_view password, uint16_t timeout_ms = 15000,
+        uint8_t retry_count = 1);
+    bool read_stored_credentials(std::string& ssid, std::string& password);
+    uint8_t prompt_credentials(std::string& ssid, std::string& password);
 
-    std::string              stored_ssid;            // table rows (loaded by the core at begin)
-    std::string              stored_psw;
+    std::string stored_ssid; // table rows (loaded by the core at begin)
+    std::string stored_psw;
 };

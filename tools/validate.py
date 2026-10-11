@@ -31,10 +31,16 @@ LIBRARY_RE = re.compile(r"^[A-Za-z0-9_.\- ]+$")
 FORBIDDEN_LIBRARIES = {"XeWeCore", "XeWeOS"}
 # old API and the arduino-esp32 `cli()` macro; checked in every file of src/<folder>/
 FORBIDDEN_SOURCE = (
-    (re.compile(r"\bcli\s*\("), "'cli(' (arduino-esp32 defines cli() as a macro; use os.cli.execute)"),
+    (
+        re.compile(r"\bcli\s*\("),
+        "'cli(' (arduino-esp32 defines cli() as a macro; use os.cli.execute)",
+    ),
     (re.compile(r"<XeWeOS\.h>"), "'<XeWeOS.h>' (include <XeWeCore.h>)"),
     (re.compile(r"xewe::os::"), "'xewe::os::' (old namespace; use xewe::)"),
-    (re.compile(r"ModuleController"), "'ModuleController' (old API; take xewe::Os& host)"),
+    (
+        re.compile(r"ModuleController"),
+        "'ModuleController' (old API; take xewe::Os& host)",
+    ),
     (re.compile(r"\bcontroller\b"), "'controller' (old API; use the member os)"),
     (re.compile(r"xewe_cli"), "'xewe_cli' (old API; use os.cli)"),
     (re.compile(r"this->os\b"), "'this->os' (use os)"),
@@ -69,8 +75,15 @@ def render_index(registry) -> str:
     for m in registry.all:
         p = m.props
         deps = ", ".join(m.deps) or "-"
-        cells = [f"[`{m.slug}`](../modules/{m.dir.name})", p.get("name", ""), f"`{p.get('id', '')}`",
-                 p.get("version", ""), p.get("description", ""), deps, f"`{p.get('requires_core', '')}`"]
+        cells = [
+            f"[`{m.slug}`](../modules/{m.dir.name})",
+            p.get("name", ""),
+            f"`{p.get('id', '')}`",
+            p.get("version", ""),
+            p.get("description", ""),
+            deps,
+            f"`{p.get('requires_core', '')}`",
+        ]
         rows.append("| " + " | ".join(c.replace("|", "\\|") for c in cells) + " |\n")
     return INDEX_HEADER + "".join(rows)
 
@@ -85,12 +98,18 @@ def check_tests(path: Path, err) -> None:
     except SyntaxError as exc:
         err(f"tests: {path.name} does not parse: {exc.msg} (line {exc.lineno})")
         return
-    names = {n.name for n in tree.body if isinstance(n, ast.FunctionDef) and n.name.startswith("test_")}
+    names = {
+        n.name
+        for n in tree.body
+        if isinstance(n, ast.FunctionDef) and n.name.startswith("test_")
+    }
     for required in ("test_compiles", "test_status"):
         if required not in names:
             err(f"tests: {required} missing in {path.name}")
     if not names - {"test_compiles", "test_status"}:
-        err(f"tests: {path.name} needs at least one behaviour test besides test_compiles and test_status")
+        err(
+            f"tests: {path.name} needs at least one behaviour test besides test_compiles and test_status"
+        )
 
 
 TEST_FOLDERS = ("board", "unit")
@@ -105,20 +124,30 @@ def check_tests_layout(tests: Path, err) -> None:
         if entry.name == "__pycache__":
             continue
         if entry.name not in TEST_FOLDERS or not entry.is_dir():
-            err(f"files: tests/{entry.name} not allowed (tests/ holds only board/ and unit/)")
+            err(
+                f"files: tests/{entry.name} not allowed (tests/ holds only board/ and unit/)"
+            )
     for sub in TEST_FOLDERS:
         for name in ("conftest.py", "__init__.py"):
             if (tests / sub / name).exists():
-                err(f"files: tests/{sub}/{name} not allowed (the plugin provides the fixtures)")
+                err(
+                    f"files: tests/{sub}/{name} not allowed (the plugin provides the fixtures)"
+                )
 
 
 def read_catalogue() -> set[str]:
     """Library names pinned in libraries.toml (empty when the file is missing)."""
     path = REPO / CATALOGUE
-    return set(tomllib.loads(path.read_text(encoding="utf-8"))) if path.is_file() else set()
+    return (
+        set(tomllib.loads(path.read_text(encoding="utf-8")))
+        if path.is_file()
+        else set()
+    )
 
 
-def check_module(m, libraries: set[str] | None, catalogue: frozenset[str] | set[str] = frozenset()) -> list[Problem]:
+def check_module(
+    m, libraries: set[str] | None, catalogue: frozenset[str] | set[str] = frozenset()
+) -> list[Problem]:
     problems: list[Problem] = []
     where = m.slug or m.dir.name
 
@@ -131,7 +160,12 @@ def check_module(m, libraries: set[str] | None, catalogue: frozenset[str] | set[
     header, cpp = src / f"{folder}.h", src / f"{folder}.cpp"
 
     # files
-    for f in (header, cpp, m.dir / "README.md", m.dir / "tests" / "board" / f"test_{m.slug}.py"):
+    for f in (
+        header,
+        cpp,
+        m.dir / "README.md",
+        m.dir / "tests" / "board" / f"test_{m.slug}.py",
+    ):
         if not f.is_file():
             err(f"files: {f.relative_to(m.dir)} missing")
     if p.get("include", "") != f"src/{folder}/{folder}.h":
@@ -145,13 +179,17 @@ def check_module(m, libraries: set[str] | None, catalogue: frozenset[str] | set[
         if dtype != folder:
             err(f"class: declare type '{dtype}' must equal folder '{folder}'")
         if not args or args[0] != "os":
-            err(f"declare-os: first declare argument must be 'os', got '{args[0] if args else ''}'")
+            err(
+                f"declare-os: first declare argument must be 'os', got '{args[0] if args else ''}'"
+            )
 
     # name, id-source
     cpp_text = cpp.read_text(encoding="utf-8") if cpp.is_file() else ""
     if cpp_text:
         if not _string_literal(cpp_text, p.get("name", "")):
-            err(f"name: '\"{p.get('name', '')}\"' not found in {cpp.name} (must equal the C++ name argument)")
+            err(
+                f"name: '\"{p.get('name', '')}\"' not found in {cpp.name} (must equal the C++ name argument)"
+            )
         if not _string_literal(cpp_text, p.get("id", "")):
             err(f"id-source: '\"{p.get('id', '')}\"' not found in {cpp.name}")
 
@@ -172,11 +210,18 @@ def check_module(m, libraries: set[str] | None, catalogue: frozenset[str] | set[
         if not LIBRARY_RE.match(lib):
             err(f"depends_libraries: '{lib}' must match {LIBRARY_RE.pattern}")
         elif lib in FORBIDDEN_LIBRARIES:
-            err(f"depends_libraries: '{lib}' must not be listed (XeWeCore comes from the harness)")
+            err(
+                f"depends_libraries: '{lib}' must not be listed (XeWeCore comes from the harness)"
+            )
         elif libraries is not None and lib not in libraries and lib not in catalogue:
-            err(f"depends_libraries: '{lib}' is neither in {CATALOGUE} nor in the harness xewe.toml [libraries]")
+            err(
+                f"depends_libraries: '{lib}' is neither in {CATALOGUE} nor in the harness xewe.toml [libraries]"
+            )
         elif lib not in catalogue:
-            err(f"depends_libraries: '{lib}' is not in {CATALOGUE} (xewe setup will not install it)", error=False)
+            err(
+                f"depends_libraries: '{lib}' is not in {CATALOGUE} (xewe setup will not install it)",
+                error=False,
+            )
 
     # source
     if src.is_dir():
@@ -186,14 +231,18 @@ def check_module(m, libraries: set[str] | None, catalogue: frozenset[str] | set[
                 for rx, what in FORBIDDEN_SOURCE:
                     if rx.search(line):
                         err(f"source: {f.relative_to(m.dir)}:{n}: {what}")
-        if header.is_file() and "#include <XeWeCore.h>" not in header.read_text(encoding="utf-8"):
+        if header.is_file() and "#include <XeWeCore.h>" not in header.read_text(
+            encoding="utf-8"
+        ):
             err(f"source: {header.name} must contain '#include <XeWeCore.h>'")
         check_core21(src, p.get("requires_core", ""), err)
         check_config(src, m.slug, err)
 
     # stray (inside the module)
     for f in sorted(m.dir.rglob("*.ino")):
-        err(f"stray: {f.relative_to(m.dir)} (validation sketches are replaced by tests)")
+        err(
+            f"stray: {f.relative_to(m.dir)} (validation sketches are replaced by tests)"
+        )
     for name in ("scripts", "LICENSE.txt"):
         if (m.dir / name).exists():
             err(f"stray: {name} (one LICENSE.txt for the repo; no per-module scripts)")
@@ -201,7 +250,9 @@ def check_module(m, libraries: set[str] | None, catalogue: frozenset[str] | set[
 
 
 CONFIG_DEFINE_RE = re.compile(r"^#\s*define\s+([A-Za-z_]\w*)")
-CONFIG_COND_RE = re.compile(r"^#\s*(ifndef|ifdef|if|elif|else|endif)\b\s*([A-Za-z_]\w*)?")
+CONFIG_COND_RE = re.compile(
+    r"^#\s*(ifndef|ifdef|if|elif|else|endif)\b\s*([A-Za-z_]\w*)?"
+)
 
 
 def check_config(src: Path, slug: str, err) -> None:
@@ -213,16 +264,22 @@ def check_config(src: Path, slug: str, err) -> None:
     config = src / "Config.h"
     if config.is_file():
         lines = config.read_text(encoding="utf-8", errors="replace").splitlines()
-        stack: list[str | None] = []   # the macro of each open `#ifndef NAME`, None for other conditionals
+        stack: list[
+            str | None
+        ] = []  # the macro of each open `#ifndef NAME`, None for other conditionals
         for n, line in enumerate(lines, 1):
             text = line.strip()
             if not text or text.startswith("//"):
                 continue
             if not text.startswith("#"):
-                err(f"config: Config.h:{n}: only comment and preprocessor lines are allowed")
+                err(
+                    f"config: Config.h:{n}: only comment and preprocessor lines are allowed"
+                )
                 continue
             if re.match(r"^#\s*include\b", text):
-                err(f"config: Config.h:{n}: no #include (the file must stay pure preprocessor)")
+                err(
+                    f"config: Config.h:{n}: no #include (the file must stay pure preprocessor)"
+                )
                 continue
             cond = CONFIG_COND_RE.match(text)
             if cond:
@@ -232,7 +289,9 @@ def check_config(src: Path, slug: str, err) -> None:
                     if kind == "ifndef" and name and name_re.match(name):
                         above = lines[n - 2].strip() if n >= 2 else ""
                         if not above.startswith("//"):
-                            err(f"config: Config.h:{n}: #ifndef {name} needs a comment line above it (what it is, unit)")
+                            err(
+                                f"config: Config.h:{n}: #ifndef {name} needs a comment line above it (what it is, unit)"
+                            )
                 elif kind == "endif":
                     if stack:
                         stack.pop()
@@ -241,33 +300,49 @@ def check_config(src: Path, slug: str, err) -> None:
             if define:
                 name = define.group(1)
                 if not name_re.match(name):
-                    err(f"config: Config.h:{n}: define '{name}' must match {prefix}<VAR> ([A-Z0-9_]+)")
+                    err(
+                        f"config: Config.h:{n}: define '{name}' must match {prefix}<VAR> ([A-Z0-9_]+)"
+                    )
                 elif name not in stack:
-                    err(f"config: Config.h:{n}: #define {name} must sit inside #ifndef {name}")
+                    err(
+                        f"config: Config.h:{n}: #define {name} must sit inside #ifndef {name}"
+                    )
     for f in sorted(x for x in src.rglob("*") if x.is_file() and x != config):
-        for n, line in enumerate(f.read_text(encoding="utf-8", errors="replace").splitlines(), 1):
+        for n, line in enumerate(
+            f.read_text(encoding="utf-8", errors="replace").splitlines(), 1
+        ):
             define = CONFIG_DEFINE_RE.match(line.strip())
             if define and define.group(1).startswith("XEWE_MODULE_"):
-                err(f"config: {f.relative_to(src.parent.parent)}:{n}: '{define.group(1)}' is defined outside Config.h")
+                err(
+                    f"config: {f.relative_to(src.parent.parent)}:{n}: '{define.group(1)}' is defined outside Config.h"
+                )
 
 
 def check_core21(src: Path, requires_core: str, err) -> None:
     """Rule core21: core 2.1 features need requires_core >= 2.1.0; setting keys are valid NVS keys."""
     uses: set[str] = set()
     keys: list[tuple[str, str]] = []
-    for f in sorted(x for x in src.rglob("*") if x.is_file() and x.suffix in (".h", ".hpp", ".cpp", ".tpp")):
+    for f in sorted(
+        x
+        for x in src.rglob("*")
+        if x.is_file() and x.suffix in (".h", ".hpp", ".cpp", ".tpp")
+    ):
         text = f.read_text(encoding="utf-8", errors="replace")
         uses.update(m.group(0) for m in CORE21_RE.finditer(text))
         keys.extend((f.name, k) for k in SETTING_KEY_RE.findall(text))
     if uses:
         m = REQUIRES_MIN_RE.search(requires_core)
         if not m or tuple(int(x) for x in m.groups()) < (2, 1, 0):
-            err(f"core21: uses {', '.join(sorted(uses))}, so requires_core must start at >=2.1.0 "
-                f"(got '{requires_core}')")
+            err(
+                f"core21: uses {', '.join(sorted(uses))}, so requires_core must start at >=2.1.0 "
+                f"(got '{requires_core}')"
+            )
     seen: set[str] = set()
     for fname, key in keys:
         if not key or len(key) > 15 or re.search(r"[\s\"\\]", key):
-            err(f"core21: {fname}: setting key '{key}' must be 1-15 characters, no whitespace, quote or backslash")
+            err(
+                f"core21: {fname}: setting key '{key}' must be 1-15 characters, no whitespace, quote or backslash"
+            )
         if key in seen:
             err(f"core21: {fname}: setting key '{key}' declared twice")
         seen.add(key)
@@ -276,16 +351,28 @@ def check_core21(src: Path, requires_core: str, err) -> None:
 def check_repo(registry) -> list[Problem]:
     problems: list[Problem] = []
     modules_dir = REPO / "modules"
-    allowed = {m.dir / "module.properties" for m in registry.all if m.dir.parent == modules_dir}
+    allowed = {
+        m.dir / "module.properties" for m in registry.all if m.dir.parent == modules_dir
+    }
     for f in sorted(REPO.rglob("module.properties")):
         if f not in allowed and ".git" not in f.parts:
-            problems.append(Problem("repo", f"stray: {f.relative_to(REPO)} (only modules/<slug>/module.properties)"))
+            problems.append(
+                Problem(
+                    "repo",
+                    f"stray: {f.relative_to(REPO)} (only modules/<slug>/module.properties)",
+                )
+            )
     for f in sorted(REPO.rglob("*.ino")):
         if ".git" not in f.parts and modules_dir not in f.parents:
             problems.append(Problem("repo", f"stray: {f.relative_to(REPO)}"))
     for base in (REPO, modules_dir):
         for d in sorted(base.glob("xewe-os-module-*")):
-            problems.append(Problem("repo", f"stray: {d.relative_to(REPO)}/ (old layout; use modules/<slug>/)"))
+            problems.append(
+                Problem(
+                    "repo",
+                    f"stray: {d.relative_to(REPO)}/ (old layout; use modules/<slug>/)",
+                )
+            )
     return problems
 
 
@@ -298,16 +385,27 @@ def read_harness(path: Path) -> tuple[str | None, set[str]]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(description="Validate the modules of this repo (doc/contract.md section 5).")
-    ap.add_argument("--harness", type=Path, metavar="DIR",
-                    help="xewe-os harness: its xewe.toml gives [core] ref and [libraries]")
-    ap.add_argument("--write-index", action="store_true", help=f"rewrite {INDEX} and exit")
+    ap = argparse.ArgumentParser(
+        description="Validate the modules of this repo (doc/contract.md section 5)."
+    )
+    ap.add_argument(
+        "--harness",
+        type=Path,
+        metavar="DIR",
+        help="xewe-os harness: its xewe.toml gives [core] ref and [libraries]",
+    )
+    ap.add_argument(
+        "--write-index", action="store_true", help=f"rewrite {INDEX} and exit"
+    )
     args = ap.parse_args(argv)
 
     try:
         from xewe.modules import registry as xm
     except ImportError:
-        print("xewe-os-tools not importable; run with <harness>/build/tools/.venv/bin/python", file=sys.stderr)
+        print(
+            "xewe-os-tools not importable; run with <harness>/build/tools/.venv/bin/python",
+            file=sys.stderr,
+        )
         return EXIT_NOT_SETUP
 
     core_ref, libraries = None, None
@@ -335,17 +433,28 @@ def main(argv: list[str] | None = None) -> int:
         return EXIT_USAGE
     problems = list(xm.validate(registry, core_ref))
     for m in registry.all:
-        if m.dir.parent == REPO / "modules":  # anything else is reported as stray by check_repo
+        if (
+            m.dir.parent == REPO / "modules"
+        ):  # anything else is reported as stray by check_repo
             problems.extend(check_module(m, libraries, catalogue))
     problems.extend(check_repo(registry))
     index = REPO / INDEX
-    if not index.is_file() or index.read_text(encoding="utf-8") != render_index(registry):
-        problems.append(Problem("repo", f"index: {INDEX} is out of date; run tools/validate.py --write-index"))
+    if not index.is_file() or index.read_text(encoding="utf-8") != render_index(
+        registry
+    ):
+        problems.append(
+            Problem(
+                "repo",
+                f"index: {INDEX} is out of date; run tools/validate.py --write-index",
+            )
+        )
 
     for problem in problems:
         print(str(problem))
     errors = sum(1 for x in problems if x.error)
-    print(f"{len(registry.all)} modules, {errors} errors, {len(problems) - errors} warnings")
+    print(
+        f"{len(registry.all)} modules, {errors} errors, {len(problems) - errors} warnings"
+    )
     return EXIT_FAIL if errors else EXIT_OK
 
 

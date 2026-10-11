@@ -4,48 +4,49 @@
 
 #include "WebInterface.h"
 
-
-WebInterface::WebInterface(xewe::Os& host,
-                           Wifi&     wifi_ref)
-      : xewe::Module(host,
-               /* id                  */ "web_interface",
-               /* name                */ "Web Interface",
-               /* description         */ "Allows to interact with other devices on the local network",
-               /* requires_init_setup */ true,
-               /* can_be_disabled     */ false,
-               /* has_cli_cmds        */ true)
-      , wifi(wifi_ref)
-{
+WebInterface::WebInterface(xewe::Os& host, Wifi& wifi_ref)
+    : xewe::Module(host,
+          /* id                  */ "web_interface",
+          /* name                */ "Web Interface",
+          /* description         */ "Allows to interact with other devices on the local network",
+          /* requires_init_setup */ true,
+          /* can_be_disabled     */ false,
+          /* has_cli_cmds        */ true),
+      wifi(wifi_ref) {
     add_requirement(wifi);
 }
 
 xewe::Settings WebInterface::settings() const {
     static constexpr xewe::SettingDef table[] = {
-        xewe::setting<&WebInterface::port>("port", 1, 65535, 80, "HTTP port", xewe::SettingDef::RESTART),
-        xewe::setting<&WebInterface::root>("root", 31, "", "GET / redirects here (e.g. /pad); empty = the console"),
+        xewe::setting<&WebInterface::port>(
+            "port", 1, 65535, 80, "HTTP port", xewe::SettingDef::RESTART),
+        xewe::setting<&WebInterface::root>(
+            "root", 31, "", "GET / redirects here (e.g. /pad); empty = the console"),
     };
     return {table, this};
 }
 
 bool WebInterface::redirect_root(const std::string& path) {
-    if (!path.empty() && path[0] != '/') return false;
+    if (!path.empty() && path[0] != '/')
+        return false;
     return apply_setting("root", path);
 }
 
-void WebInterface::begin_routines_regular () {
+void WebInterface::begin_routines_regular() {
     http_server.on("/", HTTP_GET, std::bind(&WebInterface::serve_root, this));
     http_server.on("/console", HTTP_GET, std::bind(&WebInterface::serve_main_page, this));
     http_server.on("/cmd", HTTP_GET, std::bind(&WebInterface::handle_command_request, this));
     http_server.begin(port);
     os.serial.print("Web Interface now available at:\nhttp://" + wifi.get_local_ip() +
-                    (port == 80 ? std::string() : ":" + std::to_string(port)));
+        (port == 80 ? std::string() : ":" + std::to_string(port)));
 }
-void WebInterface::loop () {
+void WebInterface::loop() {
     http_server.handleClient();
 }
 
-std::string WebInterface::status (const bool verbose) const {
-    if (is_disabled()) return Module::status(verbose);
+std::string WebInterface::status(const bool verbose) const {
+    if (is_disabled())
+        return Module::status(verbose);
 
     const unsigned long uptime_s = millis() / 1000UL;
     const uint32_t free_heap = ESP.getFreeHeap();
@@ -53,17 +54,20 @@ std::string WebInterface::status (const bool verbose) const {
     const uint32_t used_heap = total_heap - free_heap;
     const float heap_usage = total_heap ? (used_heap * 100.0f) / total_heap : 0.0f;
 
-    const std::string out = Module::status(false) + "\n" + xewe::str::format(
-        "Uptime: %lud %02lu:%02lu:%02lu\nMemory usage: %.2f%% (%lu / %lu bytes)",
-        uptime_s / 86400UL, (uptime_s % 86400UL) / 3600UL, (uptime_s % 3600UL) / 60UL, uptime_s % 60UL,
-        heap_usage, static_cast<unsigned long>(used_heap), static_cast<unsigned long>(total_heap));
+    const std::string out = Module::status(false) + "\n" +
+        xewe::str::format("Uptime: %lud %02lu:%02lu:%02lu\nMemory usage: %.2f%% (%lu / %lu bytes)",
+            uptime_s / 86400UL, (uptime_s % 86400UL) / 3600UL, (uptime_s % 3600UL) / 60UL,
+            uptime_s % 60UL, heap_usage, static_cast<unsigned long>(used_heap),
+            static_cast<unsigned long>(total_heap));
 
-    if (verbose) os.serial.print(out);
+    if (verbose)
+        os.serial.print(out);
     return out;
 }
 
 void WebInterface::serve_root() {
-    if (is_disabled()) return;
+    if (is_disabled())
+        return;
     if (root_handler) {
         root_handler();
     } else if (!root.empty() && root[0] == '/' && root != "/") {
@@ -75,12 +79,14 @@ void WebInterface::serve_root() {
 }
 
 void WebInterface::serve_main_page() {
-    if (is_disabled()) return;
+    if (is_disabled())
+        return;
     http_server.send_P(200, "text/html", INDEX_HTML);
 }
 
 void WebInterface::handle_command_request() {
-    if (is_disabled()) return;
+    if (is_disabled())
+        return;
 
     if (http_server.hasArg("c")) {
         std::string command_text = http_server.arg("c").c_str();

@@ -4,33 +4,25 @@
 
 #include "Time.h"
 
-
-Time::Time(xewe::Os& host,
-           Wifi&     wifi_ref)
-    : xewe::Module(host, "time", "Time", "Handles NTP and Timezone", true, true, true)
-    , wifi(wifi_ref)
-{
+Time::Time(xewe::Os& host, Wifi& wifi_ref)
+    : xewe::Module(host, "time", "Time", "Handles NTP and Timezone", true, true, true),
+      wifi(wifi_ref) {
     add_requirement(wifi);
 
-    register_command({
-        "set_zone",
-        "Set timezone offset (e.g. GMT-08:00)",
-        "$time set_zone GMT-08:00",
-        1,
-        [this](xewe::span<const std::string> args) { cli_set_timezone(args); }
-    });
-    register_command({
-        "fetch",
-        "Get current time from the web",
-        "$time fetch",
-        0,
-        [this](xewe::span<const std::string>) { get_time_from_web_init(); sync_and_print(); }
-    });
+    register_command(
+        {"set_zone", "Set timezone offset (e.g. GMT-08:00)", "$time set_zone GMT-08:00", 1,
+            [this](xewe::span<const std::string> args) { cli_set_timezone(args); }});
+    register_command({"fetch", "Get current time from the web", "$time fetch", 0,
+        [this](xewe::span<const std::string>) {
+            get_time_from_web_init();
+            sync_and_print();
+        }});
 }
 
 xewe::Settings Time::settings() const {
     static constexpr xewe::SettingDef table[] = {
-        xewe::setting<&Time::tz_gmt_str>("tz_gmt_str", 9, "GMT+00:00", "Timezone offset, GMT+HH:MM"),
+        xewe::setting<&Time::tz_gmt_str>(
+            "tz_gmt_str", 9, "GMT+00:00", "Timezone offset, GMT+HH:MM"),
     };
     return {table, this};
 }
@@ -38,12 +30,13 @@ xewe::Settings Time::settings() const {
 void Time::on_setting_changed(const xewe::SettingDef&) {
     std::string normalized_gmt;
     if (!xewe::str::parse_gmt_offset(tz_gmt_str, normalized_gmt)) {
-        os.serial.print("! Time: invalid timezone, use GMT+HH:MM (e.g. GMT-08:00); kept " + active_tz_string);
-        apply_setting("tz_gmt_str", active_tz_string);             // put the last good value back
+        os.serial.print(
+            "! Time: invalid timezone, use GMT+HH:MM (e.g. GMT-08:00); kept " + active_tz_string);
+        apply_setting("tz_gmt_str", active_tz_string); // put the last good value back
         return;
     }
     if (normalized_gmt != tz_gmt_str) {
-        apply_setting("tz_gmt_str", normalized_gmt);               // store the normal form; applies there
+        apply_setting("tz_gmt_str", normalized_gmt); // store the normal form; applies there
         return;
     }
     apply_timezone(tz_gmt_str);
@@ -56,36 +49,30 @@ void Time::begin_routines_required() {
 void Time::begin_routines_init() {
     os.serial.print("Detecting Timezone...", "");
 
-    const char* TZ_ENDPOINTS[] = {
-        "http://ipwho.is/?fields=success,timezone.offset,timezone.utc",
-        "http://ipwhois.app/json/",
-        "http://api.ip2location.io/"
-    };
+    const char* TZ_ENDPOINTS[] = {"http://ipwho.is/?fields=success,timezone.offset,timezone.utc",
+        "http://ipwhois.app/json/", "http://api.ip2location.io/"};
 
-    const char* TZ_SEARCH_KEYS[] = {
-        "\"utc\"",
-        "\"timezone_gmt\"",
-        "\"time_zone\""
-    };
+    const char* TZ_SEARCH_KEYS[] = {"\"utc\"", "\"timezone_gmt\"", "\"time_zone\""};
 
     TzRace ctx;
     ctx.winner = xSemaphoreCreateBinary();
-    ctx.done   = xSemaphoreCreateCounting(3, 0);
+    ctx.done = xSemaphoreCreateCounting(3, 0);
 
     for (int i = 0; i < 3; i++) {
         xTaskCreate(fetch_tz_task, "fetch_tz_task", 4096,
-            new TzArg{TZ_ENDPOINTS[i], TZ_SEARCH_KEYS[i], &ctx}, 5, NULL
-        );
+            new TzArg{TZ_ENDPOINTS[i], TZ_SEARCH_KEYS[i], &ctx}, 5, NULL);
     }
 
     bool tz_found = false;
     for (int i = 0; i < 30 && !tz_found; i++) {
         tz_found = xSemaphoreTake(ctx.winner, pdMS_TO_TICKS(200)) == pdTRUE;
-        if (!tz_found) os.serial.print(".", "");
+        if (!tz_found)
+            os.serial.print(".", "");
     }
 
     ctx.abort.store(true);
-    for (int i = 0; i < 3; i++) xSemaphoreTake(ctx.done, portMAX_DELAY); // join workers
+    for (int i = 0; i < 3; i++)
+        xSemaphoreTake(ctx.done, portMAX_DELAY); // join workers
     vSemaphoreDelete(ctx.winner);
     vSemaphoreDelete(ctx.done);
     os.serial.print();
@@ -94,12 +81,12 @@ void Time::begin_routines_init() {
         get_time_from_web_wait(true);
         std::string gmt_str(ctx.result);
         apply_timezone(gmt_str);
-        tm   ct = get_current_time();
+        tm ct = get_current_time();
 
         char prompt[128];
         snprintf(prompt, sizeof(prompt), "Is your time: %04d-%02d-%02d %02d:%02d:%02d (%s)?",
-            ct.tm_year + 1900, ct.tm_mon + 1, ct.tm_mday, ct.tm_hour, ct.tm_min, ct.tm_sec, gmt_str.c_str()
-        );
+            ct.tm_year + 1900, ct.tm_mon + 1, ct.tm_mday, ct.tm_hour, ct.tm_min, ct.tm_sec,
+            gmt_str.c_str());
 
         if (os.serial.get_yn(prompt)) {
             apply_setting("tz_gmt_str", gmt_str);
@@ -112,10 +99,12 @@ void Time::begin_routines_init() {
 
     while (true) {
         std::string normalized_gmt;
-        std::string tz_input = os.serial.get_string("Enter your timezone offset (e.g. GMT-08:00)\nFor support visit:\nhttps://webbrowsertools.com/timezone/");
+        std::string tz_input =
+            os.serial.get_string("Enter your timezone offset (e.g. GMT-08:00)\nFor support "
+                                 "visit:\nhttps://webbrowsertools.com/timezone/");
 
         if (xewe::str::parse_gmt_offset(tz_input, normalized_gmt)) {
-            apply_setting("tz_gmt_str", normalized_gmt);           // saves and applies
+            apply_setting("tz_gmt_str", normalized_gmt); // saves and applies
             os.serial.printf("Timezone set to %s\n", normalized_gmt.c_str());
             return;
         }
@@ -123,34 +112,37 @@ void Time::begin_routines_init() {
 }
 
 void Time::begin_routines_regular() {
-    apply_timezone(tz_gmt_str);             // loaded by the core (table default GMT+00:00)
+    apply_timezone(tz_gmt_str); // loaded by the core (table default GMT+00:00)
     sync_and_print();
 }
 
 std::string Time::status(bool verbose) const {
     std::string s = Module::status(false);
-    if (is_enabled()) s += "\n" + get_current_time_str();
-    if (verbose) os.serial.print(s);
+    if (is_enabled())
+        s += "\n" + get_current_time_str();
+    if (verbose)
+        os.serial.print(s);
     return s;
 }
 
 tm Time::get_current_time() const {
     const time_t now = time(nullptr);
-    tm           tm_now{};
+    tm tm_now{};
     localtime_r(&now, &tm_now);
     return tm_now;
 }
 
 std::string Time::get_current_time_str() const {
-    if (is_disabled()) return "Time module disabled";
-    if (!time_set) return "Time is not set";
+    if (is_disabled())
+        return "Time module disabled";
+    if (!time_set)
+        return "Time is not set";
 
-    tm   current_time = get_current_time();
+    tm current_time = get_current_time();
     char time_str[64];
     snprintf(time_str, sizeof(time_str), "%04d-%02d-%02d %02d:%02d:%02d",
         current_time.tm_year + 1900, current_time.tm_mon + 1, current_time.tm_mday,
-        current_time.tm_hour, current_time.tm_min, current_time.tm_sec
-    );
+        current_time.tm_hour, current_time.tm_min, current_time.tm_sec);
     return std::string(time_str);
 }
 
@@ -161,18 +153,19 @@ void Time::get_time_from_web_init() {
     esp_netif_sntp_deinit();
 
     esp_sntp_config_t sntp_cfg = ESP_NETIF_SNTP_DEFAULT_CONFIG_MULTIPLE(
-        3, ESP_SNTP_SERVER_LIST("pool.ntp.org", "time.google.com", "time.cloudflare.com")
-    );
+        3, ESP_SNTP_SERVER_LIST("pool.ntp.org", "time.google.com", "time.cloudflare.com"));
     esp_netif_sntp_init(&sntp_cfg);
 }
 
 bool Time::get_time_from_web_wait(const bool verbose) {
-    if (verbose) os.serial.print("Syncing time from server...", "");
+    if (verbose)
+        os.serial.print("Syncing time from server...", "");
 
-    uint8_t   retries  = 0;
+    uint8_t retries = 0;
     esp_err_t sync_err = ESP_FAIL;
     while ((sync_err = esp_netif_sntp_sync_wait(pdMS_TO_TICKS(200))) != ESP_OK && retries < 50) {
-        if (verbose) os.serial.print(".", "");
+        if (verbose)
+            os.serial.print(".", "");
         vTaskDelay(pdMS_TO_TICKS(200));
         retries++;
     }
@@ -182,7 +175,7 @@ bool Time::get_time_from_web_wait(const bool verbose) {
 }
 
 void Time::apply_timezone(std::string_view gmt_offset_str) {
-    active_tz_string     = std::string(gmt_offset_str);
+    active_tz_string = std::string(gmt_offset_str);
 
     std::string posix_tz = std::string(gmt_offset_str);
     if (posix_tz.length() >= 4) {
@@ -196,7 +189,8 @@ void Time::apply_timezone(std::string_view gmt_offset_str) {
 void Time::cli_set_timezone(xewe::span<const std::string> args) {
     std::string normalized_gmt;
     // alias of `$time set tz_gmt_str <offset>`, kept with its own messages
-    if (xewe::str::parse_gmt_offset(args[0], normalized_gmt) && apply_setting("tz_gmt_str", normalized_gmt)) {
+    if (xewe::str::parse_gmt_offset(args[0], normalized_gmt) &&
+        apply_setting("tz_gmt_str", normalized_gmt)) {
         os.serial.print("Time: timezone set to " + tz_gmt_str);
     } else {
         os.serial.print("! Time: invalid timezone, use GMT+HH:MM (e.g. GMT-08:00)");
@@ -204,18 +198,21 @@ void Time::cli_set_timezone(xewe::span<const std::string> args) {
 }
 
 void Time::sync_and_print() {
-    if (get_time_from_web_wait(true)) print_current_time();
-    else os.serial.print("! Time: unable to reach the time server; check the internet connection, then $time fetch");
+    if (get_time_from_web_wait(true))
+        print_current_time();
+    else
+        os.serial.print("! Time: unable to reach the time server; check the internet connection, "
+                        "then $time fetch");
 }
 
 void Time::fetch_tz_task(void* pvParameters) {
-    TzArg*                   arg    = static_cast<TzArg*>(pvParameters);
-    TzRace*                  ctx    = arg->ctx;
+    TzArg* arg = static_cast<TzArg*>(pvParameters);
+    TzRace* ctx = arg->ctx;
 
     esp_http_client_config_t config = {};
-    config.url                      = arg->url;
-    config.method                   = HTTP_METHOD_GET;
-    config.timeout_ms               = 5000;
+    config.url = arg->url;
+    config.method = HTTP_METHOD_GET;
+    config.timeout_ms = 5000;
 
     esp_http_client_handle_t client = esp_http_client_init(&config);
 
@@ -226,20 +223,22 @@ void Time::fetch_tz_task(void* pvParameters) {
         esp_http_client_fetch_headers(client);
 
         char buffer[1024] = {0};
-        int  total_read   = 0;
-        int  read_len     = 0;
+        int total_read = 0;
+        int read_len = 0;
 
         while (!ctx->abort.load() &&
-               (read_len = esp_http_client_read(client, buffer + total_read, sizeof(buffer) - total_read - 1)) > 0) {
+            (read_len = esp_http_client_read(
+                 client, buffer + total_read, sizeof(buffer) - total_read - 1)) > 0) {
             total_read += read_len;
-            if (total_read >= sizeof(buffer) - 1) break;
+            if (total_read >= sizeof(buffer) - 1)
+                break;
         }
 
         if (!ctx->abort.load() && total_read > 0) {
             buffer[total_read] = '\0';
             std::string resp(buffer);
 
-            size_t      pos = resp.find(arg->key);
+            size_t pos = resp.find(arg->key);
             if (pos != std::string::npos) {
                 size_t start_quote = resp.find('"', pos + std::strlen(arg->key));
                 if (start_quote != std::string::npos && start_quote + 7 <= resp.length()) {
@@ -256,7 +255,8 @@ void Time::fetch_tz_task(void* pvParameters) {
         }
     }
 
-    if (client) esp_http_client_cleanup(client);
+    if (client)
+        esp_http_client_cleanup(client);
     xSemaphoreGive(ctx->done); // last touch of ctx
     delete arg;
     vTaskDelete(NULL);

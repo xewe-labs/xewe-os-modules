@@ -5,7 +5,7 @@ WiFi credentials stored and connected.
 """
 
 ID = "wifi"
-NAME = "Wifi"          # module.properties name == C++ name argument
+NAME = "Wifi"  # module.properties name == C++ name argument
 
 
 def test_compiles(compiled):
@@ -14,12 +14,14 @@ def test_compiles(compiled):
 
 
 def test_status(serial):
-    serial.command(f"${ID} status", expect=rf"{NAME} module (enabled|disabled)", timeout=5)
+    serial.command(
+        f"${ID} status", expect=rf"{NAME} module (enabled|disabled)", timeout=5
+    )
 
 
 def test_scan_lists_networks(serial):
     serial.command("$wifi scan", expect=r"Scanning WiFi networks", timeout=5)
-    serial.expect(r"^\s*0\. \S", timeout=20)   # numbered, de-duplicated SSIDs
+    serial.expect(r"^\s*0\. \S", timeout=20)  # numbered, de-duplicated SSIDs
 
 
 def test_settings_table_masks_password(serial):
