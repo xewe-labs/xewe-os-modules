@@ -28,14 +28,15 @@ project's build. To write a module of your own inside a sketch, start at level 2
 | Module | What it does | Needs |
 |---|---|---|
 | [buttons](modules/buttons) | Binds CLI commands to physical buttons, with software debouncing | |
+| [led](modules/led) | Addressable LED strip: 46 chipsets, 7 effects, brightness and colour order | |
+| [led-web](modules/led-web) | LED control page in the browser, with live sync over a WebSocket | led, web-interface |
 | [pins](modules/pins) | GPIO, ADC, PWM and I2C access from the command line | |
 | [scheduler](modules/scheduler) | Runs stored commands on a weekly schedule | time |
 | [time](modules/time) | NTP time sync and automatic timezone detection | wifi |
 | [web-interface](modules/web-interface) | An HTTP page and command endpoint for other devices on the network | wifi |
 | [wifi](modules/wifi) | Joins a WiFi network and keeps the connection alive | |
 
-The unfinished `fan`, `led` and `mlx90614` modules are parked outside the repository until they are
-ready.
+The unfinished `fan` and `mlx90614` modules are parked outside the repository until they are ready.
 
 [doc/modules.md](doc/modules.md) is the generated index with ids, versions and the XeWeCore range each module
 needs. Each module's README lists its commands, settings, NVS keys, build defines and tests.

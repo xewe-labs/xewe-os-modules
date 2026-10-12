@@ -1,0 +1,34 @@
+diff -ru a/src/Modules/Hardware/LedStrip/LedStrip.cpp b/src/Modules/Hardware/LedStrip/LedStrip.cpp
+--- a/src/Modules/Hardware/LedStrip/LedStrip.cpp	2026-10-11 23:17:30.210565729 -0700
++++ b/src/Modules/Hardware/LedStrip/LedStrip.cpp	2026-10-11 23:17:30.221466672 -0700
+@@ -572,6 +572,7 @@
+ 
+     // load params from memory
+     num_led                  = controller.nvs.read<uint16_t>(id, "num_led", LED_STRIP_NUM_LEDS_MAX);
++    mode_controller->set_length(num_led);
+ 
+     uint8_t selected_chip_id = controller.nvs.read<uint8_t>(id, "chip");
+     set_leds_chipset(LedStrip::LED_CHIPSET_TABLE[selected_chip_id].value);
+diff -ru a/src/Modules/Hardware/LedStrip/ModeController/ModeController.cpp b/src/Modules/Hardware/LedStrip/ModeController/ModeController.cpp
+--- a/src/Modules/Hardware/LedStrip/ModeController/ModeController.cpp	2026-10-11 23:17:30.213696153 -0700
++++ b/src/Modules/Hardware/LedStrip/ModeController/ModeController.cpp	2026-10-11 23:17:30.221511131 -0700
+@@ -166,6 +166,7 @@
+     }
+ 
+     DBG_PRINTLN(ModeController, "<- ModeController::adj_mode_param() [Failed: Key not found]");
++    return false;
+ }
+ 
+ void ModeController::reset_current_mode() {
+diff -ru a/src/Modules/Hardware/LedStrip/ModeController/Modes/FadeColorTwoZone/FadeColorTwoZone.cpp b/src/Modules/Hardware/LedStrip/ModeController/Modes/FadeColorTwoZone/FadeColorTwoZone.cpp
+--- a/src/Modules/Hardware/LedStrip/ModeController/Modes/FadeColorTwoZone/FadeColorTwoZone.cpp	2026-10-11 23:17:30.206880720 -0700
++++ b/src/Modules/Hardware/LedStrip/ModeController/Modes/FadeColorTwoZone/FadeColorTwoZone.cpp	2026-10-11 23:17:30.221370672 -0700
+@@ -19,7 +19,7 @@
+     }), params )
+     , counter(0)
+ {
+-    std::array<uint8_t, 3> base_rgb = hsv_to_rgb({
++    base_rgb = hsv_to_rgb({
+         static_cast<uint8_t>(get_param("hue")),
+         255, // Max saturation (matching your original hardcoded 255)
+         255  // Max value (matching your original hardcoded 255)

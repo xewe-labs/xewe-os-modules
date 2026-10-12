@@ -3,3 +3,11 @@
 # unless the harness xewe.toml [libraries] pins the same name (the manifest wins).
 # Keep entries sorted; one table per library name, exactly repo and ref. tools/validate.py warns
 # about a depends_libraries name that is missing here.
+
+[FastLED]
+repo = "https://github.com/FastLED/FastLED"
+ref = "3.10.3"
+
+[WebSockets]
+repo = "https://github.com/xewe-labs/xewe-led-library-websockets"
+ref = "77024d2723788044ac0715bccd2f42e84bdb2817"
