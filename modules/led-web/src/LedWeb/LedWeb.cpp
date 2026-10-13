@@ -149,10 +149,7 @@ void LedWeb::apply_cors() {
 // ---------------------------------------------------------------------------------------------
 // WebSocket
 // ---------------------------------------------------------------------------------------------
-void LedWeb::on_web_socket_event(uint8_t num, WStype_t type, uint8_t* payload, size_t length) {
-    (void)num;
-    (void)payload;
-    (void)length;
+void LedWeb::on_web_socket_event(uint8_t, WStype_t type, uint8_t*, size_t) {
     if (is_disabled())
         return;
 

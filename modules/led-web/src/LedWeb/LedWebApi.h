@@ -144,6 +144,12 @@ inline std::string frame_all(
     return std::string(buf, static_cast<std::size_t>(n));
 }
 
+// the F frame of the led's current values: colour, last non-zero brightness, state and mode id
+template <typename LedT> std::string frame_current(const LedT& led) {
+    return frame_all(
+        led.get_rgb(), led.get_brightness(), led.get_state(), led.get_current_mode_id());
+}
+
 // ---------------------------------------------------------------------------------------------
 // Handlers. `Request` provides has(name), arg(name) -> std::string and arg_int(name) -> long
 // (Arduino String::toInt on the firmware); `LedT` is the led module (or a host fake) with its
@@ -180,8 +186,7 @@ Response handle_set(const Request& req, LedT& led, const void* origin) {
 
 // GET /state: the F frame of the live colour, the last non-zero brightness, state and mode id
 template <typename LedT> Response state_response(const LedT& led) {
-    return {200, "text/plain",
-        frame_all(led.get_rgb(), led.get_brightness(), led.get_state(), led.get_current_mode_id())};
+    return {200, "text/plain", frame_current(led)};
 }
 
 // GET /modes
@@ -246,8 +251,7 @@ public:
     // included) as one F frame
     template <typename LedT> void page_connected(const LedT& led) {
         clients++;
-        send_frame(frame_all(
-            led.get_rgb(), led.get_brightness(), led.get_state(), led.get_current_mode_id()));
+        send_frame(frame_current(led));
     }
     // a page disconnected; the count never goes below 0
     void page_disconnected() {

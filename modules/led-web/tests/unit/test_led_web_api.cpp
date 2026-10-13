@@ -271,6 +271,8 @@ void test_state_modes_name() {
     led.state = true;
     led.mode = 0;
     CHECK(led_web_api::state_response(led).body == "F00FF00,50,1,0");
+    // the same frame a connecting page gets
+    CHECK(led_web_api::frame_current(led) == led_web_api::state_response(led).body);
 
     led.modes_json = "[{\"id\":0,\"name\":\"Solid\",\"params\":[{\"key\":\"hue\",\"display_name\":"
                      "\"Hue\",\"min\":0,\"max\":255,\"step\":1,\"value\":85,\"type\":\"b\"}]}]";
