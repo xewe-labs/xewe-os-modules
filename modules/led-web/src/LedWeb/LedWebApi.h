@@ -19,7 +19,7 @@
 #include <string>
 #include <string_view>
 
-#include <XeWeCore/Utils/String.h>
+#include <XeWeCore/Utils/Color.h>
 
 #include "../Led/LedListener.h"
 
@@ -167,7 +167,7 @@ template <typename Request, typename LedT>
 Response handle_set(const Request& req, LedT& led, const void* origin) {
     if (req.has("color")) {
         std::array<uint8_t, 3> rgb{};
-        if (!xewe::str::parse_hex_color(req.arg("color"), rgb[0], rgb[1], rgb[2]))
+        if (!xewe::color::parse_hex_color(req.arg("color"), rgb[0], rgb[1], rgb[2]))
             return {400, "text/plain", SET_BAD_COLOR};
         led.sync_color(rgb, origin);
     } else if (req.has("brightness")) {

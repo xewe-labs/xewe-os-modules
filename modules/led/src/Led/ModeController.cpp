@@ -87,20 +87,22 @@ bool ModeController::set_mode_param(std::string_view key, uint16_t value) {
 void ModeController::set_rgb(const std::array<uint8_t, 3> new_rgb) {
     auto params_map = get_params_as_map();
 
+    // every value taken from the colour is kept inside the mode's own range with the rule of
+    // set_mode_param, so Color Fade's "Min Saturation" (0..245) never stores 246..255
     if (params_map.count("hue") || params_map.count("sat")) {
         const std::array<uint8_t, 3> new_hsv = xewe::color::rgb_to_hsv(new_rgb);
         if (params_map.count("hue"))
-            params_map["hue"] = new_hsv[0];
+            params_map["hue"] = normalize_mode_param_value("hue", new_hsv[0]);
         if (params_map.count("sat"))
-            params_map["sat"] = new_hsv[1];
+            params_map["sat"] = normalize_mode_param_value("sat", new_hsv[1]);
     }
 
     if (params_map.count("r"))
-        params_map["r"] = new_rgb[0];
+        params_map["r"] = normalize_mode_param_value("r", new_rgb[0]);
     if (params_map.count("g"))
-        params_map["g"] = new_rgb[1];
+        params_map["g"] = normalize_mode_param_value("g", new_rgb[1]);
     if (params_map.count("b"))
-        params_map["b"] = new_rgb[2];
+        params_map["b"] = normalize_mode_param_value("b", new_rgb[2]);
 
     set_mode(get_current_mode_id(), params_map);
 }
@@ -108,20 +110,21 @@ void ModeController::set_rgb(const std::array<uint8_t, 3> new_rgb) {
 void ModeController::set_hsv(const std::array<uint8_t, 3> new_hsv) {
     auto params_map = get_params_as_map();
 
+    // kept inside the mode's own ranges, as in set_rgb
     if (params_map.count("r") || params_map.count("g") || params_map.count("b")) {
         const std::array<uint8_t, 3> new_rgb = xewe::color::hsv_to_rgb(new_hsv);
         if (params_map.count("r"))
-            params_map["r"] = new_rgb[0];
+            params_map["r"] = normalize_mode_param_value("r", new_rgb[0]);
         if (params_map.count("g"))
-            params_map["g"] = new_rgb[1];
+            params_map["g"] = normalize_mode_param_value("g", new_rgb[1]);
         if (params_map.count("b"))
-            params_map["b"] = new_rgb[2];
+            params_map["b"] = normalize_mode_param_value("b", new_rgb[2]);
     }
 
     if (params_map.count("hue"))
-        params_map["hue"] = new_hsv[0];
+        params_map["hue"] = normalize_mode_param_value("hue", new_hsv[0]);
     if (params_map.count("sat"))
-        params_map["sat"] = new_hsv[1];
+        params_map["sat"] = normalize_mode_param_value("sat", new_hsv[1]);
 
     set_mode(get_current_mode_id(), params_map);
 }

@@ -9,6 +9,7 @@
 // text, the three fixes, and the lock discipline (no frame inside a command, nothing slow under
 // the lock). Built by test_led.py with FastLED's stub platform and host/Arduino.h.
 
+#include <algorithm>
 #include <array>
 #include <cstdio>
 #include <map>
@@ -22,6 +23,8 @@
 #include "../../src/Led/LedEngine.h"
 #include "../../src/Led/ModeController.h"
 #include "../../src/Led/ModeRegistry.h"
+
+#include <XeWeCore/Utils/String.h>
 
 // ---------------------------------------------------------------------------------------------
 // Minimal check framework: one line per check, then the summary test_led.py parses
@@ -557,10 +560,11 @@ static void test_mode_commands() {
         CHECK_EQ(f.l.ev.size(), 1ul);
     }
     {
-        // Color Fade: sat max is 245; the round trip after set_mode moves it to 246
+        // Color Fade: sat max is 245; the colour applied again after set_mode (saturation 255)
+        // is kept inside that range
         Fx f;
         f.run("set_mode 1");
-        CHECK_EQ(f.e.get_current_mode_param("sat"), uint16_t(246));
+        CHECK_EQ(f.e.get_current_mode_param("sat"), uint16_t(245));
         f.clear();
         f.run("set_mode_param speed 999");
         CHECK_EQ(f.e.get_current_mode_param("speed"), uint16_t(50));
@@ -1314,6 +1318,200 @@ static void test_lock_discipline() {
     CHECK_EQ(inj->io.depth, 0);
 }
 
+// ---------------------------------------------------------------------------------------------
+// 14. Values taken from a colour stay inside the mode's ranges
+// ---------------------------------------------------------------------------------------------
+static void test_colour_params_in_range() {
+    {
+        // Color Fade's "Min Saturation" is 0..245: a colour or HSV with more stores 245
+        Fx f(60, 1);
+        f.run("set_rgb 255 0 0");
+        CHECK_EQ(f.e.get_current_mode_param("sat"), uint16_t(245));
+        CHECK_EQ(f.e.get_current_mode_param("hue"), uint16_t(r2h({255, 0, 0})[0]));
+        CHECK_EQ((f.store.values[{1, "sat"}]), uint16_t(245));
+        CHECK_EQ(f.io.writes, V({"rgb=255,0,0"}));
+        CHECK_EQ(f.l.ev, V({"C255,0,0@cli"}));
+        f.run("set_hsv 10 250 255");
+        CHECK_EQ(f.e.get_current_mode_param("sat"), uint16_t(245));
+        f.run("set_rgb 255 30 30"); // saturation 225: in range, kept as it is
+        CHECK_EQ(f.e.get_current_mode_param("sat"), uint16_t(r2h({255, 30, 30})[1]));
+        CHECK_EQ(f.e.get_current_mode_param("sat"), uint16_t(225));
+    }
+    {
+        // the full-range modes keep saturation 255
+        Fx f;
+        f.run("set_rgb 255 0 0");
+        CHECK_EQ(f.e.get_current_mode_param("sat"), uint16_t(255));
+    }
+    // ModeController directly, set_rgb and set_hsv, every mode and a spread of colours: every
+    // parameter stays inside its declared range and is stored as it is shown
+    MemStore store;
+    std::vector<CRGB> buf(XEWE_MODULE_LED_NUM_LEDS_MAX);
+    host::set_millis(10000);
+    ModeController mc(buf.data(), 60, 900, store);
+    mc.set_mode(1);
+    mc.set_rgb({255, 0, 0});
+    CHECK_EQ(mc.get_current_mode_param("sat"), uint16_t(245));
+    mc.set_hsv({10, 250, 255});
+    CHECK_EQ(mc.get_current_mode_param("sat"), uint16_t(245));
+    mc.set_hsv({10, 200, 255});
+    CHECK_EQ(mc.get_current_mode_param("sat"), uint16_t(200));
+    CHECK_EQ(mc.get_current_mode_param("hue"), uint16_t(10));
+    int out_of_range = 0;
+    for (const auto& [id, factory] : ModeRegistry::get_registry()) {
+        mc.set_mode(id);
+        for (int c = 0; c < 64; ++c) {
+            const uint8_t a = uint8_t(c * 37), b = uint8_t(c * 101 + 7), d = uint8_t(255 - c * 3);
+            if (c % 2)
+                mc.set_rgb({a, b, d});
+            else
+                mc.set_hsv({a, b, d});
+            for (const auto& p : mc.get_current_mode_params()) {
+                const uint16_t v = mc.get_current_mode_param(p.key);
+                out_of_range += (v < p.min_value || v > p.max_value) ? 1 : 0;
+                out_of_range += (store.values[{id, p.key}] != v) ? 1 : 0;
+            }
+        }
+    }
+    CHECK_EQ(out_of_range, 0);
+}
+
+// ---------------------------------------------------------------------------------------------
+// 15. Colour-order calibration, twice, on a GRB strip
+// ---------------------------------------------------------------------------------------------
+// What a GRB pixel lights for the bytes on the wire: its first byte drives the green LED, the
+// second the red one. Returns the calibration menu's answer: 1 red, 2 green, 3 blue, 4 other.
+static int grb_pixel_answer(const CRGB& wire) {
+    const uint8_t red = wire.g, green = wire.r, blue = wire.b;
+    if (red > green && red > blue)
+        return 1;
+    if (green > red && green > blue)
+        return 2;
+    if (blue > red && blue > green)
+        return 3;
+    return 4;
+}
+
+// Led::calibrate_color_order's engine steps and answer handling, answered truthfully by a GRB
+// pixel; with_reset = the plain RGB order is set first (without it: the earlier sequence)
+static std::string calibrate_grb(Fx& f, bool with_reset) {
+    if (with_reset)
+        f.e.set_color_order_index(0);
+    std::string value = "BBB";
+    f.e.set_rgb({0, 255, 0});
+    f.e.set_brightness(50);
+    f.e.set_mode(0);
+    f.e.turn_on();
+    f.settle();
+    f.e.render_frame();
+    int answer = grb_pixel_answer(f.e.pixels()[0]);
+    if (answer == 4)
+        return "other";
+    value[answer - 1] = 'G';
+    f.e.set_rgb({255, 0, 0});
+    f.settle();
+    f.e.render_frame();
+    answer = grb_pixel_answer(f.e.pixels()[0]);
+    if (answer == 4)
+        return "other";
+    value[answer - 1] = 'R';
+    const auto it = std::find(LED_COLOR_ORDERS.begin(), LED_COLOR_ORDERS.end(), value);
+    if (it == LED_COLOR_ORDERS.end())
+        return "incorrect";
+    f.e.set_color_order_index(uint8_t(it - LED_COLOR_ORDERS.begin()));
+    return value;
+}
+
+static void test_calibration_twice_on_grb() {
+    {
+        Fx f; // a new device: RGB order
+        f.e.set_color_order_index(0);
+        CHECK_EQ(calibrate_grb(f, true), std::string("GRB"));
+        CHECK_EQ(f.e.get_color_order_index(), uint8_t(2));
+        CHECK_EQ(calibrate_grb(f, true), std::string("GRB")); // calibrated again: same order
+        CHECK_EQ(f.e.get_color_order_index(), uint8_t(2));
+        CHECK_EQ(calibrate_grb(f, true), std::string("GRB"));
+    }
+    {
+        // without the plain RGB order first, the second run reads the answers through GRB: RGB
+        Fx f;
+        f.e.set_color_order_index(0);
+        CHECK_EQ(calibrate_grb(f, false), std::string("GRB"));
+        CHECK_EQ(calibrate_grb(f, false), std::string("RGB"));
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// 16. `$led set voltage <v>`
+// ---------------------------------------------------------------------------------------------
+// The `$led set` handler as Led registers it: led_voltage_refusal first; otherwise the core's set
+// (Module::apply_setting, verbose), modelled here: it stores the value (one NVS write), echoes
+// `<key>=<value>`, then calls on_setting_changed, which accepts 5, 12 and 24.
+struct VoltageSet {
+    std::vector<std::string> out;
+    int nvs_writes = 0;
+    uint8_t voltage = 5;
+    uint8_t active_voltage = 5;
+    void run(const std::string& key, const std::string& value) {
+        const std::string refusal = led_voltage_refusal(key, value, active_voltage);
+        if (!refusal.empty()) {
+            out.push_back(refusal);
+            return;
+        }
+        long long v = 0;
+        if (!xewe::str::parse_int(std::string_view(value), v) || v < 5 || v > 24) {
+            out.push_back("! $led set voltage: expected u8 5..24");
+            return;
+        }
+        voltage = uint8_t(v);
+        ++nvs_writes;
+        out.push_back(key + "=" + std::to_string(voltage));
+        if (led_voltage_refusal(key, std::to_string(voltage), active_voltage).empty())
+            active_voltage = voltage;
+    }
+};
+
+static void test_voltage_refusal() {
+    const std::string bad = "! Led: voltage must be 5, 12 or 24; kept ";
+    CHECK_EQ(led_voltage_refusal("voltage", "9", 5), bad + "5");
+    CHECK_EQ(led_voltage_refusal("voltage", "23", 12), bad + "12");
+    CHECK_EQ(led_voltage_refusal("voltage", " 6 ", 24), bad + "24"); // parsed like the core
+    for (const char* ok : {"5", "12", "24"})
+        CHECK_EQ(led_voltage_refusal("voltage", ok, 5), std::string());
+    // outside 5..24 or not a whole number: the core's own error, not this one
+    for (const char* core_error : {"4", "25", "300", "-1", "abc", "", "9.5"})
+        CHECK_EQ(led_voltage_refusal("voltage", core_error, 5), std::string());
+    // the same reading of the number as the core's parser (xewe::str::parse_int)
+    int disagree = 0;
+    for (const char* text : {"+9", "09", "9 ", "\t9", " 13\n", "0x9", "9a", "- 9", "+", "-", "007",
+             "18", "99999999999999999999", "  ", "1e1"}) {
+        long long n = 0;
+        const bool core_ok = xewe::str::parse_int(std::string_view(text), n);
+        const bool refuse = core_ok && n >= 5 && n <= 24 && n != 5 && n != 12 && n != 24;
+        disagree += refuse != !led_voltage_refusal("voltage", text, 5).empty() ? 1 : 0;
+    }
+    CHECK_EQ(disagree, 0);
+    // other keys are never refused here
+    CHECK_EQ(led_voltage_refusal("chip", "9", 5), std::string());
+    CHECK_EQ(led_voltage_refusal("Voltage", "9", 5), std::string());
+    {
+        VoltageSet s;
+        s.run("voltage", "9"); // refused: nothing echoed, nothing stored
+        CHECK_EQ(s.out, V({"! Led: voltage must be 5, 12 or 24; kept 5"}));
+        CHECK_EQ(s.nvs_writes, 0);
+        CHECK_EQ(s.voltage, uint8_t(5));
+        s.out.clear();
+        s.run("voltage", "12"); // accepted: one echo, one NVS write
+        CHECK_EQ(s.out, V({"voltage=12"}));
+        CHECK_EQ(s.nvs_writes, 1);
+        CHECK_EQ(s.active_voltage, uint8_t(12));
+        s.out.clear();
+        s.run("voltage", "9"); // the kept value is the last accepted one
+        CHECK_EQ(s.out, V({"! Led: voltage must be 5, 12 or 24; kept 12"}));
+        CHECK_EQ(s.nvs_writes, 1);
+    }
+}
+
 int main() {
     test_command_table();
     test_arg_parsing();
@@ -1328,6 +1526,9 @@ int main() {
     test_status_text();
     test_mode_tables_literal();
     test_lock_discipline();
+    test_colour_params_in_range();
+    test_calibration_twice_on_grb();
+    test_voltage_refusal();
     if (g_failures == 0)
         std::printf("PASSED: %d check(s), 0 failure(s)\n", g_checks);
     else

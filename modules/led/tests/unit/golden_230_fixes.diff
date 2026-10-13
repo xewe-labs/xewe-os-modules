@@ -12,6 +12,46 @@ diff -ru a/src/Modules/Hardware/LedStrip/LedStrip.cpp b/src/Modules/Hardware/Led
 diff -ru a/src/Modules/Hardware/LedStrip/ModeController/ModeController.cpp b/src/Modules/Hardware/LedStrip/ModeController/ModeController.cpp
 --- a/src/Modules/Hardware/LedStrip/ModeController/ModeController.cpp	2026-10-11 23:17:30.213696153 -0700
 +++ b/src/Modules/Hardware/LedStrip/ModeController/ModeController.cpp	2026-10-11 23:17:30.221511131 -0700
+@@ -113,14 +113,14 @@
+ 
+     if (params_map.count("hue") || params_map.count("sat")) {
+         const std::array<uint8_t, 3> new_hsv = rgb_to_hsv(new_rgb);
+-        if (params_map.count("hue")) params_map["hue"] = new_hsv[0];
++        if (params_map.count("hue")) params_map["hue"] = normalize_mode_param_value("hue", new_hsv[0]);
+         //        if (params_map.count("hue_a")) params_map["hue_a"] = new_hsv[0];
+-        if (params_map.count("sat")) params_map["sat"] = new_hsv[1];
++        if (params_map.count("sat")) params_map["sat"] = normalize_mode_param_value("sat", new_hsv[1]);
+     }
+ 
+-    if (params_map.count("r")) params_map["r"] = new_rgb[0];
+-    if (params_map.count("g")) params_map["g"] = new_rgb[1];
+-    if (params_map.count("b")) params_map["b"] = new_rgb[2];
++    if (params_map.count("r")) params_map["r"] = normalize_mode_param_value("r", new_rgb[0]);
++    if (params_map.count("g")) params_map["g"] = normalize_mode_param_value("g", new_rgb[1]);
++    if (params_map.count("b")) params_map["b"] = normalize_mode_param_value("b", new_rgb[2]);
+ 
+     set_mode(get_current_mode_id(), params_map);
+ 
+@@ -134,14 +134,14 @@
+ 
+     if (params_map.count("r") || params_map.count("g") || params_map.count("b")) {
+         const std::array<uint8_t, 3> new_rgb = hsv_to_rgb(new_hsv);
+-        if (params_map.count("r")) params_map["r"] = new_rgb[0];
+-        if (params_map.count("g")) params_map["g"] = new_rgb[1];
+-        if (params_map.count("b")) params_map["b"] = new_rgb[2];
++        if (params_map.count("r")) params_map["r"] = normalize_mode_param_value("r", new_rgb[0]);
++        if (params_map.count("g")) params_map["g"] = normalize_mode_param_value("g", new_rgb[1]);
++        if (params_map.count("b")) params_map["b"] = normalize_mode_param_value("b", new_rgb[2]);
+     }
+ 
+-    if (params_map.count("hue")) params_map["hue"] = new_hsv[0];
++    if (params_map.count("hue")) params_map["hue"] = normalize_mode_param_value("hue", new_hsv[0]);
+     //    if (params_map.count("hue_a")) params_map["hue_a"] = new_hsv[0];
+-    if (params_map.count("sat")) params_map["sat"] = new_hsv[1];
++    if (params_map.count("sat")) params_map["sat"] = normalize_mode_param_value("sat", new_hsv[1]);
+ 
+     set_mode(get_current_mode_id(), params_map);
+ 
 @@ -166,6 +166,7 @@
      }
  

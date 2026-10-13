@@ -11,6 +11,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <string>
+#include <string_view>
 
 #include <XeWeCore.h>
 
@@ -33,6 +34,11 @@ struct LedCommand {
 // decimal digits, the rest ignored, 0 when there are none, saturated to the int32 range. Callers
 // narrow the result to the argument type (uint8_t modulo 256, uint16_t modulo 65536).
 int32_t led_arg_to_int(const std::string& text);
+
+// `$led set voltage <v>`: the strip voltage is 5, 12 or 24 V. For a whole number inside the
+// settings row's 5..24 range that is none of these, returns the refusal line (naming the voltage
+// that is kept); for anything else, other keys included, returns "" and the core handles the value
+std::string led_voltage_refusal(std::string_view key, std::string_view value, uint8_t kept);
 
 inline constexpr std::size_t LED_COMMAND_COUNT = 30;
 extern const LedCommand LED_COMMANDS[LED_COMMAND_COUNT];

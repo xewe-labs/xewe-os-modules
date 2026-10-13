@@ -15,6 +15,7 @@ compared with the 2.3.0 sources in that folder.
 
 from __future__ import annotations
 
+import ast
 import concurrent.futures
 import hashlib
 import json
@@ -397,9 +398,10 @@ def test_reset_clears_mode_params_and_stops_output():
 
 # The first-boot wizard of 2.3.0, in source order: console calls (prompt text, menu, get_int bounds),
 # stored keys (literal values only), strip calls and waits of the colour-order calibration, and the
-# point where the found order is applied. Only difference from the 2.3.0 source: the parallel-lines
-# branch stores num_led (the longest line). The chip registration failure message moved to
-# Led::start_strip (checked below).
+# point where the found order is applied. Differences from the 2.3.0 source: the parallel-lines
+# branch stores num_led (the longest line), and the calibration first sets the plain RGB order, so
+# calibrating an already calibrated strip finds its order again. The chip registration failure
+# message moved to Led::start_strip (checked below).
 WIZARD_2_3_0 = [
     (
         "print",
@@ -437,6 +439,7 @@ WIZARD_2_3_0 = [
     ("store", "lines", "0"),
     ("get_int", "How many LEDs do you have connected?", "0, MAX"),
     ("store", "num_led", "{}"),
+    ("order_reset",),  # the test colours in plain RGB order (not in 2.3.0)
     ("set_rgb", "{0, 255, 0}"),
     ("set_brightness", "50"),
     ("set_mode", "0"),
@@ -550,7 +553,7 @@ CALL = re.compile(
     r"(?:os\.nvs|controller\.nvs)\.write<\w+>\(|apply_setting\(|"
     r"(?<![\w.])(?:engine\.)?(set_rgb|set_brightness|set_mode|turn_on|turn_off)\(|"
     r"(run_with_dots|wait_with_dots)\(|(?:os|controller)\.system\.restart\(\)|"
-    r"engine\.set_color_order_index\(color_order_index\)|"
+    r"engine\.set_color_order_index\((?:color_order_index|0)\)|"
     r"color_order_index = static_cast<uint8_t>\(it - color_orders\.begin\(\)\)|"
     r"(?<![\w.:])(set_color_order|calibrate_color_order)\(\)"
 )
@@ -564,7 +567,7 @@ def _events(body, splice=None):
             out.append(("restart",))
             continue
         if "color_order_index" in s:
-            out.append(("order_applied",))
+            out.append(("order_reset",) if s.endswith("(0)") else ("order_applied",))
             continue
         if m[4]:
             out.extend(splice or [("calibration",)])
@@ -658,10 +661,12 @@ def test_wizard_sequence_is_2_3_0():
     assert 'os.serial.print("Shining the light", "");' in common
     if _find_golden() is not None:
         legacy = _legacy_wizard((_legacy_led_strip() / "LedStrip.cpp").read_text())
-        fix = WIZARD_2_3_0.index(
-            ("store", "num_led", "{}")
-        )  # the parallel-lines one comes first
-        assert legacy == WIZARD_2_3_0[:fix] + WIZARD_2_3_0[fix + 1 :]
+        # not in 2.3.0: the parallel-lines num_led store (the first one) and the order reset
+        fixes = {
+            WIZARD_2_3_0.index(("store", "num_led", "{}")),
+            WIZARD_2_3_0.index(("order_reset",)),
+        }
+        assert legacy == [e for i, e in enumerate(WIZARD_2_3_0) if i not in fixes]
 
 
 @pytest.mark.unit
@@ -679,6 +684,110 @@ def test_set_color_order_without_a_name_calibrates():
         r'\{"set_color_order",[^}]*\[\]\(LedEngine& e, Args a\) \{ e\.set_color_order\(a\[0\]\); \},\s*false\}',
         row,
         re.S,
+    )
+
+
+@pytest.mark.unit
+def test_set_refuses_a_bad_voltage_before_the_core_stores_it():
+    """`$led set` is the module's own command: it asks led_voltage_refusal first (printing the
+    refusal and returning, so nothing is stored or echoed) and otherwise runs the core's set
+    (apply_setting, verbose). Its description and usage are the core's, so `$led help` is unchanged.
+    The texts and the write count are pinned by the engine test (test_voltage_refusal)."""
+    cpp = (SRC / "Led.cpp").read_text()
+    ctor = cpp[cpp.index("Led::Led(xewe::Os& host)") : cpp.index("// Settings\n")]
+    m = re.search(
+        r'register_command\(\{"set", "([^"]*)", "([^"]*)",\s*2,\s*\[this\]\(xewe::span<const std::string> args\) \{'
+        r"\s*const std::string refusal = led_voltage_refusal\(args\[0\], args\[1\], active_voltage\);"
+        r"\s*if \(!refusal\.empty\(\)\) \{\s*os\.serial\.print\(refusal\);\s*return;\s*\}"
+        r"\s*apply_setting\(args\[0\], args\[1\], true\);\s*\}\}\);",
+        ctor,
+    )
+    assert m, "the set handler refuses first, then runs the core's set"
+    assert m.groups() == (
+        "Set a setting: validated, applied, saved",
+        "$led set <key> <value>",
+    )
+    core = _find_core_src()
+    if core is not None:
+        module = (core / "XeWeCore" / "Module.cpp").read_text()
+        row = '{"set", "Set a setting: validated, applied, saved", " set <key> <value>", 2}'
+        assert row in module
+    # the settings hook keeps the same rule for other apply_setting callers (puts the value back)
+    hook = cpp[
+        cpp.index("void Led::on_setting_changed(") : cpp.index(
+            "void Led::schema_extra("
+        )
+    ]
+    assert "led_voltage_refusal(key, std::to_string(voltage), active_voltage)" in hook
+    assert 'apply_setting("voltage", std::to_string(active_voltage));' in hook
+
+
+def _serial_calls(node: ast.AST, names: set[str]) -> list[ast.Call]:
+    """Calls `serial.<name>(...)` with name in `names` anywhere under `node`."""
+    return [
+        n
+        for n in ast.walk(node)
+        if isinstance(n, ast.Call)
+        and isinstance(n.func, ast.Attribute)
+        and isinstance(n.func.value, ast.Name)
+        and n.func.value.id == "serial"
+        and n.func.attr in names
+    ]
+
+
+@pytest.mark.unit
+def test_board_test_waits_for_each_command():
+    """The core reads serial input between commands and keeps at most 4 lines waiting; a line
+    beyond that is dropped (`! Input overflow: line dropped`). The board test therefore never has
+    more than one line unanswered: every bare `serial.send` is followed directly by a wait for its
+    reply (`expect`/`collect`/`command`), or answers a prompt the firmware is blocked on (directly
+    after `serial.expect(INPUT)`); every other command goes through `serial.command` or `_send`,
+    which waits for the board's echo of the line."""
+    board = MODULE_DIR / "tests" / "board" / "test_led.py"
+    tree = ast.parse(board.read_text())
+    waits = {"expect", "collect", "command"}
+    assert not _serial_calls(tree, {"write"}), "raw writes bypass the pacing"
+
+    checked = 0
+    for node in ast.walk(tree):
+        for field in ("body", "orelse", "finalbody"):
+            block = getattr(node, field, None)
+            if not isinstance(block, list):
+                continue
+            for i, stmt in enumerate(block):
+                if not (
+                    isinstance(stmt, ast.Expr)
+                    and _serial_calls(stmt, {"send"}) == [stmt.value]
+                ):
+                    continue
+                checked += 1
+                where = f"test_led.py:{stmt.lineno}"
+                if i + 1 < len(block):
+                    assert _serial_calls(block[i + 1], waits), (
+                        f"{where}: the next statement does not wait for the reply"
+                    )
+                else:  # a prompt answer: the firmware waits for exactly this line
+                    prev = block[i - 1] if i else None
+                    assert (
+                        prev is not None
+                        and _serial_calls(prev, {"expect"})
+                        and ast.unparse(prev).startswith("serial.expect(INPUT")
+                    ), f"{where}: a send at the end of a block must answer a prompt"
+    sends = _serial_calls(tree, {"send"})
+    assert checked == len(sends) > 0, "every serial.send is a statement of its own"
+
+    send_helper = next(
+        f
+        for f in ast.walk(tree)
+        if isinstance(f, ast.FunctionDef) and f.name == "_send"
+    )
+    (call,) = _serial_calls(send_helper, waits)
+    assert call.func.attr == "command"
+    expect = next(k.value for k in call.keywords if k.arg == "expect")
+    assert "re.escape(cmd)" in ast.unparse(expect)
+    # the setters and mode changes print nothing but their echo: they go through _send
+    assert not re.search(
+        r"serial\.send\(f\"\$\{ID\} (set_|reset_current_mode)", board.read_text()
     )
 
 
@@ -771,20 +880,38 @@ CADENCE_SAME_FRAMES_AS = {
     "strip_cadence_poll1_n60.json": "strip_boot_solid_green_b50_grb_n60.json"
 }
 # Scenarios compared with the oracle rebuilt from the 2.3.0 sources + golden_230_fixes.diff (the
-# three fixes applied to the reference tree) instead of expected/: every strip_* scenario boots
-# through LedStrip, so the pixels-past-num_led fix shows in mode_controller_num_leds, and two enter
-# mode 2 (Two Zone).
+# fixes applied to the reference tree) instead of expected/: every strip_* scenario boots through
+# LedStrip, so the pixels-past-num_led fix shows in mode_controller_num_leds, two enter mode 2 (Two
+# Zone), and four (plus mc_set_rgb_hsv_n60) apply a colour to Color Fade, whose saturation taken
+# from the colour is now kept inside its 0..245 range.
 FIXED_REFERENCE_PREFIX = "strip_"
-# What the three fixes may change in the reference output, per strip file: only
-# mode_controller_num_leds (num_led instead of the buffer maximum), nothing when num_led is the
-# maximum, and for the two Two Zone files also the colour-derived values (frames, CRC chains, Hue A
-# and the stored colour of mode 2).
+FIXED_REFERENCE_EXTRA = {"mc_set_rgb_hsv_n60"}
+# What the fixes may change in the reference output, per file: only mode_controller_num_leds
+# (num_led instead of the buffer maximum), nothing when num_led is the maximum, for the two Two Zone
+# files also the colour-derived values (frames, CRC chains, Hue A and the stored colour of mode 2),
+# and for the Color Fade files the saturation and what follows from it (FIX_DELTA_COLOR_FADE).
 FIX_DELTA_NONE = {"strip_boot_christmas_b128_bgr_n600.json"}
 FIX_DELTA_NUM_LEDS = re.compile(r".*/mode_controller_num_leds")
 FIX_DELTA_TWO_ZONE = re.compile(
     r".*/mode_controller_num_leds|/crc_chain_all_renders|/renders\[\d+\]/(crc32|first16.*)|"
     r"(/state_after_boot|/final_state|/state_after_ops\[\d+\]/state)/params/hue|/nvs/led/rgb/.*|/nvs/mc/m:2:hue/.*"
 )
+_STATE = r"(/state_after_boot|/final_state|/state_after_ops\[\d+\]/state)"
+_SAT = rf".*/mode_controller_num_leds|{_STATE}/(params/sat|get_rgb\[\d\])|/nvs/mc/m:1:sat/.*"
+FIX_DELTA_COLOR_FADE = {
+    # only the stored saturation of mode 1 (set_rgb/set_hsv on the ModeController)
+    "mc_set_rgb_hsv_n60.json": re.compile(r"/nvs/mc/m:1:sat/.*"),
+    # saturation, the colour built from it, the stored saturation
+    "strip_boot_fadecolor_b255_gbr_n7.json": re.compile(_SAT),
+    "strip_set_mode_0_to_1_n60.json": re.compile(_SAT),
+    # colour commands on Color Fade: also the frames, the colour re-derived from the clamped
+    # saturation (hue) and the stored colour
+    "strip_color_ops_fadecolor_n60.json": re.compile(
+        _SAT
+        + rf"|/crc_chain_all_renders|/renders\[\d+\]/(crc32|first16.*)|{_STATE}/params/hue|"
+        r"/nvs/led/rgb/.*"
+    ),
+}
 
 
 def _leaves(x, path=""):
@@ -944,7 +1071,11 @@ def golden_compare(request=None, report: Path | None = None) -> dict:
     manifest = json.loads((golden / "expected" / "MANIFEST.json").read_text())
     scenarios = [s[: -len(".json")] for s in manifest["scenarios"]]
     flagged = set(manifest.get("depends_on_uninitialised_memory", []))
-    strip = [s for s in scenarios if s.startswith(FIXED_REFERENCE_PREFIX)]
+    strip = [
+        s
+        for s in scenarios
+        if s.startswith(FIXED_REFERENCE_PREFIX) or s in FIXED_REFERENCE_EXTRA
+    ]
     results: dict = {
         "scenarios": len(scenarios),
         "variants": {},
@@ -991,7 +1122,7 @@ def golden_compare(request=None, report: Path | None = None) -> dict:
             if f in CADENCE_SKIPS:
                 v["skipped"][f] = CADENCE_SKIPS[f]
                 continue
-            if s.startswith(FIXED_REFERENCE_PREFIX):
+            if s in strip:
                 want = (work / variant / "ref" / f).read_bytes()
                 (v["matched_fixed_reference"] if got == want else v["mismatch"]).append(
                     f
@@ -1016,7 +1147,7 @@ def golden_compare(request=None, report: Path | None = None) -> dict:
                 else v["mismatch"]
             ).append("MANIFEST.json")
         results["variants"][variant] = v
-        # what the three fixes change in the 2.3.0 output (reference vs expected/), field by field
+        # what the fixes change in the 2.3.0 output (reference vs expected/), field by field
         changed, fields = [], {}
         for s in strip:
             f = s + ".json"
@@ -1051,8 +1182,9 @@ def golden_compare(request=None, report: Path | None = None) -> dict:
 @pytest.mark.unit
 def test_golden_frames_match_2_3_0(request):
     """Needs XEWE_LED_GOLDEN_DIR (skips otherwise). Every scenario of the 2.3.0 oracle, both float
-    variants: byte-equal to expected/, or for strip_* byte-equal to the reference built from the
-    2.3.0 sources plus the three fixes, whose own delta to expected/ is asserted field by field."""
+    variants: byte-equal to expected/, or for strip_* and mc_set_rgb_hsv_n60 byte-equal to the
+    reference built from the 2.3.0 sources plus the fixes, whose own delta to expected/ is asserted
+    field by field."""
     r = golden_compare(request)
     for variant, v in r["variants"].items():
         assert not v["mismatch"], f"{variant}: {v['mismatch']}"
@@ -1062,6 +1194,16 @@ def test_golden_frames_match_2_3_0(request):
         for f, delta in r["fixed_reference_fields"][variant].items():
             if f in FIX_DELTA_NONE:
                 assert delta == [], (variant, f, delta)
+            elif f in FIX_DELTA_COLOR_FADE:
+                assert delta and all(
+                    FIX_DELTA_COLOR_FADE[f].fullmatch(d) for d in delta
+                ), (variant, f, delta[:10])
+                assert any(
+                    d.endswith("/params/sat") or "/m:1:sat/" in d for d in delta
+                ), (
+                    variant,
+                    f,
+                )
             elif f in r["flagged_uninitialised"]:
                 assert delta and all(FIX_DELTA_TWO_ZONE.fullmatch(d) for d in delta), (
                     variant,

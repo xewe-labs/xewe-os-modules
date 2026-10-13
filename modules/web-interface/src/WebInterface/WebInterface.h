@@ -14,7 +14,10 @@ class WebInterface : public xewe::Module {
 public:
     WebInterface(xewe::Os& host, Wifi& wifi_ref);
 
-    void begin_routines_regular() override;
+    // routes and the catch-all on every enabled boot; the server starts in the common routine,
+    // so it also listens on the module's first-boot setup boot
+    void begin_routines_required() override;
+    void begin_routines_common() override;
 
     void loop() override;
     std::string status(const bool verbose = false) const override;
@@ -46,6 +49,8 @@ private:
     void serve_root();
     void serve_main_page();
     void handle_command_request();
+    // catch-all (onNotFound): the CORS headers, then 204 to OPTIONS or 404 text/plain
+    void handle_not_found();
 
     static const char INDEX_HTML[] PROGMEM;
 };

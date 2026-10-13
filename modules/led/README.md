@@ -88,7 +88,7 @@ Metadata and dependencies are declared in [`module.properties`](module.propertie
 |---|---|---|---|
 | `use_clk` | bool | false | the strip has a clock line (status only) |
 | `chip` | u8 0..45 | 0 (APA102) | chipset id (wizard menu order); applies after a restart |
-| `voltage` | u8, 5/12/24 | 5 | strip voltage (power estimate); other values are put back |
+| `voltage` | u8, 5/12/24 | 5 | strip voltage (power estimate); `$led set` refuses other values before storing anything |
 | `lines` | u16 0..max | 0 | parallel strips on the data line (0 = one strip) |
 | `num_led` | u16 0..max | max | number of LEDs (`set` behaves like `$led set_length`) |
 | `colorder` | u8 0..5 | 0 (RGB) | colour order RGB, RBG, GRB, GBR, BRG, BGR |
@@ -117,7 +117,7 @@ Other pins: `xewe build --define XEWE_MODULE_LED_PIN_DATA=<gpio> --define XEWE_M
 
 These are deliberate, so that stored button and schedule strings, stored values and the web page behave the same as on devices already in use:
 
-- Every colour or parameter change builds the mode twice (the second time from the colour converted to hue/saturation), so hue or saturation may move by one step: `$led set_mode 1` gives Color Fade saturation 246 although its maximum is 245. The `adj_*` colour commands apply their result twice (two cross-fade restarts, two `rgb` writes).
+- Every colour or parameter change builds the mode twice (the second time from the colour converted to hue/saturation), so hue or saturation may move by one step (inside the mode's range, see below). The `adj_*` colour commands apply their result twice (two cross-fade restarts, two `rgb` writes).
 - `set_mode` announces the new mode's colour (origin: the `Led`) before the mode itself.
 - An unknown mode id runs mode 0, but the requested id is stored and announced; `adj_mode` therefore goes past 6 to an unknown id (mode 0 runs) and does not wrap below 0.
 - `set_hsv` and `set_val` with V=0 give white: V only scales the colour that is converted back to hue/saturation, and black converts to hue 0, saturation 0.
@@ -135,6 +135,9 @@ These are deliberate, so that stored button and schedule strings, stored values 
 - `adj_mode_param` with a key the current mode does not have changes nothing (like `set_mode_param`).
 - A missing or short stored `rgb` leaves mode 0 at its defaults; a stored `colorder` or `chip` out of range falls back to 0 (RGB, APA102).
 - A "no" to a wizard pin question does not stop the setup (see Setup wizard).
+- Hue and saturation taken from a colour (`set_rgb`, `set_hsv` and every command that applies a colour, `set_mode` included) stay inside the mode's own range, with the rule of `set_mode_param`: Color Fade's "Min Saturation" (0..245) stops at 245. Earlier versions stored 246..255 there (`$led set_mode 1` gave 246, `$led set_rgb 255 0 0` 255).
+- Running the colour-order calibration again on a calibrated strip (`$led set_color_order ""`) finds the strip's order: the test colours are shown in plain RGB order. Earlier versions showed them through the order already set, so a GRB strip answered truthfully came out as RGB.
+- `$led set voltage` with a value other than 5, 12 or 24 prints only `! Led: voltage must be 5, 12 or 24; kept <v>` and stores nothing. Earlier versions printed `voltage=<value>` first and wrote NVS twice (the value, then the kept one).
 
 ### Known issues
 
@@ -154,6 +157,6 @@ build/tools/.venv/bin/python -m xewe test --module led --all-chips  # c3, c6, s3
 build/tools/.venv/bin/python -m xewe test --module led --unit-only  # unit tests only, no build
 ```
 
-- Unit: source checks (properties, GPL headers, comments, one file pair per mode, registry ids 0..6, the 46-case chipset switch, the pinned command table, the wizard's prompt sequence, `reset` order), `test_led_engine.cpp` (g++ with FastLED's stub platform: every command's effect, NVS writes, output and listener events; the pinned mode parameter tables and `/modes` JSON; parameter clamping; tables; status text; no frame inside a command and nothing slow under the render lock), and, with `XEWE_LED_GOLDEN_DIR` set to the reference oracle folder, a golden-frame comparison (frames, cross-fades, brightness curves, NVS) that otherwise skips with that hint. The C++ tests need FastLED and XeWeCore sources (the harness's `build/libraries`, or `XEWE_FASTLED_SOURCE` / `XEWE_CORE_SOURCE`).
+- Unit: source checks (properties, GPL headers, comments, one file pair per mode, registry ids 0..6, the 46-case chipset switch, the pinned command table, the wizard's prompt sequence, `reset` order), `test_led_engine.cpp` (g++ with FastLED's stub platform: every command's effect, NVS writes, output and listener events; the pinned mode parameter tables and `/modes` JSON; parameter clamping; values taken from a colour kept inside the mode's ranges; the colour-order calibration run twice on a GRB strip; the voltage refusal of `$led set`; tables; status text; no frame inside a command and nothing slow under the render lock), and, with `XEWE_LED_GOLDEN_DIR` set to the reference oracle folder, a golden-frame comparison (frames, cross-fades, brightness curves, NVS) that otherwise skips with that hint. The C++ tests need FastLED and XeWeCore sources (the harness's `build/libraries`, or `XEWE_FASTLED_SOURCE` / `XEWE_CORE_SOURCE`).
 - Board: `test_compiles` runs without a board; `test_status`, `test_settings_table`, `test_not_disableable`, `test_cli_errors_are_the_core_texts`, `test_length_and_color_order_messages`, `test_mode_and_params_round_trip`, `test_brightness_round_trip`, `test_render_task_runs` need a board (each restores what it changes); `test_reset_runs_wizard` (last) resets the module and answers the wizard, only with `XEWE_TEST_LED_RESET=1`.
 - Hardware precondition: a provisioned board whose led wizard has been answered (its menus need numbers, which `xewe provision` does not give).

@@ -4,6 +4,7 @@
 
 #include "LedCommands.h"
 
+#include <cctype>
 #include <climits>
 #include <cstdlib>
 
@@ -14,6 +15,24 @@ int32_t led_arg_to_int(const std::string& text) {
     if (v < INT32_MIN)
         return INT32_MIN;
     return static_cast<int32_t>(v);
+}
+
+std::string led_voltage_refusal(std::string_view key, std::string_view value, uint8_t kept) {
+    if (key != "voltage")
+        return "";
+    // read as the core's settings parser reads a whole number (surrounding spaces, then one decimal
+    // token), so every value the core would refuse is left to its own error line
+    std::size_t first = 0, last = value.size();
+    while (first < last && std::isspace(static_cast<unsigned char>(value[first])))
+        ++first;
+    while (last > first && std::isspace(static_cast<unsigned char>(value[last - 1])))
+        --last;
+    const std::string token(value.substr(first, last - first));
+    char* end = nullptr;
+    const long long v = std::strtoll(token.c_str(), &end, 10);
+    if (token.empty() || *end != '\0' || v < 5 || v > 24 || v == 5 || v == 12 || v == 24)
+        return "";
+    return "! Led: voltage must be 5, 12 or 24; kept " + std::to_string(kept);
 }
 
 namespace {

@@ -120,8 +120,8 @@ repository: `Buttons buttons(os);`, `Pins pins(os);`, `Scheduler scheduler(os, t
 
 **Base and include.** A module is `class <Folder> : public xewe::Module`. Its header has
 `#include <XeWeCore.h>` as the only XeWeCore include (R `source`): arduino-cli finds the library only
-through its top-level header. Host-includable core headers (`XeWeCore/Utils/Color.h`,
-`Listeners.h`) may be included by pure headers that host tests compile. esp32-core headers
+through its top-level header. Host-includable core headers (`XeWeCore/Utils/Color.h`, home
+of the hex colour helpers, and `Listeners.h`) may be included by pure headers that host tests compile. esp32-core headers
 (`<WiFi.h>`, `<WebServer.h>`, `<Wire.h>`) are allowed. A required module's header is included
 relatively, `#include "../Wifi/Wifi.h"`, because installed folders sit side by side in
 `build/modules/src/`.
@@ -264,7 +264,8 @@ origin.
 operation; the core prints the conflict. Strapping pins are claimed with a warning. `$pins claims`
 lists the registry.
 
-**Hex colours** use the core's `xewe::str::parse_hex_color` / `to_hex_color`; no module keeps its own
+**Hex colours** use the core's `xewe::color::parse_hex_color` / `to_hex_color` from
+`XeWeCore/Utils/Color.h` (also reachable as `xewe::str::` through `String.h`); no module keeps its own
 copy.
 
 ### 3.2 Compile-time configuration

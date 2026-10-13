@@ -4,6 +4,8 @@
 
 #include "WebInterface.h"
 
+#include "WebInterfaceApi.h"
+
 WebInterface::WebInterface(xewe::Os& host, Wifi& wifi_ref)
     : xewe::Module(host,
           /* id                  */ "web_interface",
@@ -32,14 +34,21 @@ bool WebInterface::redirect_root(const std::string& path) {
     return apply_setting("root", path);
 }
 
-void WebInterface::begin_routines_regular() {
+void WebInterface::begin_routines_required() {
     http_server.on("/", HTTP_GET, std::bind(&WebInterface::serve_root, this));
     http_server.on("/console", HTTP_GET, std::bind(&WebInterface::serve_main_page, this));
     http_server.on("/cmd", HTTP_GET, std::bind(&WebInterface::handle_command_request, this));
+    // WebServer keeps one not-found handler: a module that begins later and calls onNotFound
+    // replaces this one
+    http_server.onNotFound(std::bind(&WebInterface::handle_not_found, this));
+}
+
+void WebInterface::begin_routines_common() {
     http_server.begin(port);
     os.serial.print("Web Interface now available at:\nhttp://" + wifi.get_local_ip() +
         (port == 80 ? std::string() : ":" + std::to_string(port)));
 }
+
 void WebInterface::loop() {
     http_server.handleClient();
 }
@@ -98,6 +107,18 @@ void WebInterface::handle_command_request() {
     } else {
         http_server.send(400, "text/plain", "Empty Command");
     }
+}
+
+void WebInterface::handle_not_found() {
+    for (const auto& header : web_interface_api::CORS_HEADERS)
+        http_server.sendHeader(header[0], header[1]);
+
+    const web_interface_api::Answer a =
+        web_interface_api::answer(http_server.method() == HTTP_OPTIONS);
+    if (a.type == nullptr)
+        http_server.send(a.code);
+    else
+        http_server.send(a.code, a.type, a.body);
 }
 
 // --------------------------------------------------------------------------

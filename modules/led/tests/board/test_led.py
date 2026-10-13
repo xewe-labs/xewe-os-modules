@@ -24,6 +24,14 @@ INPUT = (
 )
 
 
+def _send(serial, cmd: str) -> None:
+    """Send one command and wait for the board's echo of it. The core echoes a line when it reads
+    it and keeps at most 4 read lines waiting (more are dropped with `! Input overflow: line
+    dropped`); the CLI reads input only between commands, so waiting for each echo keeps at most
+    one line queued. For commands that print nothing else (`set_mode`, `set_rgb`, ...)."""
+    serial.command(cmd, expect=rf"^{re.escape(cmd)}$", timeout=5)
+
+
 def _status(serial) -> str:
     serial.send(f"${ID} status")
     return "\n".join(serial.collect(silence=1.0, limit=10))
@@ -52,12 +60,12 @@ def _mode_params(serial) -> dict:
 def _restore_live(serial, live: dict, params: dict) -> None:
     """Back to a recorded mode, its colour and parameters, brightness and state. The colour goes
     first: re-applying it rebuilds the mode, the parameters after it are then set exactly."""
-    serial.send(f"${ID} set_mode {live['mode']}")
-    serial.send(f"${ID} set_rgb {' '.join(live['rgb'])}")
+    _send(serial, f"${ID} set_mode {live['mode']}")
+    _send(serial, f"${ID} set_rgb {' '.join(live['rgb'])}")
     for key, value in params.items():
-        serial.send(f"${ID} set_mode_param {key} {value}")
-    serial.send(f"${ID} set_brightness {live['brightness']}")
-    serial.send(f"${ID} set_state {live['state']}")
+        _send(serial, f"${ID} set_mode_param {key} {value}")
+    _send(serial, f"${ID} set_brightness {live['brightness']}")
+    _send(serial, f"${ID} set_state {live['state']}")
     serial.command(f"${ID} status", expect=rf"Mode: \[{live['mode']}\]", timeout=5)
 
 
@@ -123,7 +131,7 @@ def test_length_and_color_order_messages(serial):
 def test_mode_and_params_round_trip(serial):
     live = _live(serial)
     params = _mode_params(serial)
-    serial.send(f"${ID} set_mode 5")
+    _send(serial, f"${ID} set_mode 5")
     rainbow = _mode_params(serial)
     try:
         serial.command(
@@ -132,32 +140,32 @@ def test_mode_and_params_round_trip(serial):
             timeout=5,
         )
         serial.expect(r"- speed \(Speed\): \d+ \[Range: 1-20\]", timeout=5)
-        serial.send(f"${ID} set_mode_param speed 20")
+        _send(serial, f"${ID} set_mode_param speed 20")
         serial.command(
             f"${ID} get_mode_params",
             expect=r"- speed \(Speed\): 20 \[Range: 1-20\]",
             timeout=5,
         )
-        serial.send(f"${ID} reset_current_mode")
+        _send(serial, f"${ID} reset_current_mode")
         serial.command(
             f"${ID} get_mode_params",
             expect=r"- speed \(Speed\): 5 \[Range: 1-20\]",
             timeout=5,
         )
     finally:
-        serial.send(f"${ID} set_mode 5")
+        _send(serial, f"${ID} set_mode 5")
         for key, value in rainbow.items():  # Rainbow's own stored parameters
-            serial.send(f"${ID} set_mode_param {key} {value}")
+            _send(serial, f"${ID} set_mode_param {key} {value}")
         _restore_live(serial, live, params)
 
 
 def test_brightness_round_trip(serial):
     before = int(re.search(r"Brightness:\s+(\d+)/255", _status(serial))[1])
     try:
-        serial.send(f"${ID} set_brightness 10")
+        _send(serial, f"${ID} set_brightness 10")
         serial.command(f"${ID} status", expect=r"Brightness:\s+10/255", timeout=5)
     finally:
-        serial.send(f"${ID} set_brightness {before}")
+        _send(serial, f"${ID} set_brightness {before}")
         serial.command(
             f"${ID} status", expect=rf"Brightness:\s+{before}/255", timeout=5
         )
@@ -200,7 +208,7 @@ def test_reset_runs_wizard(serial):
     live = _live(serial)
     params = {}
     for mode in range(7):  # every mode's stored parameters (the reset wipes them)
-        serial.send(f"${ID} set_mode {mode}")
+        _send(serial, f"${ID} set_mode {mode}")
         params[mode] = _mode_params(serial)
 
     serial.command(f"${ID} reset", expect=rf"{NAME} module reset", timeout=10)
@@ -239,8 +247,8 @@ def test_reset_runs_wizard(serial):
         f"${ID} set num_led {num_led}", expect=rf"num_led={num_led}", timeout=5
     )
     for mode in range(7):
-        serial.send(f"${ID} set_mode {mode}")
+        _send(serial, f"${ID} set_mode {mode}")
         for key, value in params[mode].items():
-            serial.send(f"${ID} set_mode_param {key} {value}")
+            _send(serial, f"${ID} set_mode_param {key} {value}")
     _restore_live(serial, live, params[live["mode"]])
     serial.command(f"${ID} get lines", expect=rf"lines={lines}", timeout=5)

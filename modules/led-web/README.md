@@ -14,7 +14,7 @@ schedule, another module), is pushed to every open page as a WebSocket text fram
 - The page, stylesheet and script are served byte for byte from flash (`PROGMEM`, `src/LedWeb/pages/`)
 - Routes on the web interface's server: `/` (taken with `web_interface.set_root`), `/set`, `/state`, `/modes`, `/name` and the page assets; each answer carries the CORS headers `Access-Control-Allow-Origin: *`, `Access-Control-Allow-Methods: POST, GET, OPTIONS, DELETE, PUT`, `Access-Control-Allow-Headers: Content-Type`
 - WebSocket server on port 81 (`XEWE_MODULE_LED_WEB_WS_PORT`): a `led` listener turns every change into one frame for all pages, including the page that made it; a heartbeat every second while a page is connected
-- A colour from the page is read with the core hex parser; anything that is not six hex digits is refused with `400 Invalid color`
+- A colour from the page is read with the core hex parser (`xewe::color::parse_hex_color` from `XeWeCore/Utils/Color.h`); anything that is not six hex digits is refused with `400 Invalid color`
 - The handlers and frames are in a pure header (`LedWebApi.h`) and are tested on the developer machine
 
 ## How it works
@@ -84,7 +84,7 @@ It registers no listener set of its own.
 | | |
 |---|---|
 | Modules | [led](../led), [web-interface](../web-interface) (and through it [wifi](../wifi)) |
-| Libraries | WebSockets (the xewe-labs fork of arduinoWebSockets, pinned to a commit in `libraries.toml`), XeWeCore >=3.0.0,<4.0.0 |
+| Libraries | WebSockets (the xewe-labs fork of arduinoWebSockets, pinned to a commit in `libraries.toml`), XeWeCore >=3.1.0,<4.0.0 |
 | Boards | ESP32-C3, ESP32-C6, ESP32-S3 (arduino-esp32 3.x) |
 
 Metadata and dependencies are declared in [`module.properties`](module.properties).
@@ -105,14 +105,8 @@ None of its own (namespace `led_web` holds only the core's `is_enabled` and `not
 - No authentication: anyone on the local network can change the LEDs (as with the web interface's `/cmd`).
 - At most 5 WebSocket connections at once (the library's `WEBSOCKETS_SERVER_CLIENT_MAX`).
 - About 46-49 KB of flash (the page is 23.5 KB of it) and 1.5 KB of RAM.
-- `OPTIONS` preflights and unknown paths get the web server's default `404 Not found: <uri>`
-  (`text/html`), without CORS headers, until the web interface installs a catch-all (`onNotFound`).
 - While enabled, the page owns `/`: `$web_interface set root` and a project's own
   `web_interface.set_root` are overridden. The console stays at `/console`.
-- On a boot where the web interface runs its first-boot setup (for example right after
-  `$web_interface reset`, or the first boot after adding web-interface to a device) its HTTP server
-  is not started, so the page, `/set` and `/state` do not answer although the WebSocket port is
-  open; restart once more.
 - The page's "Set Up Schedule" button opens `/schedule`, which answers 404 until the project
   registers a schedule page on the web interface's server.
 - `status` prints the HTTP port from the web interface's `port` setting; after
@@ -128,6 +122,6 @@ build/tools/.venv/bin/python -m xewe test --module led-web --all-chips  # c3, c6
 build/tools/.venv/bin/python -m xewe test --module led-web --unit-only  # unit tests only, no build
 ```
 
-- Unit: source checks (properties, the WebSockets pin, GPL headers, the route table and the `/set` argument order, route registration, the WebSocket glue), `test_led_web_api.cpp` (g++: `/set` for valid and malformed input, `/state`, `/modes`, `/name`, every frame, the listener including its own-origin echo and the frame order, the page sessions, the status page address, CORS headers), the served bytes of the three page assets (SHA-256, and equal to the files at xewe-led-os commit 91bd344 when that repository is next to the modules checkout or in `XEWE_LED_OS_REPO`; the route table, argument order and content types are compared with its `WebInterface.cpp` the same way), `node --check` of the page script, and the page's links and fetches against the route table. The C++ test needs XeWeCore's `src/` and the led module's `src/Led`.
+- Unit: source checks (properties, the WebSockets pin, GPL headers, the route table and the `/set` argument order, route registration, the WebSocket glue), `test_led_web_api.cpp` (g++: `/set` for valid and malformed input, `/state`, `/modes`, `/name`, every frame, the listener including its own-origin echo and the frame order, the page sessions, the status page address, CORS headers), the served bytes of the three page assets (SHA-256, and equal to the files at xewe-led-os commit 91bd344 when that repository is next to the modules checkout or in `XEWE_LED_OS_REPO`; the route table, argument order and content types are compared with its `WebInterface.cpp` the same way), `node --check` of the page script, and the page's links and fetches against the route table. The C++ test needs XeWeCore 3.1.0's `src/` (the hex parser in `Utils/Color.h`) and the led module's `src/Led`.
 - Board: `test_compiles` runs without a board; `test_status` and `test_status_reports_page_and_websocket` need a board; `test_http_routes`, `test_http_cors_and_served_bytes` (CORS headers and the script's SHA-256 on the wire, 404 for an unknown path) and `test_set_is_echoed_over_websocket` (echo, CLI change, heartbeat, `C` then `M` on a mode change, `F` to every page when a second one connects) also need network access to the board (`XEWE_TEST_LED_WEB_HTTP=1`); `test_disable_enable_across_restart` (last) answers the disable confirmation and enables the module again.
 - Hardware precondition: a provisioned board (the "enable Led Web module?" prompt answered yes, the led wizard completed), WiFi connected.

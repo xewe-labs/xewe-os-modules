@@ -5,7 +5,7 @@
 |---|---|---|---|---|---|---|
 | [`buttons`](../modules/buttons) | Buttons | `buttons` | 3.0.0 | Binds commands to physical buttons with software debouncing | - | `>=3.0.0,<4.0.0` |
 | [`led`](../modules/led) | Led | `led` | 3.0.0 | Controls an addressable LED strip: 46 chipsets, 7 effects, brightness and colour order | - | `>=3.0.0,<4.0.0` |
-| [`led-web`](../modules/led-web) | Led Web | `led_web` | 3.0.0 | LED control page in the browser, with live sync of every LED change over a WebSocket | led, web-interface | `>=3.0.0,<4.0.0` |
+| [`led-web`](../modules/led-web) | Led Web | `led_web` | 3.0.0 | LED control page in the browser, with live sync of every LED change over a WebSocket | led, web-interface | `>=3.1.0,<4.0.0` |
 | [`pins`](../modules/pins) | Pins | `pins` | 3.0.0 | GPIO, ADC, PWM and I2C access from the command line | - | `>=3.0.0,<4.0.0` |
 | [`scheduler`](../modules/scheduler) | Scheduler | `schedule` | 3.0.0 | Runs stored commands on a weekly schedule | time | `>=3.0.0,<4.0.0` |
 | [`time`](../modules/time) | Time | `time` | 3.0.0 | NTP time sync and timezone handling | wifi | `>=3.0.0,<4.0.0` |

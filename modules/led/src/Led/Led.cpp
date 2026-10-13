@@ -53,6 +53,17 @@ Led::Led(xewe::Os& host)
         command_slots[i] = {this, i};
         command_slots[i].attach();
     }
+    // `$led set` (registered here, so the core does not add its own): a voltage other than 5, 12
+    // or 24 is refused before the core stores and echoes it; everything else is the core's `set`
+    register_command({"set", "Set a setting: validated, applied, saved", "$led set <key> <value>",
+        2, [this](xewe::span<const std::string> args) {
+            const std::string refusal = led_voltage_refusal(args[0], args[1], active_voltage);
+            if (!refusal.empty()) {
+                os.serial.print(refusal);
+                return;
+            }
+            apply_setting(args[0], args[1], true);
+        }});
 }
 
 // =============================================================================
@@ -78,11 +89,13 @@ xewe::Settings Led::settings() const {
 void Led::on_setting_changed(const xewe::SettingDef& def) {
     const std::string_view key = def.key;
     if (key == "voltage") {
-        if (voltage != 5 && voltage != 12 && voltage != 24) {
-            os.serial.print(
-                "! Led: voltage must be 5, 12 or 24; kept " + std::to_string(active_voltage));
-            apply_setting(
-                "voltage", std::to_string(active_voltage)); // put the last good value back
+        // `$led set` refuses a bad voltage before it is stored; another apply_setting caller gets
+        // the last good value put back
+        const std::string refusal =
+            led_voltage_refusal(key, std::to_string(voltage), active_voltage);
+        if (!refusal.empty()) {
+            os.serial.print(refusal);
+            apply_setting("voltage", std::to_string(active_voltage));
             return;
         }
         active_voltage = voltage;
@@ -241,6 +254,10 @@ void Led::begin_routines_common() {
 void Led::calibrate_color_order() {
     std::string value;
     uint8_t color_order_index = 0;
+
+    // the test colours go out in plain RGB order, so the answers name the strip's own order also
+    // when an order is already applied (calibrating a second time)
+    engine.set_color_order_index(0);
 
     while (true) {
         value = "BBB";

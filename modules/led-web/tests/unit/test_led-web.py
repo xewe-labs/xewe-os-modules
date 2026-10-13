@@ -5,7 +5,8 @@ against the LED page's HTTP surface, the served page bytes and the page script s
 machine only, no board and no firmware build.
 Run through a harness: `python -m xewe test --module led-web --unit-only`.
 
-The C++ test needs XeWeCore's src/ (XEWE_CORE_SOURCE, else the harness's build/libraries/XeWeCore)
+The C++ test needs XeWeCore 3.1.0's src/ (the hex helpers in Utils/Color.h; XEWE_CORE_SOURCE, else
+the harness's build/libraries/XeWeCore)
 and the led module's src/Led (the modules checkout, else the harness's build/modules/src/Led).
 The comparison with the original firmware reads xewe-led-os at commit 91bd344 (v2.3.0) with
 `git show`: XEWE_LED_OS_REPO, else xewe-led-os next to the modules checkout; without it only the
@@ -122,7 +123,8 @@ def _find_core_src() -> Path | None:
         h / "build" / "libraries" / "XeWeCore" / "src" for h in _harness_dirs()
     ]
     for c in candidates:
-        if (c / "XeWeCore" / "Utils" / "String.h").is_file():
+        color = c / "XeWeCore" / "Utils" / "Color.h"
+        if color.is_file() and "parse_hex_color" in color.read_text():
             return c
     return None
 
@@ -240,6 +242,9 @@ def test_comments_describe_code_only():
                 r"\b2\.3\.\d\b",
             ):
                 assert not re.search(pattern, text, re.I), f"{p.name}: {pattern}"
+    # the hex parser comes from Color.h, the host-includable home of the colour helpers
+    api = (SRC / "LedWebApi.h").read_text()
+    assert not re.search(r"#include [<\"][^>\"]*Utils/String\.h[>\"]", api)
 
 
 @pytest.mark.unit
@@ -269,7 +274,7 @@ def test_set_checks_arguments_in_order():
     api = (SRC / "LedWebApi.h").read_text()
     body = api[api.index("Response handle_set(") : api.index("// GET /state")]
     assert re.findall(r'req\.has\("(\w+)"\)', body) == SET_ARGS_ORDER
-    assert "xewe::str::parse_hex_color" in body
+    assert "xewe::color::parse_hex_color" in body
 
 
 @pytest.mark.unit
@@ -389,7 +394,9 @@ def test_api_unit_gpp(tmp_path):
     core = _find_core_src()
     led = _find_led_src()
     if core is None or led is None:
-        pytest.skip("XeWeCore src/ or the led module's src/Led not found")
+        pytest.skip(
+            "XeWeCore >=3.1.0 src/ (hex helpers in Utils/Color.h) or the led module's src/Led not found"
+        )
     exe = tmp_path / "test_led_web_api"
     src = UNIT / "test_led_web_api.cpp"
     subprocess.run(
@@ -423,7 +430,7 @@ def test_api_header_stays_pure():
         "cstdio",
         "string",
         "string_view",
-        "XeWeCore/Utils/String.h",
+        "XeWeCore/Utils/Color.h",
         "../Led/LedListener.h",
     }
     text = (SRC / "LedWebApi.h").read_text()
