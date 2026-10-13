@@ -31,10 +31,15 @@ void FadeColorTwoZone::loop(CRGB* leds, uint16_t num_leds) {
 
     const uint32_t spatial_step = get_noise_spatial_step();
     const uint8_t blend_amount = get_blend_amount();
+    // the parameters are fixed for the life of the instance: looked up once per frame
+    const uint8_t hue_a = static_cast<uint8_t>(get_param("hue"));
+    const uint8_t hue_b = static_cast<uint8_t>(get_param("hue_b"));
+    const uint8_t min_bright = static_cast<uint8_t>(get_param("min_bright"));
+    const uint8_t min_sat = static_cast<uint8_t>(get_param("min_sat"));
 
     for (uint16_t i = 0; i < num_leds; i++) {
         const uint16_t noise_val = inoise16(static_cast<uint32_t>(i) * spatial_step, counter);
-        const CRGB target_color = get_weighted_color(noise_val);
+        const CRGB target_color = get_weighted_color(noise_val, hue_a, hue_b, min_bright, min_sat);
         const CRGB smooth_color = blend_colors(previous_frame[i], target_color, blend_amount);
 
         leds[i] = smooth_color;
@@ -80,12 +85,8 @@ uint8_t FadeColorTwoZone::get_blend_amount() const {
     return blend;
 }
 
-CRGB FadeColorTwoZone::get_weighted_color(uint16_t val) const {
-    const uint8_t hue_a = static_cast<uint8_t>(get_param("hue"));
-    const uint8_t hue_b = static_cast<uint8_t>(get_param("hue_b"));
-    const uint8_t min_bright = static_cast<uint8_t>(get_param("min_bright"));
-    const uint8_t min_sat = static_cast<uint8_t>(get_param("min_sat"));
-
+CRGB FadeColorTwoZone::get_weighted_color(
+    uint16_t val, uint8_t hue_a, uint8_t hue_b, uint8_t min_bright, uint8_t min_sat) const {
     // linear between the two hues (not around the colour wheel)
     const uint8_t hue = map(val, 0, 65535, hue_a, hue_b);
     const uint8_t sat = static_cast<uint8_t>(map(val, 0, 65535, min_sat, MAX_SAT));

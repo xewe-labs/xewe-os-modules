@@ -25,7 +25,8 @@ private:
     uint16_t get_speed_step() const;
     uint32_t get_noise_spatial_step() const;
     uint8_t get_blend_amount() const;
-    CRGB get_weighted_color(uint16_t val) const;
+    CRGB get_weighted_color(
+        uint16_t val, uint8_t hue_a, uint8_t hue_b, uint8_t min_bright, uint8_t min_sat) const;
     CRGB ColorHSV(uint8_t hue, uint8_t sat, uint8_t val) const;
     CRGB blend_colors(const CRGB& color1, const CRGB& color2, uint8_t amount) const;
 

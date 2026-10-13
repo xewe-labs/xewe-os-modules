@@ -14,7 +14,8 @@ public:
     std::array<uint8_t, 3> get_rgb() override;
 
 private:
-    CRGB get_fire_color(uint8_t noise_val, long base_hue_16bit);
+    CRGB get_fire_color(
+        uint8_t noise_val, long base_hue_16bit, long hue_gap, uint8_t min_sat, uint8_t min_bright);
     CRGB ColorHSV(long hue, uint8_t sat, uint8_t val);
 
     uint32_t counter;

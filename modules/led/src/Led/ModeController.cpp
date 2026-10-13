@@ -127,7 +127,7 @@ void ModeController::set_hsv(const std::array<uint8_t, 3> new_hsv) {
 }
 
 bool ModeController::adj_mode_param(std::string_view key, int32_t value_delta) {
-    for (const auto& param : current_mode->get_params()) {
+    for (const auto& param : current_mode->get_config().params) {
         if (param.key == key) {
             const int32_t current_value = static_cast<int32_t>(current_mode->get_param(param.key));
             const uint16_t new_value = normalize_mode_param_value(key, current_value + value_delta);
@@ -175,17 +175,8 @@ const ModeConfig& ModeController::get_current_mode_config() const {
 }
 
 uint16_t ModeController::get_current_mode_param(std::string_view key) const {
-    if (!current_mode) {
-        return 0;
-    }
-
-    for (const auto& param : current_mode->get_params()) {
-        if (param.key == key) {
-            return current_mode->get_param(param.key);
-        }
-    }
-
-    return 0;
+    // Mode::get_param gives 0 for a key the mode does not have
+    return current_mode ? current_mode->get_param(key) : 0;
 }
 
 const ModeConfig& ModeController::get_mode_config(uint8_t mode_id) const {
@@ -251,18 +242,6 @@ std::string ModeController::get_all_modes_json() const {
     return json;
 }
 
-std::vector<std::pair<uint8_t, std::string>> ModeController::get_all_modes() const {
-    std::vector<std::pair<uint8_t, std::string>> modes;
-
-    const auto& registry = ModeRegistry::get_registry();
-    for (const auto& [id, factory] : registry) {
-        auto temp_mode = factory({});
-        modes.emplace_back(id, temp_mode->get_config().name);
-    }
-
-    return modes;
-}
-
 uint16_t ModeController::get_mode_transition_delay() const {
     return transition_timer->get_delay_ms();
 }
@@ -291,7 +270,7 @@ std::map<std::string, uint16_t> ModeController::get_params_as_map() const {
         return map;
     }
 
-    for (const auto& param : current_mode->get_params()) {
+    for (const auto& param : current_mode->get_config().params) {
         map[param.key] = current_mode->get_param(param.key);
     }
 
@@ -335,7 +314,7 @@ void ModeController::persist_mode_params_to_nvs(uint8_t mode_id) const {
 }
 
 uint16_t ModeController::normalize_mode_param_value(std::string_view key, int32_t value) const {
-    for (const auto& param : current_mode->get_params()) {
+    for (const auto& param : current_mode->get_config().params) {
         if (param.key != key) {
             continue;
         }

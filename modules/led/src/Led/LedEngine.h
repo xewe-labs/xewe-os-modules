@@ -103,14 +103,9 @@ public:
     // ---- colour
     void set_rgb(const std::array<uint8_t, 3> new_rgb);
     void set_rgb(const uint8_t r, const uint8_t g, const uint8_t b);
-    void set_r(const uint8_t r);
-    void set_g(const uint8_t g);
-    void set_b(const uint8_t b);
 
     void set_hsv(const std::array<uint8_t, 3> new_hsv);
     void set_h(const uint8_t h);
-    void set_s(const uint8_t s);
-    void set_v(const uint8_t v);
 
     void adj_rgb(const std::array<int, 3> rgb_delta);
     void adj_r(const int r_delta);
@@ -127,9 +122,6 @@ public:
     uint8_t get_g() const;
     uint8_t get_b() const;
     std::array<uint8_t, 3> get_hsv() const;
-    uint8_t get_h() const;
-    uint8_t get_s() const;
-    uint8_t get_v() const;
 
     // ---- brightness
     void set_brightness(const uint8_t new_brightness);
@@ -156,7 +148,6 @@ public:
     std::vector<ModeParam> get_current_mode_params() const;
     void reset_current_mode();
     std::string get_all_modes_json() const;
-    std::vector<std::pair<uint8_t, std::string>> get_all_modes() const;
     uint16_t get_mode_transition_delay() const;
     // `$led get_mode_params` text
     std::string mode_params_text() const;

@@ -5,9 +5,13 @@
 #include "Mode.h"
 
 ModeConfig::ModeConfig(
-    uint8_t init_id, std::string init_name, const std::vector<ModeParam>& custom_params)
+    uint8_t init_id, std::string init_name, std::initializer_list<ModeParamSpec> custom_params)
     : id(init_id), name(std::move(init_name)) {
-    params.insert(params.end(), custom_params.begin(), custom_params.end());
+    params.reserve(custom_params.size());
+    for (const ModeParamSpec& spec : custom_params) {
+        params.push_back({spec.key, spec.display_name, spec.min_value, spec.max_value,
+            spec.default_value, spec.step_value, spec.type});
+    }
 }
 
 Mode::Mode(ModeConfig mode_config, const std::map<std::string, uint16_t>& params)

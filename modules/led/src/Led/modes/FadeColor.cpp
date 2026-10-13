@@ -25,11 +25,15 @@ FadeColor::FadeColor(const std::map<std::string, uint16_t>& params)
 void FadeColor::loop(CRGB* leds, uint16_t num_leds) {
     long base_hue_16bit = static_cast<long>(get_param("hue")) * 256;
     uint16_t fire_step = get_param("fire_step");
+    // the parameters are fixed for the life of the instance: looked up once per frame
+    long hue_gap = get_param("h_gap");
+    uint8_t min_sat = get_param("sat");
+    uint8_t min_bright = get_param("min_bright");
 
     for (int i = 0; i < num_leds; i++) {
         // inoise8(uint16_t x, uint16_t y): the 32-bit counter is truncated to 16 bits here
         uint8_t noise = inoise8(i * fire_step, counter);
-        leds[i] = get_fire_color(noise, base_hue_16bit);
+        leds[i] = get_fire_color(noise, base_hue_16bit, hue_gap, min_sat, min_bright);
     }
 
     counter += get_param("speed");
@@ -39,12 +43,9 @@ std::array<uint8_t, 3> FadeColor::get_rgb() {
     return {base_rgb.r, base_rgb.g, base_rgb.b};
 }
 
-CRGB FadeColor::get_fire_color(uint8_t val, long base_hue_16bit) {
-    long hue_gap = get_param("h_gap");
+CRGB FadeColor::get_fire_color(
+    uint8_t val, long base_hue_16bit, long hue_gap, uint8_t min_sat, uint8_t min_bright) {
     long calculated_hue = base_hue_16bit - hue_gap / 2 + map(val, 0, 255, 0, hue_gap);
-
-    uint8_t min_sat = get_param("sat");
-    uint8_t min_bright = get_param("min_bright");
 
     uint8_t calculated_sat = constrain(map(val, 0, 255, 255, min_sat), 0, 255);
     uint8_t calculated_val = constrain(map(val, 0, 255, min_bright, 255), 0, 255);

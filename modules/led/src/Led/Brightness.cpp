@@ -17,10 +17,6 @@ Brightness::Brightness(
     timer->initiate();
 }
 
-uint8_t Brightness::get_start_value() const {
-    return timer->get_start_value();
-}
-
 uint8_t Brightness::get_current_value() const {
     return timer->get_current_value();
 }

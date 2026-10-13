@@ -10,6 +10,7 @@
 #include <FastLED.h>
 #include <array>
 #include <cstdint>
+#include <initializer_list>
 #include <map>
 #include <string>
 #include <string_view>
@@ -29,13 +30,25 @@ struct ModeParam {
     char type; // a for additional (hidden on the web UI by default), b for basic
 };
 
+// one row of a mode's parameter table, as written in the mode's constructor
+struct ModeParamSpec {
+    const char* key;
+    const char* display_name;
+    uint16_t min_value;
+    uint16_t max_value;
+    uint16_t default_value;
+    uint16_t step_value;
+    char type;
+};
+
 struct ModeConfig {
     uint8_t id;
     std::string name;
     std::vector<ModeParam> params;
 
-    ModeConfig(
-        uint8_t init_id, std::string init_name, const std::vector<ModeParam>& custom_params = {});
+    // the rows are constant data; one shared loop turns them into ModeParam entries
+    ModeConfig(uint8_t init_id, std::string init_name,
+        std::initializer_list<ModeParamSpec> custom_params = {});
 };
 
 class Mode {

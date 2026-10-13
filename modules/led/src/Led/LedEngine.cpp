@@ -6,7 +6,18 @@
 
 #include <algorithm>
 #include <cctype>
-#include <sstream>
+#include <cstdio>
+
+namespace {
+
+// a float as `std::ostream << value` writes it with the default flags: "%g", 6 significant digits
+std::string float_text(float value) {
+    char text[24];
+    std::snprintf(text, sizeof(text), "%g", static_cast<double>(value));
+    return text;
+}
+
+} // namespace
 
 LedEngine::LedEngine(LedEngineIo& io) : io(io), self(this) {
     fill_solid(leds, XEWE_MODULE_LED_NUM_LEDS_MAX, CRGB::Black);
@@ -248,21 +259,6 @@ void LedEngine::set_rgb(const uint8_t r, const uint8_t g, const uint8_t b) {
     set_rgb({r, g, b});
 }
 
-void LedEngine::set_r(const uint8_t r) {
-    Section section(*this);
-    set_rgb({r, mode_controller->get_rgb()[1], mode_controller->get_rgb()[2]});
-}
-
-void LedEngine::set_g(const uint8_t g) {
-    Section section(*this);
-    set_rgb({mode_controller->get_rgb()[0], g, mode_controller->get_rgb()[2]});
-}
-
-void LedEngine::set_b(const uint8_t b) {
-    Section section(*this);
-    set_rgb({mode_controller->get_rgb()[0], mode_controller->get_rgb()[1], b});
-}
-
 void LedEngine::set_hsv(const std::array<uint8_t, 3> new_hsv) {
     Section section(*this);
     mode_controller->set_hsv(new_hsv);
@@ -273,18 +269,6 @@ void LedEngine::set_h(const uint8_t h) {
     Section section(*this);
     std::array<uint8_t, 3> old_hsv = get_hsv();
     set_hsv({h, old_hsv[1], old_hsv[2]});
-}
-
-void LedEngine::set_s(const uint8_t s) {
-    Section section(*this);
-    std::array<uint8_t, 3> old_hsv = get_hsv();
-    set_hsv({old_hsv[0], s, old_hsv[2]});
-}
-
-void LedEngine::set_v(const uint8_t v) {
-    Section section(*this);
-    std::array<uint8_t, 3> old_hsv = get_hsv();
-    set_hsv({old_hsv[0], old_hsv[1], v});
 }
 
 void LedEngine::adj_rgb(const std::array<int, 3> rgb_delta) {
@@ -359,18 +343,6 @@ uint8_t LedEngine::get_b() const {
 
 std::array<uint8_t, 3> LedEngine::get_hsv() const {
     return xewe::color::rgb_to_hsv(get_rgb());
-}
-
-uint8_t LedEngine::get_h() const {
-    return get_hsv()[0];
-}
-
-uint8_t LedEngine::get_s() const {
-    return get_hsv()[1];
-}
-
-uint8_t LedEngine::get_v() const {
-    return get_hsv()[2];
 }
 
 // =============================================================================
@@ -494,24 +466,21 @@ std::string LedEngine::get_all_modes_json() const {
     return mode_controller->get_all_modes_json();
 }
 
-std::vector<std::pair<uint8_t, std::string>> LedEngine::get_all_modes() const {
-    return mode_controller->get_all_modes();
-}
-
 uint16_t LedEngine::get_mode_transition_delay() const {
     return mode_controller->get_mode_transition_delay();
 }
 
 std::string LedEngine::mode_params_text() const {
-    std::stringstream ss;
-    ss << "Mode " << static_cast<int>(get_current_mode_id()) << " (" << get_current_mode_name()
-       << ") Parameters:\n";
+    std::string text = "Mode " + std::to_string(get_current_mode_id()) + " (" +
+        std::string(get_current_mode_name()) + ") Parameters:\n";
 
-    for (const auto& param : mode_controller->get_current_mode_params()) {
-        ss << "  - " << param.key << " (" << param.display_name << "): " << param.default_value
-           << " [Range: " << param.min_value << "-" << param.max_value << "]\n";
+    for (const auto& param : mode_controller->get_current_mode_config().params) {
+        text += "  - " + param.key + " (" + param.display_name +
+            "): " + std::to_string(param.default_value) +
+            " [Range: " + std::to_string(param.min_value) + "-" + std::to_string(param.max_value) +
+            "]\n";
     }
-    return ss.str();
+    return text;
 }
 
 void LedEngine::print_text(std::string_view text) {
@@ -676,17 +645,18 @@ std::string LedEngine::status_text(const LedStatusInput& in) const {
     uint32_t total_power_mw = 0;
     const uint16_t loop_count = (configured_lines == 0) ? 1 : configured_lines;
 
-    std::stringstream hw_lines_stream;
-    std::stringstream pwr_lines_stream;
+    std::string hw_lines;
+    std::string pwr_lines;
 
     for (uint16_t i = 0; i < loop_count; ++i) {
         uint16_t line_len = num_led; // Default for 0 configured lines
 
         if (configured_lines > 0) {
             line_len = i < in.line_lengths.size() ? in.line_lengths[i] : 0;
-            hw_lines_stream << "    Line " << (i + 1) << " Length:    " << line_len << "\n";
+            hw_lines += "    Line " + std::to_string(i + 1) +
+                " Length:    " + std::to_string(line_len) + "\n";
         } else {
-            hw_lines_stream << "    Length:           " << line_len << "\n";
+            hw_lines += "    Length:           " + std::to_string(line_len) + "\n";
         }
 
         total_physical_leds += line_len;
@@ -705,56 +675,59 @@ std::string LedEngine::status_text(const LedStatusInput& in) const {
         const float power_w = line_power_mw / 1000.0f;
         const float current_a = power_w / current_v; // current_v is safely > 0
 
-        pwr_lines_stream << "    Line " << (configured_lines > 0 ? std::to_string(i + 1) : "1")
-                         << ":           " << power_w << " W, " << current_a << " A\n";
+        pwr_lines += "    Line " + (configured_lines > 0 ? std::to_string(i + 1) : "1") +
+            ":           " + float_text(power_w) + " W, " + float_text(current_a) + " A\n";
     }
 
-    std::stringstream ss;
-    ss << "Hardware:\n"
-       << "    Chip:             " << get_chip_name(configured_chip) << "\n"
-       << "    Data Pin:         GPIO_" << in.pin_data << "\n";
+    std::string text = "Hardware:\n";
+    text += "    Chip:             " + get_chip_name(configured_chip) + "\n";
+    text += "    Data Pin:         GPIO_" + std::to_string(in.pin_data) + "\n";
 
     if (use_clk) {
-        ss << "    Clock Pin:        GPIO_" << in.pin_clock << "\n";
+        text += "    Clock Pin:        GPIO_" + std::to_string(in.pin_clock) + "\n";
     }
 
-    ss << "    Voltage:          " << static_cast<int>(configured_v) << " V\n"
-       << "    Color Order:      " << LED_COLOR_ORDERS[color_order_index] << "\n";
+    text += "    Voltage:          " + std::to_string(configured_v) + " V\n";
+    text += "    Color Order:      ";
+    text += LED_COLOR_ORDERS[color_order_index];
+    text += "\n";
 
     if (configured_lines == 0) {
-        ss << hw_lines_stream.str() << "    Max Length:       " << XEWE_MODULE_LED_NUM_LEDS_MAX
-           << "\n\n";
+        text += hw_lines + "    Max Length:       " + std::to_string(XEWE_MODULE_LED_NUM_LEDS_MAX) +
+            "\n\n";
     } else {
-        ss << "    Parallel Lines:   " << configured_lines << "\n"
-           << hw_lines_stream.str() << "    Total LEDs:       " << total_physical_leds << "\n"
-           << "    Max LEDs/line:    " << XEWE_MODULE_LED_NUM_LEDS_MAX << "\n\n";
+        text += "    Parallel Lines:   " + std::to_string(configured_lines) + "\n" + hw_lines +
+            "    Total LEDs:       " + std::to_string(total_physical_leds) + "\n" +
+            "    Max LEDs/line:    " + std::to_string(XEWE_MODULE_LED_NUM_LEDS_MAX) + "\n\n";
     }
 
-    ss << "Live State:\n"
-       << "    FPS:              " << in.fps << "\n"
-       << "    Brightness:       " << static_cast<int>(get_brightness()) << "/255\n"
-       << "    Power State:      " << (is_on ? "ON" : "OFF") << "\n"
-       << "    Color (RGB):      (" << static_cast<int>(get_r()) << ", "
-       << static_cast<int>(get_g()) << ", " << static_cast<int>(get_b()) << ")\n\n";
+    text += "Live State:\n";
+    text += "    FPS:              " + std::to_string(in.fps) + "\n";
+    text += "    Brightness:       " + std::to_string(get_brightness()) + "/255\n";
+    text += std::string("    Power State:      ") + (is_on ? "ON" : "OFF") + "\n";
+    text += "    Color (RGB):      (" + std::to_string(get_r()) + ", " + std::to_string(get_g()) +
+        ", " + std::to_string(get_b()) + ")\n\n";
 
     const float total_power_w = total_power_mw / 1000.0f;
-    ss << "Power:\n"
-       << "    Voltage:          " << current_v << " V\n"
-       << pwr_lines_stream.str() << "    Total:            " << total_power_w << " W, "
-       << (total_power_w / current_v) << " A\n\n"
-       << "Mode: [" << static_cast<int>(get_current_mode_id()) << "] " << get_current_mode_name()
-       << "\n";
+    text += "Power:\n";
+    text += "    Voltage:          " + float_text(current_v) + " V\n";
+    text += pwr_lines + "    Total:            " + float_text(total_power_w) + " W, " +
+        float_text(total_power_w / current_v) + " A\n\n";
+    text += "Mode: [" + std::to_string(get_current_mode_id()) + "] ";
+    text += get_current_mode_name();
+    text += "\n";
 
-    auto params = mode_controller->get_current_mode_params();
+    const auto& params = mode_controller->get_current_mode_config().params;
     if (params.empty()) {
-        ss << "    (No parameters for this mode)\n";
+        text += "    (No parameters for this mode)\n";
     } else {
         for (const auto& param : params) {
-            ss << "    - " << param.key << ": "
-               << mode_controller->get_current_mode_param(param.key) << " [" << param.min_value
-               << "-" << param.max_value << "] (" << param.display_name << ")\n";
+            text += "    - " + param.key + ": " +
+                std::to_string(mode_controller->get_current_mode_param(param.key)) + " [" +
+                std::to_string(param.min_value) + "-" + std::to_string(param.max_value) + "] (" +
+                param.display_name + ")\n";
         }
     }
 
-    return ss.str();
+    return text;
 }
