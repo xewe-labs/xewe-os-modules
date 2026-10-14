@@ -1,0 +1,34 @@
+led 3.1.0
+
+Drives an addressable LED strip with FastLED: 46 chipsets, seven effects with a cross-fade between
+them, software brightness and colour order, a first-boot wizard and 30 $led commands. Other modules
+follow every LED change through a listener. This is the module's first release; it carries the
+LED engine of xewe-led-os 2.3.0 over to XeWe OS, with the same command names, arguments and texts,
+so button and schedule commands stored on devices keep working.
+
+Changed compared with xewe-led-os 2.3.0
+
+- Smaller and faster: the status and parameter texts no longer use std::stringstream, which takes
+  the whole iostream runtime out of the image (about 225-250 KB less flash and 4.6-4.8 KB less RAM
+  for the module alone on c3, c6 and s3). Mode parameters are constant tables, and the two noise
+  effects look their parameters up once per frame instead of once per pixel. The text output is
+  unchanged.
+- Re-running the colour-order calibration ($led set_color_order "") on a strip that is already
+  calibrated now finds the right order. Before, a GRB strip came out as RGB the second time.
+- $led set voltage refuses any value other than 5, 12 or 24 before it stores or echoes anything.
+- A hue or saturation taken from a colour now stays inside the mode's range: Color Fade's Min
+  Saturation stops at 245, where 2.3.0 stored 246-255.
+- The calibration and saturation items change behaviour compared with 2.3.0; the voltage item fixes
+  a bug of the port. Command names, arguments and texts are unchanged.
+- The board test sends each command only after the board has echoed the previous one, so the
+  core's input queue (4 lines) never overflows during the round-trip tests.
+
+Requirements
+
+- XeWeCore >=3.1.0,<4.0.0 (requires_core). ESP32-C3, C6 or S3 with arduino-esp32 3.x.
+- Library: FastLED 3.10.3 (pinned in libraries.toml). Modules: none.
+
+Not verified by the release card
+
+Strip-only and visual checks (colours on a real strip, effect timing, the wizard on a fresh board)
+are done by hand; the card lists what its board session ran.

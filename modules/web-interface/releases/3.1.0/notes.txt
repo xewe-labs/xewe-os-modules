@@ -1,0 +1,27 @@
+web-interface 3.1.0
+
+An HTTP page and a command endpoint for other devices on the network: GET /console serves a small
+command page, GET /cmd?c=<command> runs a console command, and a project or module can take over
+GET / with its own page.
+
+Changed since 3.0.0
+
+- Catch-all for unmatched requests, as in xewe-led-os 2.3.0: every answer carries the CORS headers
+  (Access-Control-Allow-Origin *, Methods POST, GET, OPTIONS, DELETE, PUT, Headers Content-Type);
+  an OPTIONS request gets 204 with an empty body, anything else 404 text/plain "404: Not Found".
+  Before, the server's default "Not found: <uri>" page answered.
+- The HTTP server now starts on every boot where the module is enabled, including the first-boot
+  setup boot, so /, /console and /cmd answer right after setup. The "Web Interface now available
+  at" line is printed on that boot too.
+- A module declared later that registers its own catch-all (Alexa) still replaces this one for
+  that boot: the last registration wins.
+- Products no longer need their own fallback handler, and nothing else has to start the server.
+
+Requirements
+
+- XeWeCore >=3.1.0,<4.0.0 (requires_core). ESP32-C3, C6 or S3 with arduino-esp32 3.x.
+- Modules: wifi. Libraries: none outside the esp32 core (WebServer).
+
+Known behaviour
+
+- No authentication: anyone on the same network can run any command. Trusted networks only.

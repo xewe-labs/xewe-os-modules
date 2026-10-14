@@ -66,9 +66,16 @@ modules and listeners: `doc/os/module.md`, pin registry: `doc/utils/pins.md`).
 - No module is an Arduino library and nothing here is compiled on its own: modules are compiled
   inside an xewe-os project ("harness").
 - `scripts/release.sh` releases one module (tag `<slug>/X.Y.Z`, files in
-  `modules/<slug>/releases/<version>/`) or the set (tag `X.Y.Z`, `releases/<version>/notes.txt`)
-  that projects pin (README "Releasing"). Agents may run `--dry-run` only, and `--prepare` only on a
-  scratch copy unless asked; the owner commits, tags and pushes.
+  `modules/<slug>/releases/<version>/`) or the set (tag `X.Y.Z`, `releases/<version>/`) that
+  projects pin (README "Releasing"). `--prepare <version> --all` (no git change) sets every
+  `version=` and `requires_core=`, regenerates `doc/modules.md`, stops with exit 2 until the nine
+  `notes.txt` files are filled, then runs one shared check run through `xewe release-card record`
+  (harness setup with every module, validator, unit tests, format, brand-lint, module-alone and
+  all-modules builds and the board tests per chip; logs in `releases/<version>/logs/`, gitignored)
+  and renders the generated `release_card.md` of every module (only its tests) and of the set (no
+  hand-written test card). The tag runs verify the card, wait for the `tests` workflow with its
+  card check green, and publish the card as the release's only asset. Agents may run `--dry-run`
+  only, and `--prepare` only on a scratch copy unless asked; the owner commits, tags and pushes.
 
 ### How a project installs a module
 

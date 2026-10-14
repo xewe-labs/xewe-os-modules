@@ -1,0 +1,29 @@
+led-web 3.1.0
+
+A web page for the led module, served at / by the web-interface module: mode menu, the current
+mode's parameter sliders, colour, brightness and on/off. Every LED change, whatever made it (this
+page, another page, the console, a button, a schedule, another module), is pushed to every open
+page as a WebSocket frame on port 81. This is the module's first release; the page bytes are the
+ones of xewe-led-os 2.3.0.
+
+Highlights
+
+- The page, stylesheet and script are served byte for byte from flash.
+- Routes on the web interface's server: /, /set, /state, /modes, /name and the page assets, each
+  answer with the CORS headers. A colour from the page is read with the core's hex parser from
+  XeWeCore/Utils/Color.h; anything that is not six hex digits gets 400 Invalid color.
+- One shared builder makes the current-values frame for /state and for a page that connects, so
+  both always send the same bytes.
+- Unknown paths and OPTIONS requests are now answered by web-interface 3.1.0 (CORS, 204 or
+  404: Not Found), and the page works on the first boot too, since the server now starts there.
+
+Requirements
+
+- XeWeCore >=3.1.0,<4.0.0 (requires_core): the hex colour helpers in XeWeCore/Utils/Color.h.
+- Modules: led, web-interface (and wifi through it). Library: WebSockets (pinned in
+  libraries.toml).
+
+Not verified by the release card
+
+Using the page in a browser (sliders, colour picker, live sync between two open pages) is checked
+by hand; the card lists the HTTP tests its board session ran.
