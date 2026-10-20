@@ -98,10 +98,10 @@ as `X-NN`. They are not part of the WAX reference.
   `(xewe::Os& host, <Dep>& <var>_ref..., <Config> config = {})`, `has_cli_commands = true`, a
   `status()` override whose first line is `<name> module (enabled|disabled)`, a `reset()` override
   when the module holds RAM state, hardware or pin claims.
-- **X-06 `requires_core`.** `requires_core=>=2.1.0,<3.0.0` (comma form, full versions). A module
+- **X-06 `requires_core`.** `requires_core=>=3.0.0,<4.0.0` (comma form, full versions). A module
   using `SettingDef`, `ListenerSet`, `SchemaOut` or `xewe::pins` must not declare a lower bound
   below 2.1.0.
-- **X-07 Core 2.1 conventions.** Plain settings live in the settings table, never in hand-written
+- **X-07 Core conventions.** Plain settings live in the settings table, never in hand-written
   NVS reads or writes; secrets carry `SECRET`. Non-row values go through `schema_extra`. Change
   events go through a `ListenerSet` with an `origin`. Every driven GPIO is claimed in `xewe::pins`
   and released when let go. Hex colours use the core's parser. (`doc/contract.md` section 3.1.)
