@@ -329,15 +329,18 @@ way, written exactly as `XEWE_<SLUG>_<KEY>` in the table.
 **Sources.** No other file under `src/` defines or undefines a name with a module's prefix or
 `XEWE_CORE_` (R `config`).
 
-**How a value reaches the project.** `xewe modules generate` (run by `./setup.sh` and `xewe modules
-select`) appends each selected module's `Config.h`, without its header, as one marked block to the
-project's `Config.h` (`// ---- <slug> (xewe modules generate) ----` ... `// ---- end <slug> ----`),
-once. It copies the section markers and the runtime and compile-time groups as they are; a first-boot
-entry becomes its comment line plus `// #define <NAME> <value>`, commented out and without
-`<NAME>_PROMPT`, so a fresh project still asks at first boot. A block is never rewritten, so the
-user's edits survive every generate. To pre-answer a first-boot question the user uncomments the line
-and sets the value, or sets it to the sentinel `INJECTED_FROM_DOTENV` to take it from the dotenv file
-at build time (`#define XEWE_WIFI_PSW INJECTED_FROM_DOTENV`).
+**How a value reaches the project.** The project's `Config.h` is a catalogue. `xewe modules generate`
+(run by `./setup.sh` and `xewe modules select`) appends each selected module's `Config.h`, without its
+header, as one marked block to it (`// ---- <slug> (xewe modules generate) ----` ... `// ---- end
+<slug> ----`), once. The section markers are copied; every entry becomes its comment line followed by
+its definition commented out, `// #define <NAME> <value>`, without `#ifndef` and without
+`<NAME>_PROMPT`; a chip-conditional entry keeps its `#if`/`#elif`/`#else`/`#endif` lines, each
+commented. Nothing in the project file is active until the user uncomments a line. An uncommented
+line is a bare `#define` with no `#ifndef`, because the generated `XeWeOverrides.h` is read after the
+project's `Config.h`. Uncommenting a first-boot line pre-answers its question; its value may be the
+sentinel `INJECTED_FROM_DOTENV` to take it from the dotenv file at build time
+(`#define XEWE_WIFI_PSW INJECTED_FROM_DOTENV`). A block is never rewritten, so the user's edits
+survive every generate. The module's own `Config.h` keeps its `#ifndef` groups as the fallbacks.
 
 **Override ladder.** For one name the first of these wins: `xewe build --define NAME=VALUE`; the
 dotenv value behind `INJECTED_FROM_DOTENV`; the project's `Config.h`; the module's `Config.h`

@@ -56,7 +56,7 @@ Metadata and dependencies are declared in [`module.properties`](module.propertie
 ### In Config.h
 
 All names start with `XEWE_TIME_`. `./setup.sh` (and `xewe modules select`) appends the module's
-`src/Time/Config.h` as one marked block to the project's `Config.h`, following the scheme in
+`src/Time/Config.h` as one marked block to the project's `Config.h`, every entry commented out, following the scheme in
 [XeWeCore's `doc/config.md`](https://github.com/xewe-labs/xewe-os-core/blob/main/doc/config.md). The module has one first-boot value, written there as a commented-out line:
 
 ```c

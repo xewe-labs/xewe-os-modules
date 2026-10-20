@@ -67,15 +67,17 @@ Select modules with `./setup.sh --modules wifi,time` or `xewe modules select wif
 After a build the modules' commands are on the console: `$help` lists them, `$<id> status` shows a
 module's state, and `$system schema` prints every module's settings as JSON lines.
 
-Build-time values live in the project's `Config.h`: `./setup.sh` and `xewe modules select` append
-each selected module's `src/<Folder>/Config.h` there once, as one marked block, and the user edits
-it. Every name is `XEWE_<SLUG>_<PARAM>` (`XEWE_LED_PIN_DATA`, `XEWE_WIFI_SSID`; the slug in upper
-case, `-` as `_`). A block holds up to three sections: runtime defaults and compile-time constants
-(edit the number), and first-boot values, written commented out so a fresh device still asks at
-first boot. To pre-answer a question, uncomment its line and set the value, or write
-`INJECTED_FROM_DOTENV` to take it from the dotenv file at build time; `xewe build --define
-NAME=VALUE` wins over both. A block is never rewritten by a later generate. Each module README lists
-its values; the scheme is specified in XeWeCore's
+Build-time values live in the project's `Config.h`, which is a catalogue: `./setup.sh` and `xewe
+modules select` append each selected module's `src/<Folder>/Config.h` there once, as one marked
+block, and every entry in it is its comment line followed by the definition commented out
+(`// #define XEWE_LED_NUM_LED 600`). Nothing in the project file is active until the user uncomments a
+line, which is a bare `#define`. Every name is `XEWE_<SLUG>_<PARAM>` (`XEWE_LED_PIN_DATA`,
+`XEWE_WIFI_SSID`; the slug in upper case, `-` as `_`). A block holds up to three sections: runtime
+defaults, first-boot values and compile-time constants. Uncommenting a first-boot line pre-answers
+its question; `INJECTED_FROM_DOTENV` as its value takes it from the dotenv file at build time;
+`xewe build --define NAME=VALUE` wins over both. The module's own `Config.h` keeps the fallbacks, so
+a line left commented out changes nothing. A block is never rewritten by a later generate. Each
+module README lists its values; the scheme is specified in XeWeCore's
 [`doc/config.md`](https://github.com/xewe-labs/xewe-os-core/blob/main/doc/config.md) and
 [doc/contract.md](doc/contract.md) section 3.2.
 

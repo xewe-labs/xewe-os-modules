@@ -58,11 +58,11 @@ Metadata and dependencies are declared in [`module.properties`](module.propertie
 ### In Config.h
 
 All names start with `XEWE_WIFI_`. `./setup.sh` (and `xewe modules select`) appends the module's
-`src/Wifi/Config.h` as one marked block to the project's `Config.h`; the file follows the scheme in
-[XeWeCore's `doc/config.md`](https://github.com/xewe-labs/xewe-os-core/blob/main/doc/config.md), and a line in the project's `Config.h`, a dotenv value behind `INJECTED_FROM_DOTENV` or
+`src/Wifi/Config.h` as one marked block to the project's `Config.h`, every entry commented out; the file follows the scheme in
+[XeWeCore's `doc/config.md`](https://github.com/xewe-labs/xewe-os-core/blob/main/doc/config.md), and an uncommented line in the project's `Config.h`, a dotenv value behind `INJECTED_FROM_DOTENV` or
 `xewe build --define NAME=VALUE` wins over the module's default.
 
-**First-boot values.** The block holds them as commented-out lines, so a fresh project still asks:
+**First-boot values.** Like every entry, the block holds them as commented-out lines, so a fresh project still asks:
 
 ```c
 // Network name (wifi/ssid), string literal, up to 32 characters; asked at first boot

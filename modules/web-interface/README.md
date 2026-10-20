@@ -97,8 +97,9 @@ Metadata and dependencies are declared in [`module.properties`](module.propertie
 
 All names start with `XEWE_WEB_INTERFACE_` (the slug `web-interface` with `-` written as `_`). They
 are the defaults of the two settings rows, the runtime-defaults section of the scheme in [XeWeCore's `doc/config.md`](https://github.com/xewe-labs/xewe-os-core/blob/main/doc/config.md): a
-line in the project's `Config.h` (`xewe modules generate` copies them there as `#ifndef` groups to
-edit) or `xewe build --define NAME=VALUE` changes the default a fresh device starts with, and
+line in the project's `Config.h` (`xewe modules generate` lists them there commented out, for example
+`// #define XEWE_WEB_INTERFACE_PORT 80`; uncomment one and set the value) or `xewe build --define
+NAME=VALUE` changes the default a fresh device starts with, and
 `$web_interface set` changes the stored value. The module has no first-boot values and no
 compile-time constants.
 

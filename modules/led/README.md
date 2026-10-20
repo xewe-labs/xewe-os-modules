@@ -103,7 +103,7 @@ Metadata and dependencies are declared in [`module.properties`](module.propertie
 
 ### Build defines (`src/Led/Config.h`)
 
-All names start with `XEWE_LED_` and hold a fallback: a line in the project's `Config.h`, a dotenv value behind `INJECTED_FROM_DOTENV` or `xewe build --define NAME=VALUE` wins (see [Config.h in a project](../../README.md#using-modules-in-a-project)). The file has the three sections of the scheme in [XeWeCore's `doc/config.md`](https://github.com/xewe-labs/xewe-os-core/blob/main/doc/config.md).
+All names start with `XEWE_LED_` and hold a fallback in the module's `Config.h`: an uncommented line in the project's `Config.h`, a dotenv value behind `INJECTED_FROM_DOTENV` or `xewe build --define NAME=VALUE` wins (see [Config.h in a project](../../README.md#using-modules-in-a-project)). The file has the three sections of the scheme in [XeWeCore's `doc/config.md`](https://github.com/xewe-labs/xewe-os-core/blob/main/doc/config.md).
 
 **Runtime defaults:** none.
 
@@ -118,14 +118,14 @@ All names start with `XEWE_LED_` and hold a fallback: a line in the project's `C
 | `XEWE_LED_NUM_LED` | 600 | `num_led` | number of LEDs, per line when `XEWE_LED_LINES` > 0 |
 | `XEWE_LED_COLORDER` | 0 | `colorder` | 0..5 = RGB, RBG, GRB, GBR, BRG, BGR; set = no calibration |
 
-In the project's `Config.h`, `xewe modules generate` writes these six lines commented out (`// #define XEWE_LED_NUM_LED 600`), so a fresh project asks everything. Uncomment a line and set the value to pre-answer that question, for example a 144-LED strip with GRB order:
+In the project's `Config.h`, `xewe modules generate` writes these six lines commented out (`// #define XEWE_LED_NUM_LED 600`), so a fresh project asks everything. Uncomment a line (a bare `#define`) and set the value to pre-answer that question, for example a 144-LED strip with GRB order:
 
 ```c
 #define XEWE_LED_NUM_LED 144
 #define XEWE_LED_COLORDER 2
 ```
 
-**Compile-time constants** (the project's `Config.h` holds them as `#ifndef` groups to edit):
+**Compile-time constants** (the project's `Config.h` lists them commented out; uncomment a line to override):
 
 | Define | Default | Meaning |
 |---|---|---|
@@ -137,7 +137,7 @@ In the project's `Config.h`, `xewe modules generate` writes these six lines comm
 | `XEWE_LED_LISTENERS` | 4 | listener capacity |
 | `XEWE_LED_TASK_STACK` / `_PRIORITY` / `_CORE` | 4096 / 3 / 0 | render task |
 
-Other pins: set `XEWE_LED_PIN_DATA` and `XEWE_LED_PIN_CLOCK` in the project's `Config.h`, or `xewe build --define XEWE_LED_PIN_DATA=<gpio> --define XEWE_LED_PIN_CLOCK=<gpio>`. The data pin, and the clock pin of clocked chipsets, are claimed in the core pin registry at boot; a pin held by another module leaves the strip without output (reported). Strapping pins are claimed with the core's warning.
+Other pins: uncomment `XEWE_LED_PIN_DATA` and `XEWE_LED_PIN_CLOCK` in the project's `Config.h` and set them, or `xewe build --define XEWE_LED_PIN_DATA=<gpio> --define XEWE_LED_PIN_CLOCK=<gpio>`. The data pin, and the clock pin of clocked chipsets, are claimed in the core pin registry at boot; a pin held by another module leaves the strip without output (reported). Strapping pins are claimed with the core's warning.
 
 ### Behaviour kept for stored commands and devices in use
 
