@@ -4,7 +4,7 @@
 
 Hardware preconditions: provisioned board with the led setup wizard completed (chip, voltage,
 length and colour order answered; `xewe provision` only answers y/n prompts, so the wizard's menus
-are answered by hand once), a strip on XEWE_MODULE_LED_PIN_DATA (no strip still runs every test;
+are answered by hand once), a strip on XEWE_LED_PIN_DATA (no strip still runs every test;
 nothing here reads the light back). Each test restores what it changes. The last test,
 `test_reset_runs_wizard`, wipes the led settings and answers the wizard again; it runs only with
 XEWE_TEST_LED_RESET=1.

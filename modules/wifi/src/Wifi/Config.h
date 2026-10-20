@@ -2,13 +2,32 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // xewe-os-modules/modules/wifi/src/Wifi/Config.h
 //
-// Compile-time values of the wifi module. Pure preprocessor, no includes: `xewe modules generate`
-// copies everything after `#pragma once` into the project's Config.h, which `xewe build` passes to
-// every translation unit before this file, so a value set there wins. Wifi.h includes this file
-// for the defaults.
+// The values of the wifi module, in the module Config.h form of XeWeCore's doc/config.md: slug
+// wifi, so every name starts with XEWE_WIFI_. Pure preprocessor and no includes. Each value is a
+// fallback: a line in the project's Config.h (an uncommented first-boot line pre-answers that
+// question), a dotenv value behind INJECTED_FROM_DOTENV (the usual way for the password) or
+// `xewe build --define` wins.
 #pragma once
 
-// Debug output of the module (0 or 1). 1 prints every step, credentials included: bench only.
-#ifndef XEWE_MODULE_WIFI_DEBUG
-#define XEWE_MODULE_WIFI_DEBUG 0
+// ---- runtime defaults ----
+
+// ---- first-boot values ----
+
+// Network name (wifi/ssid), string literal, up to 32 characters; asked at first boot
+#ifndef XEWE_WIFI_SSID
+#define XEWE_WIFI_SSID ""
+#define XEWE_WIFI_SSID_PROMPT 1
+#endif
+
+// Network password (wifi/psw), string literal, up to 63 characters; asked at first boot
+#ifndef XEWE_WIFI_PSW
+#define XEWE_WIFI_PSW ""
+#define XEWE_WIFI_PSW_PROMPT 1
+#endif
+
+// ---- compile-time constants ----
+
+// Debug output of the module, 0 or 1; 1 prints every step, credentials included: bench only
+#ifndef XEWE_WIFI_DEBUG
+#define XEWE_WIFI_DEBUG 0
 #endif

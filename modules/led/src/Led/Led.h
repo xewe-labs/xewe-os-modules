@@ -5,7 +5,7 @@
 // Addressable LED strip: 46 FastLED chipsets on compile-time pins, 7 effects with a 900 ms
 // cross-fade, software brightness with a 500 ms fade, 6 software colour orders, a first-boot
 // wizard, 30 `$led` commands and change events for other modules. Frames are rendered by a
-// FreeRTOS task every XEWE_MODULE_LED_FRAME_MS; the main loop only changes state.
+// FreeRTOS task every XEWE_LED_FRAME_MS; the main loop only changes state.
 #pragma once
 
 #include <FastLED.h>
@@ -174,7 +174,7 @@ private:
     uint8_t chip{0};
     uint8_t voltage{5};
     uint16_t lines{0};
-    uint16_t num_led{XEWE_MODULE_LED_NUM_LEDS_MAX};
+    uint16_t num_led{XEWE_LED_NUM_LED};
     uint8_t colorder{0};
 
     uint8_t active_voltage{5}; // last accepted voltage
@@ -192,5 +192,5 @@ private:
 
 public:
     // the change events (LedListener); declared after `engine`, which owns the set
-    xewe::ListenerSet<LedListener, XEWE_MODULE_LED_LISTENERS>& listeners;
+    xewe::ListenerSet<LedListener, XEWE_LED_LISTENERS>& listeners;
 };

@@ -756,7 +756,7 @@ static void test_fanout() {
 // ---------------------------------------------------------------------------------------------
 static void test_param_clamping() {
     MemStore store;
-    std::vector<CRGB> buf(XEWE_MODULE_LED_NUM_LEDS_MAX);
+    std::vector<CRGB> buf(XEWE_LED_NUM_LEDS_MAX);
     host::set_millis(10000);
     ModeController mc(buf.data(), 60, 900, store);
     for (const auto& [id, factory] : ModeRegistry::get_registry()) {
@@ -896,7 +896,7 @@ static void test_fixes() {
             f.e.render_frame();
         }
         bool tail_black = true;
-        for (int i = 60; i < XEWE_MODULE_LED_NUM_LEDS_MAX; ++i)
+        for (int i = 60; i < XEWE_LED_NUM_LEDS_MAX; ++i)
             tail_black = tail_black && f.e.pixels()[i] == CRGB(0, 0, 0);
         CHECK(tail_black);
         bool head_lit = false;
@@ -913,7 +913,7 @@ static void test_fixes() {
         CHECK(untouched);
         CHECK(f.e.take_blank_frame());
         bool black = true;
-        for (int i = 0; i < XEWE_MODULE_LED_NUM_LEDS_MAX; ++i)
+        for (int i = 0; i < XEWE_LED_NUM_LEDS_MAX; ++i)
             black = black && f.e.pixels()[i] == CRGB(0, 0, 0);
         CHECK(black);
         CHECK(!f.e.take_blank_frame());
@@ -1181,7 +1181,7 @@ struct LockIo : RecIo {
         engine->take_blank_frame();
         engine->render_frame();
         uint32_t h = 2166136261u;
-        for (int i = 0; i < XEWE_MODULE_LED_NUM_LEDS_MAX; ++i) {
+        for (int i = 0; i < XEWE_LED_NUM_LEDS_MAX; ++i) {
             const CRGB p = engine->pixels()[i];
             for (uint8_t c : {p.r, p.g, p.b})
                 h = (h ^ c) * 16777619u;
@@ -1346,7 +1346,7 @@ static void test_colour_params_in_range() {
     // ModeController directly, set_rgb and set_hsv, every mode and a spread of colours: every
     // parameter stays inside its declared range and is stored as it is shown
     MemStore store;
-    std::vector<CRGB> buf(XEWE_MODULE_LED_NUM_LEDS_MAX);
+    std::vector<CRGB> buf(XEWE_LED_NUM_LEDS_MAX);
     host::set_millis(10000);
     ModeController mc(buf.data(), 60, 900, store);
     mc.set_mode(1);

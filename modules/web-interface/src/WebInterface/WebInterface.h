@@ -9,6 +9,7 @@
 
 #include <XeWeCore.h>
 #include "../Wifi/Wifi.h"
+#include "Config.h"
 
 class WebInterface : public xewe::Module {
 public:
@@ -41,8 +42,8 @@ public:
 
 private:
     Wifi& wifi;
-    WebServer http_server{80};
-    uint16_t port{80}; // table row; applied at begin
+    WebServer http_server{XEWE_WEB_INTERFACE_PORT};
+    uint16_t port{XEWE_WEB_INTERFACE_PORT}; // table row; applied at begin
     std::string root; // table row
     std::function<void()> root_handler;
 

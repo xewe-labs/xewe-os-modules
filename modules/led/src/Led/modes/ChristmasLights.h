@@ -6,7 +6,7 @@
 #include "Mode.h"
 
 // id 6: five-colour palette in blocks of `density` bulbs, each bulb flickering on its own inoise8
-// track. Every construction draws XEWE_MODULE_LED_NUM_LEDS_MAX values from FastLED random16(),
+// track. Every construction draws XEWE_LED_NUM_LEDS_MAX values from FastLED random16(),
 // which is never seeded, so the offsets depend on how many instances were built since boot.
 class ChristmasLights : public Mode {
 public:
@@ -17,7 +17,7 @@ public:
 
 private:
     uint16_t z = 0;
-    uint16_t noise_offsets[XEWE_MODULE_LED_NUM_LEDS_MAX];
+    uint16_t noise_offsets[XEWE_LED_NUM_LEDS_MAX];
 
     static constexpr CRGB palette[5] = {
         CRGB(255, 6, 0), CRGB(199, 61, 3), CRGB(6, 133, 3), CRGB(10, 10, 122), CRGB(119, 130, 30)};

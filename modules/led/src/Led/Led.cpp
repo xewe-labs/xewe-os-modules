@@ -24,7 +24,23 @@ private:
     LedEngineIo& io;
 };
 
+// true while the build leaves at least one wizard question open; the pin confirmations store
+// nothing, so a build that pre-answers every value skips them as well
+#if defined(XEWE_LED_USE_CLK_PROMPT) || defined(XEWE_LED_CHIP_PROMPT) || \
+    defined(XEWE_LED_VOLTAGE_PROMPT) || defined(XEWE_LED_LINES_PROMPT) || \
+    defined(XEWE_LED_NUM_LED_PROMPT) || defined(XEWE_LED_COLORDER_PROMPT)
+constexpr bool wizard_asks = true;
+#else
+constexpr bool wizard_asks = false;
+#endif
+
 } // namespace
+
+static_assert(XEWE_LED_CHIP < LED_CHIPSET_COUNT, "XEWE_LED_CHIP: no such chipset id");
+static_assert(XEWE_LED_VOLTAGE == 5 || XEWE_LED_VOLTAGE == 12 || XEWE_LED_VOLTAGE == 24,
+    "XEWE_LED_VOLTAGE must be 5, 12 or 24");
+static_assert(
+    XEWE_LED_NUM_LED <= XEWE_LED_NUM_LEDS_MAX, "XEWE_LED_NUM_LED exceeds XEWE_LED_NUM_LEDS_MAX");
 
 // =============================================================================
 // Constructor
@@ -71,17 +87,18 @@ Led::Led(xewe::Os& host)
 // =============================================================================
 xewe::Settings Led::settings() const {
     static constexpr xewe::SettingDef table[] = {
-        xewe::setting<&Led::use_clk>("use_clk", false, "LED has a clock line (status only)"),
-        xewe::setting<&Led::chip>("chip", 0, LED_CHIPSET_COUNT - 1, 0,
+        xewe::setting<&Led::use_clk>(
+            "use_clk", XEWE_LED_USE_CLK, "LED has a clock line (status only)"),
+        xewe::setting<&Led::chip>("chip", 0, LED_CHIPSET_COUNT - 1, XEWE_LED_CHIP,
             "LED chipset id 0..45 (README), applied at boot", xewe::SettingDef::RESTART),
         xewe::setting<&Led::voltage>(
-            "voltage", 5, 24, 5, "Strip voltage, 5, 12 or 24 V (power estimate)"),
-        xewe::setting<&Led::lines>("lines", 0, XEWE_MODULE_LED_NUM_LEDS_MAX, 0,
+            "voltage", 5, 24, XEWE_LED_VOLTAGE, "Strip voltage, 5, 12 or 24 V (power estimate)"),
+        xewe::setting<&Led::lines>("lines", 0, XEWE_LED_NUM_LEDS_MAX, XEWE_LED_LINES,
             "Parallel strips on the data line (0 = one strip)"),
-        xewe::setting<&Led::num_led>("num_led", 0, XEWE_MODULE_LED_NUM_LEDS_MAX,
-            XEWE_MODULE_LED_NUM_LEDS_MAX, "Number of LEDs (same as $led set_length)"),
+        xewe::setting<&Led::num_led>("num_led", 0, XEWE_LED_NUM_LEDS_MAX, XEWE_LED_NUM_LED,
+            "Number of LEDs (same as $led set_length)"),
         xewe::setting<&Led::colorder>(
-            "colorder", 0, 5, 0, "Colour order 0..5 = RGB RBG GRB GBR BRG BGR"),
+            "colorder", 0, 5, XEWE_LED_COLORDER, "Colour order 0..5 = RGB RBG GRB GBR BRG BGR"),
     };
     return {table, this};
 }
@@ -152,22 +169,31 @@ void Led::begin_routines_init() {
     wizard_active = true;
 
     os.serial.print(
-        "Detailed guide is available here:\nhttps://github.com/maxdokukin/xewe/led-os/TODO");
+        "Detailed guide is available here:\nhttps://github.com/xewe-labs/xewe-os-modules/blob/main/modules/led/README.md");
 
-    // A "no" to a pin question prints how to change the pins and the setup continues: wrong pins
-    // show no colours in the calibration, whose "Other" answer restarts into this wizard.
-    if (!os.serial.get_yn("Is LED data line connected to pin GPIO_" +
-            std::to_string(XEWE_MODULE_LED_PIN_DATA) + "?")) {
+    // Each value is asked only while its XEWE_LED_<KEY>_PROMPT is defined (Config.h); otherwise the
+    // build's value is stored without a question. A "no" to a pin question prints how to change
+    // the pins and the setup continues: wrong pins show no colours in the calibration, whose
+    // "Other" answer restarts into this wizard.
+    if (wizard_asks &&
+        !os.serial.get_yn(
+            "Is LED data line connected to pin GPIO_" + std::to_string(XEWE_LED_PIN_DATA) + "?")) {
         os.serial.print_header(
             "Pins can not be changed after upload. \nOptions:\\sep1. Upload the version with the "
             "correct pin\\sep2. If there is no compiled version with pin that you need, set pins "
             "in Config.h and compile yourself");
     }
 
-    if (os.serial.get_yn("Are you using LED with CLK line?")) {
+#ifdef XEWE_LED_USE_CLK_PROMPT
+    const bool clocked = os.serial.get_yn("Are you using LED with CLK line?");
+#else
+    const bool clocked = XEWE_LED_USE_CLK;
+#endif
+    if (clocked) {
         apply_setting("use_clk", "true");
-        if (!os.serial.get_yn("Is LED CLK line connected to pin GPIO_" +
-                std::to_string(XEWE_MODULE_LED_PIN_CLOCK) + "?")) {
+        if (wizard_asks &&
+            !os.serial.get_yn("Is LED CLK line connected to pin GPIO_" +
+                std::to_string(XEWE_LED_PIN_CLOCK) + "?")) {
             os.serial.print_header(
                 "Pins can not be changed after upload.\nOptions:\\sep1. Upload the version with "
                 "the correct pin\\sep2. If there is no compiled version with pin that you need, "
@@ -178,6 +204,7 @@ void Led::begin_routines_init() {
         apply_setting("use_clk", "false");
     }
 
+#ifdef XEWE_LED_CHIP_PROMPT
     std::vector<std::string> chipset_names;
     for (const auto& entry : LED_CHIPSET_TABLE) {
         chipset_names.push_back(entry.name);
@@ -185,9 +212,13 @@ void Led::begin_routines_init() {
 
     const uint8_t selected_chip_id =
         os.serial.get_menu_choice("What is your LED Chip?", chipset_names) - 1;
+#else
+    const uint8_t selected_chip_id = XEWE_LED_CHIP;
+#endif
     apply_setting("chip", std::to_string(selected_chip_id));
     start_strip();
 
+#ifdef XEWE_LED_VOLTAGE_PROMPT
     switch (os.serial.get_menu_choice("What is LED Voltage?", {"5V", "12V", "24V"})) {
     case 1:
         apply_setting("voltage", "5");
@@ -199,20 +230,36 @@ void Led::begin_routines_init() {
         apply_setting("voltage", "24");
         break;
     }
+#else
+    apply_setting("voltage", std::to_string(XEWE_LED_VOLTAGE));
+#endif
 
+    // lines and num_led: with lines asked, both questions run as usual; with lines pre-answered,
+    // only the lengths are asked while num_led still prompts, else every line takes num_led
+#ifdef XEWE_LED_LINES_PROMPT
+    uint16_t parallel_led_strips_count = 0;
     if (os.serial.get_yn("Do you have parallel LED strips attached to data line?")) {
-        const uint16_t parallel_led_strips_count = os.serial.get_int(
-            "How many LED strips do you have in parallel?", 1, XEWE_MODULE_LED_NUM_LEDS_MAX);
+        parallel_led_strips_count = os.serial.get_int(
+            "How many LED strips do you have in parallel?", 1, XEWE_LED_NUM_LEDS_MAX);
+    }
+#else
+    const uint16_t parallel_led_strips_count = XEWE_LED_LINES;
+#endif
 
+    if (parallel_led_strips_count > 0) {
         apply_setting("lines", std::to_string(parallel_led_strips_count));
 
         // the longest line becomes the stored length (the strip drives that many pixels on the
         // shared data line)
         uint16_t longest_line = 0;
         for (uint16_t i = 0; i < parallel_led_strips_count; ++i) {
+#if defined(XEWE_LED_LINES_PROMPT) || defined(XEWE_LED_NUM_LED_PROMPT)
             const uint16_t leds_per_line = os.serial.get_int(
                 "How many LEDs are connected on parallel line #" + std::to_string(i + 1) + "?", 1,
-                XEWE_MODULE_LED_NUM_LEDS_MAX);
+                XEWE_LED_NUM_LEDS_MAX);
+#else
+            const uint16_t leds_per_line = XEWE_LED_NUM_LED;
+#endif
 
             longest_line = std::max(longest_line, leds_per_line);
 
@@ -221,15 +268,30 @@ void Led::begin_routines_init() {
         apply_setting("num_led", std::to_string(longest_line));
     } else {
         apply_setting("lines", "0");
-        const uint16_t count = os.serial.get_int(
-            "How many LEDs do you have connected?", 0, XEWE_MODULE_LED_NUM_LEDS_MAX);
+#if defined(XEWE_LED_LINES_PROMPT) || defined(XEWE_LED_NUM_LED_PROMPT)
+        const uint16_t count =
+            os.serial.get_int("How many LEDs do you have connected?", 0, XEWE_LED_NUM_LEDS_MAX);
+#else
+        const uint16_t count = XEWE_LED_NUM_LED;
+#endif
         apply_setting("num_led", std::to_string(count));
     }
 
     engine.set_length(num_led); // the ModeController renders this length, the rest stays black
     start_render_task(); // the colour order calibration needs live frames
 
+#ifdef XEWE_LED_COLORDER_PROMPT
     calibrate_color_order();
+#else
+    // no calibration (`$led set_color_order ""` still runs it): the build's order, then the state
+    // the calibration ends in, so the next boot restores a lit strip
+    apply_setting("colorder", std::to_string(XEWE_LED_COLORDER));
+    engine.set_rgb({0, 255, 0});
+    engine.set_brightness(50);
+    engine.set_mode(0);
+    engine.turn_on();
+    os.serial.print("Color order set to " + std::string(LED_COLOR_ORDERS[XEWE_LED_COLORDER]));
+#endif
 
     os.serial.print("LED setup success!");
     wizard_active = false;
@@ -524,9 +586,9 @@ bool Led::start_strip() {
     const LEDChipsetEntry& entry = LED_CHIPSET_TABLE[chip < LED_CHIPSET_COUNT ? chip : 0];
 
     // the clock pin is claimed only for the clocked chipsets
-    data_pin_claimed = xewe::pins::claim(XEWE_MODULE_LED_PIN_DATA, id.c_str());
-    clock_pin_claimed = data_pin_claimed && entry.clocked &&
-        xewe::pins::claim(XEWE_MODULE_LED_PIN_CLOCK, id.c_str());
+    data_pin_claimed = xewe::pins::claim(XEWE_LED_PIN_DATA, id.c_str());
+    clock_pin_claimed =
+        data_pin_claimed && entry.clocked && xewe::pins::claim(XEWE_LED_PIN_CLOCK, id.c_str());
     if (!data_pin_claimed || (entry.clocked && !clock_pin_claimed)) {
         release_pins();
         os.serial.print("! Led: strip pin claimed by another module (see $pins claims); no output");
@@ -544,9 +606,9 @@ bool Led::start_strip() {
 
 void Led::release_pins() {
     if (data_pin_claimed)
-        xewe::pins::release(XEWE_MODULE_LED_PIN_DATA, id.c_str());
+        xewe::pins::release(XEWE_LED_PIN_DATA, id.c_str());
     if (clock_pin_claimed)
-        xewe::pins::release(XEWE_MODULE_LED_PIN_CLOCK, id.c_str());
+        xewe::pins::release(XEWE_LED_PIN_CLOCK, id.c_str());
     data_pin_claimed = false;
     clock_pin_claimed = false;
 }
@@ -556,9 +618,9 @@ void Led::release_pins() {
 // buffer, RGB order on the wire (the colour order is applied in software) and TypicalLEDStrip
 // correction. Changing the chip, the pins or the buffer size needs a restart.
 bool Led::set_leds_chipset(const LEDChipset chipset) {
-    constexpr int D = XEWE_MODULE_LED_PIN_DATA;
-    constexpr int C = XEWE_MODULE_LED_PIN_CLOCK;
-    constexpr int N = XEWE_MODULE_LED_NUM_LEDS_MAX;
+    constexpr int D = XEWE_LED_PIN_DATA;
+    constexpr int C = XEWE_LED_PIN_CLOCK;
+    constexpr int N = XEWE_LED_NUM_LEDS_MAX;
     CRGB* leds = engine.pixels();
     switch (chipset) {
     case LEDChipset::APA102:
@@ -718,10 +780,9 @@ void Led::start_render_task() {
         return;
 
     render_task_stop = false;
-    const BaseType_t core =
-        XEWE_MODULE_LED_TASK_CORE < portNUM_PROCESSORS ? XEWE_MODULE_LED_TASK_CORE : 0;
+    const BaseType_t core = XEWE_LED_TASK_CORE < portNUM_PROCESSORS ? XEWE_LED_TASK_CORE : 0;
     const BaseType_t created = xTaskCreatePinnedToCore(&Led::render_task_entry, "led_render",
-        XEWE_MODULE_LED_TASK_STACK, this, XEWE_MODULE_LED_TASK_PRIORITY, &render_task_handle, core);
+        XEWE_LED_TASK_STACK, this, XEWE_LED_TASK_PRIORITY, &render_task_handle, core);
 
     if (created != pdPASS) {
         render_task_handle = nullptr;
@@ -744,8 +805,7 @@ void Led::render_task_entry(void* self) {
 }
 
 void Led::render_task() {
-    const TickType_t frame_period =
-        std::max<TickType_t>(1, pdMS_TO_TICKS(XEWE_MODULE_LED_FRAME_MS));
+    const TickType_t frame_period = std::max<TickType_t>(1, pdMS_TO_TICKS(XEWE_LED_FRAME_MS));
     TickType_t last_wake = xTaskGetTickCount();
     fps_window_start_ms = millis();
 
@@ -785,9 +845,9 @@ void Led::render_task() {
 void Led::count_frame() {
     fps_counter++;
     const uint32_t now_ms = millis();
-    if (now_ms - fps_window_start_ms < static_cast<uint32_t>(XEWE_MODULE_LED_FPS_WINDOW_S) * 1000)
+    if (now_ms - fps_window_start_ms < static_cast<uint32_t>(XEWE_LED_FPS_WINDOW_S) * 1000)
         return;
-    fps_calculated = fps_counter / XEWE_MODULE_LED_FPS_WINDOW_S;
+    fps_calculated = fps_counter / XEWE_LED_FPS_WINDOW_S;
     fps_counter = 0;
     fps_window_start_ms = now_ms;
 }

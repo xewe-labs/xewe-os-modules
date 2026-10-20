@@ -21,9 +21,9 @@ WebInterface::WebInterface(xewe::Os& host, Wifi& wifi_ref)
 xewe::Settings WebInterface::settings() const {
     static constexpr xewe::SettingDef table[] = {
         xewe::setting<&WebInterface::port>(
-            "port", 1, 65535, 80, "HTTP port", xewe::SettingDef::RESTART),
-        xewe::setting<&WebInterface::root>(
-            "root", 31, "", "GET / redirects here (e.g. /pad); empty = the console"),
+            "port", 1, 65535, XEWE_WEB_INTERFACE_PORT, "HTTP port", xewe::SettingDef::RESTART),
+        xewe::setting<&WebInterface::root>("root", 31, XEWE_WEB_INTERFACE_ROOT,
+            "GET / redirects here (e.g. /pad); empty = the console"),
     };
     return {table, this};
 }

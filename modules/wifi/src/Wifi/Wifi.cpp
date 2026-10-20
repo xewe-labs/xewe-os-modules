@@ -25,9 +25,10 @@ Wifi::Wifi(xewe::Os& host)
 
 xewe::Settings Wifi::settings() const {
     static constexpr xewe::SettingDef table[] = {
-        xewe::setting<&Wifi::stored_ssid>("ssid", 32, "", "Network name; used by $wifi connect"),
+        xewe::setting<&Wifi::stored_ssid>(
+            "ssid", 32, XEWE_WIFI_SSID, "Network name; used by $wifi connect"),
         xewe::setting<&Wifi::stored_psw>(
-            "psw", 63, "", "Network password", xewe::SettingDef::SECRET),
+            "psw", 63, XEWE_WIFI_PSW, "Network password", xewe::SettingDef::SECRET),
     };
     return {table, this};
 }
@@ -40,8 +41,37 @@ void Wifi::begin_routines_required() {
 }
 
 void Wifi::begin_routines_init() {
+#if !defined(XEWE_WIFI_SSID_PROMPT) && !defined(XEWE_WIFI_PSW_PROMPT)
+    // both pre-answered by the build: stored unless NVS holds another network, joined without a
+    // scan; the scan is the fallback
+    if (stored_ssid == XEWE_WIFI_SSID && stored_psw == XEWE_WIFI_PSW) {
+        apply_setting("ssid", XEWE_WIFI_SSID);
+        apply_setting("psw", XEWE_WIFI_PSW);
+    }
+    for (uint8_t attempt = 0; attempt < 3; ++attempt) {
+        if (join(stored_ssid, stored_psw, 10000, 1))
+            return;
+    }
+    os.serial.print("! Wifi: unable to join " + stored_ssid + "; select a network");
+    if (!select_network())
+        disable(false, false);
+#elif !defined(XEWE_WIFI_SSID_PROMPT)
+    // only the network name pre-answered: its password is asked, no scan; the scan is the fallback
+    const std::string pwd =
+        os.serial.get_string("Selected: '" + std::string(XEWE_WIFI_SSID) + "'\nPassword: ");
+    if (join(XEWE_WIFI_SSID, pwd, 10000, 1)) {
+        apply_setting("ssid", XEWE_WIFI_SSID);
+        apply_setting("psw", pwd);
+        return;
+    }
+    os.serial.print("! Wifi: unable to join " + std::string(XEWE_WIFI_SSID) + "; select a network");
+    if (!select_network())
+        disable(false, false);
+#else
+    // a password without a network name is ignored: both are asked
     if (!connect(true))
         disable(false, false);
+#endif
 }
 
 void Wifi::begin_routines_regular() {
@@ -117,32 +147,35 @@ bool Wifi::connect(bool prompt_for_credentials) {
         }
     }
 
-    if (prompt_for_credentials) {
-        while (is_disconnected()) {
-            DBG_PRINTLN(Wifi, "connect(): prompting for credentials");
-            uint8_t prompt_status = prompt_credentials(ssid, pwd);
-            DBG_PRINTF(Wifi, "connect(): prompt_credentials returned %d\n", prompt_status);
+    return prompt_for_credentials && select_network();
+}
 
-            if (prompt_status == 1) { // User exit
-                DBG_PRINTLN(Wifi, "connect(): user terminated setup");
-                os.serial.print("Terminated WiFi setup");
-                return false;
-            } else if (prompt_status == 2) { // Rescan
-                DBG_PRINTLN(Wifi, "connect(): invalid choice, retrying");
-                continue;
-            } else if (prompt_status == 3) { // Invalid
-                DBG_PRINTLN(Wifi, "connect(): invalid choice, retrying");
-                os.serial.print("! Wifi: invalid choice");
-                continue;
-            } else {
-                DBG_PRINTLN(Wifi, "connect(): attempting join() with user credentials");
-                if (join(ssid, pwd, 10000, 1)) {
-                    DBG_PRINTLN(Wifi, "connect(): join() succeeded with user credentials");
-                    // validated + saved by the table (an over-long value is refused and not stored)
-                    apply_setting("ssid", ssid);
-                    apply_setting("psw", pwd);
-                    return true;
-                }
+bool Wifi::select_network() {
+    std::string ssid, pwd;
+    while (is_disconnected()) {
+        DBG_PRINTLN(Wifi, "select_network(): prompting for credentials");
+        uint8_t prompt_status = prompt_credentials(ssid, pwd);
+        DBG_PRINTF(Wifi, "select_network(): prompt_credentials returned %d\n", prompt_status);
+
+        if (prompt_status == 1) { // User exit
+            DBG_PRINTLN(Wifi, "select_network(): user terminated setup");
+            os.serial.print("Terminated WiFi setup");
+            return false;
+        } else if (prompt_status == 2) { // Rescan
+            DBG_PRINTLN(Wifi, "select_network(): invalid choice, retrying");
+            continue;
+        } else if (prompt_status == 3) { // Invalid
+            DBG_PRINTLN(Wifi, "select_network(): invalid choice, retrying");
+            os.serial.print("! Wifi: invalid choice");
+            continue;
+        } else {
+            DBG_PRINTLN(Wifi, "select_network(): attempting join() with user credentials");
+            if (join(ssid, pwd, 10000, 1)) {
+                DBG_PRINTLN(Wifi, "select_network(): join() succeeded with user credentials");
+                // validated + saved by the table (an over-long value is refused and not stored)
+                apply_setting("ssid", ssid);
+                apply_setting("psw", pwd);
+                return true;
             }
         }
     }

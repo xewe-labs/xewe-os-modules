@@ -22,7 +22,7 @@ Time::Time(xewe::Os& host, Wifi& wifi_ref)
 xewe::Settings Time::settings() const {
     static constexpr xewe::SettingDef table[] = {
         xewe::setting<&Time::tz_gmt_str>(
-            "tz_gmt_str", 9, "GMT+00:00", "Timezone offset, GMT+HH:MM"),
+            "tz_gmt_str", 9, XEWE_TIME_TZ_GMT_STR, "Timezone offset, GMT+HH:MM"),
     };
     return {table, this};
 }
@@ -47,6 +47,18 @@ void Time::begin_routines_required() {
 }
 
 void Time::begin_routines_init() {
+#ifndef XEWE_TIME_TZ_GMT_STR_PROMPT
+    // pre-answered by the build: no detection and no question; NTP still syncs. An offset that
+    // does not parse falls back to the typed one below.
+    std::string build_gmt;
+    if (xewe::str::parse_gmt_offset(XEWE_TIME_TZ_GMT_STR, build_gmt)) {
+        apply_setting("tz_gmt_str", build_gmt); // saves and applies
+        os.serial.print("Timezone set to " + tz_gmt_str);
+        sync_and_print();
+        return;
+    }
+    os.serial.print("! Time: XEWE_TIME_TZ_GMT_STR is not GMT+HH:MM (e.g. GMT-08:00)");
+#else
     os.serial.print("Detecting Timezone...", "");
 
     const char* TZ_ENDPOINTS[] = {"http://ipwho.is/?fields=success,timezone.offset,timezone.utc",
@@ -96,6 +108,7 @@ void Time::begin_routines_init() {
     } else {
         os.serial.print("! Time: unable to reach a timezone server; check the internet connection");
     }
+#endif
 
     while (true) {
         std::string normalized_gmt;

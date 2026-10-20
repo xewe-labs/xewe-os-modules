@@ -85,8 +85,8 @@ private:
 
     CRGB* output_buffer;
 
-    std::array<CRGB, XEWE_MODULE_LED_NUM_LEDS_MAX> buffer_current;
-    std::array<CRGB, XEWE_MODULE_LED_NUM_LEDS_MAX> buffer_old;
+    std::array<CRGB, XEWE_LED_NUM_LEDS_MAX> buffer_current;
+    std::array<CRGB, XEWE_LED_NUM_LEDS_MAX> buffer_old;
 
     bool buffer_old_static_flag;
 

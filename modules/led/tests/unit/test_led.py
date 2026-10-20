@@ -405,7 +405,7 @@ def test_reset_clears_mode_params_and_stops_output():
 WIZARD_2_3_0 = [
     (
         "print",
-        "Detailed guide is available here:\\nhttps://github.com/maxdokukin/xewe/led-os/TODO",
+        "Detailed guide is available here:\\nhttps://github.com/xewe-labs/xewe-os-modules/blob/main/modules/led/README.md",
     ),
     ("get_yn", "Is LED data line connected to pin GPIO_{}?"),
     (
@@ -537,7 +537,7 @@ def _text(arg):
 
 def _norm(arg):
     arg = re.sub(r"\s+", " ", arg)
-    arg = arg.replace("XEWE_MODULE_LED_NUM_LEDS_MAX", "MAX").replace(
+    arg = arg.replace("XEWE_LED_NUM_LEDS_MAX", "MAX").replace(
         "LED_STRIP_NUM_LEDS_MAX", "MAX"
     )
     return arg
@@ -592,12 +592,55 @@ def _events(body, splice=None):
     return out
 
 
-def _port_wizard(cpp):
+PROMPTS = re.findall(r"#define (XEWE_LED_\w+_PROMPT) 1", (SRC / "Config.h").read_text())
+
+
+def _resolve(text, defined):
+    """`text` with its #if/#ifdef/#ifndef/#elif/#else/#endif lines resolved for the macros in
+    `defined` (every other macro undefined); conditions use only defined(), !, && and ||."""
+
+    def holds(cond):
+        cond = re.sub(
+            r"defined\s*\(?\s*(\w+)\s*\)?", lambda m: str(m[1] in defined), cond
+        )
+        cond = cond.replace("&&", " and ").replace("||", " or ")
+        return eval(re.sub(r"!(?!=)", " not ", cond))
+
+    text = re.sub(r"\\\n", " ", text)
+    out, stack = [], []  # stack: (this branch is kept, an earlier branch was kept)
+    for line in text.splitlines():
+        m = re.match(r"\s*#\s*(ifdef|ifndef|if|elif|else|endif)\b(.*)", line)
+        if not m:
+            if all(keep for keep, _ in stack):
+                out.append(line)
+            continue
+        kind, rest = m[1], m[2].strip()
+        if kind in ("ifdef", "ifndef", "if"):
+            keep = {
+                "ifdef": lambda: rest in defined,
+                "ifndef": lambda: rest not in defined,
+            }.get(kind, lambda: holds(rest))()
+            stack.append((keep, keep))
+        elif kind == "elif":
+            done = stack[-1][1]
+            keep = not done and holds(rest)
+            stack[-1] = (keep, done or keep)
+        elif kind == "else":
+            stack[-1] = (not stack[-1][1], True)
+        else:
+            stack.pop()
+    return "\n".join(out)
+
+
+def _port_wizard(cpp, defined=None):
+    """The wizard as a build sees it: every question open unless `defined` names the prompts left."""
+    defined = set(PROMPTS) if defined is None else defined
     init = cpp[
         cpp.index("void Led::begin_routines_init()") : cpp.index(
             "void Led::begin_routines_regular()"
         )
     ]
+    init = _resolve(init, defined)
     cal = cpp[
         cpp.index("void Led::calibrate_color_order()") : cpp.index(
             "void Led::wait_with_dots("
@@ -670,6 +713,145 @@ def test_wizard_sequence_is_2_3_0():
 
 
 @pytest.mark.unit
+def test_first_boot_values_are_guarded():
+    """Each first-boot value of Config.h has its _PROMPT and is asked only under it: dropping one
+    prompt removes exactly that question from the wizard and stores the build's value instead."""
+    assert PROMPTS == [
+        f"XEWE_LED_{k}_PROMPT"
+        for k in ("USE_CLK", "CHIP", "VOLTAGE", "LINES", "NUM_LED", "COLORDER")
+    ]
+    cpp = (SRC / "Led.cpp").read_text()
+    full = _port_wizard(cpp)
+    asked = {
+        "USE_CLK": [("get_yn", "Are you using LED with CLK line?")],
+        "CHIP": [("get_menu_choice", "What is your LED Chip?", "chipset_names")],
+        "VOLTAGE": [
+            ("get_menu_choice", "What is LED Voltage?", '{"5V", "12V", "24V"}')
+        ],
+        "COLORDER": [("print_header", "Color Order Calibration")],
+    }
+    for key, events in asked.items():
+        view = _port_wizard(cpp, set(PROMPTS) - {f"XEWE_LED_{key}_PROMPT"})
+        for event in events:
+            assert event in full and event not in view, (key, event)
+        assert ("store", key.lower(), "{}") in view or key == "USE_CLK", key
+    # colorder pre-answered: no calibration, the build's order and the calibration's end state
+    view = _port_wizard(cpp, set(PROMPTS) - {"XEWE_LED_COLORDER_PROMPT"})
+    assert ("calibration",) not in view and ("store", "colorder", "{}") in view
+    assert view[-7:-2] == [
+        ("store", "colorder", "{}"),
+        ("set_rgb", "{0, 255, 0}"),
+        ("set_brightness", "50"),
+        ("set_mode", "0"),
+        ("turn_on", ""),
+    ]
+
+
+LINE_QUESTIONS = {
+    "parallel": ("get_yn", "Do you have parallel LED strips attached to data line?"),
+    "strips": ("get_int", "How many LED strips do you have in parallel?", "1, MAX"),
+    "per_line": (
+        "get_int",
+        "How many LEDs are connected on parallel line #{}?",
+        "1, MAX",
+    ),
+    "count": ("get_int", "How many LEDs do you have connected?", "0, MAX"),
+}
+
+
+@pytest.mark.parametrize(
+    "lines_prompt, num_led_prompt, asked",
+    [
+        (True, True, {"parallel", "strips", "per_line", "count"}),
+        (True, False, {"parallel", "strips", "per_line", "count"}),
+        (
+            False,
+            True,
+            {"per_line", "count"},
+        ),  # lines > 0 asks the lengths, lines 0 the count
+        (False, False, set()),  # every line takes XEWE_LED_NUM_LED
+    ],
+)
+@pytest.mark.unit
+def test_lines_and_num_led_matrix(lines_prompt, num_led_prompt, asked):
+    cpp = (SRC / "Led.cpp").read_text()
+    defined = set(PROMPTS) - {
+        name
+        for name, keep in (
+            ("XEWE_LED_LINES_PROMPT", lines_prompt),
+            ("XEWE_LED_NUM_LED_PROMPT", num_led_prompt),
+        )
+        if not keep
+    }
+    view = _port_wizard(cpp, defined)
+    assert {k for k, e in LINE_QUESTIONS.items() if e in view} == asked
+    assert ("store", "lines", "0") in view and ("store", "l_<i>_cnt", "{}") in view
+
+
+def _preprocessed(tmp_path, source, defines):
+    """`source` through g++ -E with Config.h forced first and `defines` as -D values, the way a
+    build with those values pre-answered sees it; #include lines are dropped (nothing else needed)."""
+    gpp = shutil.which("g++")
+    if gpp is None:
+        pytest.skip("g++ not installed")
+    text = "\n".join(
+        l
+        for l in source.read_text().splitlines()
+        if not l.lstrip().startswith("#include")
+    )
+    src = tmp_path / source.name
+    src.write_text(text)
+    cmd = [gpp, "-E", "-P", "-x", "c++", "-include", str(source.parent / "Config.h")]
+    cmd += [f"-D{k}={v}" for k, v in defines.items()] + [str(src)]
+    return subprocess.run(cmd, check=True, capture_output=True, text=True).stdout
+
+
+@pytest.mark.unit
+def test_colorder_pre_answer_skips_the_calibration_gpp(tmp_path):
+    """A build with XEWE_LED_COLORDER skips the calibration and stores that order; the default build
+    calibrates. With every value pre-answered the pin confirmations are skipped too."""
+
+    def init(defines):
+        out = _preprocessed(tmp_path, SRC / "Led.cpp", defines)
+        body = out[
+            out.index("void Led::begin_routines_init()") : out.index(
+                "void Led::begin_routines_regular()"
+            )
+        ]
+        return out, body
+
+    out, body = init({})
+    assert (
+        "calibrate_color_order();" in body
+        and "constexpr bool wizard_asks = true;" in out
+    )
+    out, body = init({"XEWE_LED_COLORDER": "2"})
+    assert "calibrate_color_order();" not in body
+    assert 'apply_setting("colorder", std::to_string(2));' in body
+    assert "constexpr bool wizard_asks = true;" in out
+    every = {
+        "XEWE_LED_USE_CLK": "0",
+        "XEWE_LED_CHIP": "39",
+        "XEWE_LED_VOLTAGE": "12",
+        "XEWE_LED_LINES": "0",
+        "XEWE_LED_NUM_LED": "60",
+        "XEWE_LED_COLORDER": "2",
+    }
+    out, body = init(every)
+    assert "constexpr bool wizard_asks = false;" in out
+    assert not re.search(r"get_(menu_choice|int)\(", body)
+    assert (
+        body.count("os.serial.get_yn(") == 2
+    )  # the two pin confirmations, behind wizard_asks
+    asserts = re.findall(r'static_assert\((.*?),\s*"', out, re.S)
+    assert [" ".join(a.split()) for a in asserts][:3] == [
+        "39 < LED_CHIPSET_COUNT",
+        "12 == 5 || 12 == 12 || 12 == 24",
+        "60 <= 600",
+    ]
+
+
+@pytest.mark.unit
 def test_set_color_order_without_a_name_calibrates():
     """`$led set_color_order ""` runs the wizard's calibration, outside the command lock (it waits
     for answers while the render task shows the test colours)."""
@@ -709,7 +891,7 @@ def test_set_refuses_a_bad_voltage_before_the_core_stores_it():
     )
     core = _find_core_src()
     if core is not None:
-        module = (core / "XeWeCore" / "Module.cpp").read_text()
+        module = (core / "XeWeCore" / "Module" / "Module.cpp").read_text()
         row = '{"set", "Set a setting: validated, applied, saved", " set <key> <value>", 2}'
         assert row in module
     # the settings hook keeps the same rule for other apply_setting callers (puts the value back)

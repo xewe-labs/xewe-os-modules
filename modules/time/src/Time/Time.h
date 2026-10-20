@@ -18,6 +18,7 @@
 #include "freertos/semphr.h"
 #include <XeWeCore.h>
 #include "../Wifi/Wifi.h"
+#include "Config.h"
 
 class Time : public xewe::Module {
 public:

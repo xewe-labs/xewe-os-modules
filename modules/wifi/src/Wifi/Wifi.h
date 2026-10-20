@@ -8,12 +8,12 @@
 
 #include <XeWeCore.h>
 
-#include "Config.h" // XEWE_MODULE_WIFI_DEBUG, set in the project's Config.h
+#include "Config.h"
 
 // The core's DBG_PRINTF(Wifi, ...) reads DEBUG_Wifi; a -DDEBUG_Wifi=1 on the command line still
 // wins.
 #ifndef DEBUG_Wifi
-#define DEBUG_Wifi XEWE_MODULE_WIFI_DEBUG
+#define DEBUG_Wifi XEWE_WIFI_DEBUG
 #endif
 
 class Wifi : public xewe::Module {
@@ -54,6 +54,9 @@ private:
         uint8_t retry_count = 1);
     bool read_stored_credentials(std::string& ssid, std::string& password);
     uint8_t prompt_credentials(std::string& ssid, std::string& password);
+    // the scan, select and join loop of `$wifi connect` and the first boot; false when the user
+    // exits it
+    bool select_network();
 
     std::string stored_ssid; // table rows (loaded by the core at begin)
     std::string stored_psw;

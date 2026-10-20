@@ -232,3 +232,13 @@ def test_catch_all_equals_v230():
         cpp, "void WebInterface::begin_routines_regular("
     )
     assert cpp.count("onNotFound(") == 1
+
+
+@pytest.mark.unit
+def test_rows_and_server_take_the_config_defaults():
+    cpp = (SRC / "WebInterface.cpp").read_text()
+    assert '"port", 1, 65535, XEWE_WEB_INTERFACE_PORT, "HTTP port"' in cpp
+    assert '"root", 31, XEWE_WEB_INTERFACE_ROOT,' in cpp
+    header = (SRC / "WebInterface.h").read_text()
+    assert "WebServer http_server{XEWE_WEB_INTERFACE_PORT};" in header
+    assert '#include "Config.h"' in header

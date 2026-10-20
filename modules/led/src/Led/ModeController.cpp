@@ -8,8 +8,8 @@ ModeController::ModeController(
     CRGB* output_buffer, uint16_t num_leds, uint16_t transition_delay_ms, ModeParamStore& store)
     : num_leds(num_leds), output_buffer(output_buffer), buffer_old_static_flag(false),
       store(store) {
-    fill_solid(buffer_current.data(), XEWE_MODULE_LED_NUM_LEDS_MAX, CRGB::Black);
-    fill_solid(buffer_old.data(), XEWE_MODULE_LED_NUM_LEDS_MAX, CRGB::Black);
+    fill_solid(buffer_current.data(), XEWE_LED_NUM_LEDS_MAX, CRGB::Black);
+    fill_solid(buffer_old.data(), XEWE_LED_NUM_LEDS_MAX, CRGB::Black);
 
     transition_timer = std::make_unique<xewe::AsyncTimer<uint8_t>>(transition_delay_ms, 0, 255);
 

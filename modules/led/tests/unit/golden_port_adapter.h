@@ -27,9 +27,9 @@
 #include "../../src/Led/LedEngine.h"
 #include "../../src/Led/ModeController.h"
 
-#define LED_STRIP_NUM_LEDS_MAX XEWE_MODULE_LED_NUM_LEDS_MAX
-#define LED_PIN_DATA XEWE_MODULE_LED_PIN_DATA
-#define LED_PIN_CLOCK XEWE_MODULE_LED_PIN_CLOCK
+#define LED_STRIP_NUM_LEDS_MAX XEWE_LED_NUM_LEDS_MAX
+#define LED_PIN_DATA XEWE_LED_PIN_DATA
+#define LED_PIN_CLOCK XEWE_LED_PIN_CLOCK
 
 template <typename T> using AsyncTimer = xewe::AsyncTimer<T>;
 
@@ -118,10 +118,10 @@ private:
 };
 
 struct LedStripConfig {
-    uint16_t mode_transition_delay = XEWE_MODULE_LED_MODE_FADE_MS;
-    uint16_t brightness_transition_delay = XEWE_MODULE_LED_BRIGHTNESS_FADE_MS;
-    uint8_t frame_delay = XEWE_MODULE_LED_FRAME_MS;
-    uint8_t fps_calc_window_s = XEWE_MODULE_LED_FPS_WINDOW_S;
+    uint16_t mode_transition_delay = XEWE_LED_MODE_FADE_MS;
+    uint16_t brightness_transition_delay = XEWE_LED_BRIGHTNESS_FADE_MS;
+    uint8_t frame_delay = XEWE_LED_FRAME_MS;
+    uint8_t fps_calc_window_s = XEWE_LED_FPS_WINDOW_S;
 };
 
 class ModuleController;
@@ -133,7 +133,7 @@ public:
 
     // Module::begin step 0 loads the settings table; Led::begin_routines_required builds the engine
     void begin_routines_required(const LedStripConfig& cfg) {
-        engine.begin(nvs.read<uint16_t>("led", "num_led", XEWE_MODULE_LED_NUM_LEDS_MAX), store,
+        engine.begin(nvs.read<uint16_t>("led", "num_led", XEWE_LED_NUM_LEDS_MAX), store,
             cfg.brightness_transition_delay, cfg.mode_transition_delay);
     }
     // Led::begin_routines_regular (the strip driver registration is the oracle's counting one);
@@ -254,7 +254,7 @@ private:
     Nvs& nvs;
     ModeParamStore& store;
     LedEngine engine;
-    uint32_t frame_ms = XEWE_MODULE_LED_FRAME_MS;
+    uint32_t frame_ms = XEWE_LED_FRAME_MS;
     uint32_t last_frame_ms = 0;
 };
 

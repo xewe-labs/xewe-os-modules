@@ -69,8 +69,8 @@ struct LedStatusInput {
     uint16_t lines = 0;
     std::vector<uint16_t> line_lengths; // l_<i>_cnt, one per line
     uint16_t fps = 0;
-    int pin_data = XEWE_MODULE_LED_PIN_DATA;
-    int pin_clock = XEWE_MODULE_LED_PIN_CLOCK;
+    int pin_data = XEWE_LED_PIN_DATA;
+    int pin_clock = XEWE_LED_PIN_CLOCK;
 };
 
 class LedEngine {
@@ -79,8 +79,8 @@ public:
 
     // builds Brightness(off, 0) and the ModeController (which starts mode 0, fading in from black)
     void begin(uint16_t num_led, ModeParamStore& store,
-        uint16_t brightness_transition_ms = XEWE_MODULE_LED_BRIGHTNESS_FADE_MS,
-        uint16_t mode_transition_ms = XEWE_MODULE_LED_MODE_FADE_MS);
+        uint16_t brightness_transition_ms = XEWE_LED_BRIGHTNESS_FADE_MS,
+        uint16_t mode_transition_ms = XEWE_LED_MODE_FADE_MS);
     bool begun() const;
     // regular boot: the stored values, applied in the order colour order, rgb, brightness, mode,
     // state; each setter writes its key back
@@ -195,7 +195,7 @@ public:
         LedEngine& engine;
     };
 
-    xewe::ListenerSet<LedListener, XEWE_MODULE_LED_LISTENERS> listeners;
+    xewe::ListenerSet<LedListener, XEWE_LED_LISTENERS> listeners;
 
 private:
     // forwards to the real store; commit() (the flash write) is queued like the other effects
@@ -260,9 +260,9 @@ private:
     int section_depth = 0;
     std::vector<Effect> pending_effects;
 
-    CRGB leds[XEWE_MODULE_LED_NUM_LEDS_MAX];
+    CRGB leds[XEWE_LED_NUM_LEDS_MAX];
 
-    uint16_t num_led{XEWE_MODULE_LED_NUM_LEDS_MAX};
+    uint16_t num_led{XEWE_LED_NUM_LEDS_MAX};
     uint8_t color_order_index = 0;
     bool blank_requested = false;
     uint16_t blank_length = 0;

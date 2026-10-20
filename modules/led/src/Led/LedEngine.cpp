@@ -20,7 +20,7 @@ std::string float_text(float value) {
 } // namespace
 
 LedEngine::LedEngine(LedEngineIo& io) : io(io), self(this) {
-    fill_solid(leds, XEWE_MODULE_LED_NUM_LEDS_MAX, CRGB::Black);
+    fill_solid(leds, XEWE_LED_NUM_LEDS_MAX, CRGB::Black);
 }
 
 void LedEngine::begin(uint16_t length, ModeParamStore& store, uint16_t brightness_transition_ms,
@@ -492,9 +492,8 @@ void LedEngine::print_text(std::string_view text) {
 // =============================================================================
 void LedEngine::set_length(const uint16_t length) {
     Section section(*this);
-    if (length > XEWE_MODULE_LED_NUM_LEDS_MAX) {
-        print("That's too many. Max supported: " + std::to_string(XEWE_MODULE_LED_NUM_LEDS_MAX) +
-            " LEDs");
+    if (length > XEWE_LED_NUM_LEDS_MAX) {
+        print("That's too many. Max supported: " + std::to_string(XEWE_LED_NUM_LEDS_MAX) + " LEDs");
         return;
     }
 
@@ -693,12 +692,12 @@ std::string LedEngine::status_text(const LedStatusInput& in) const {
     text += "\n";
 
     if (configured_lines == 0) {
-        text += hw_lines + "    Max Length:       " + std::to_string(XEWE_MODULE_LED_NUM_LEDS_MAX) +
-            "\n\n";
+        text +=
+            hw_lines + "    Max Length:       " + std::to_string(XEWE_LED_NUM_LEDS_MAX) + "\n\n";
     } else {
         text += "    Parallel Lines:   " + std::to_string(configured_lines) + "\n" + hw_lines +
             "    Total LEDs:       " + std::to_string(total_physical_leds) + "\n" +
-            "    Max LEDs/line:    " + std::to_string(XEWE_MODULE_LED_NUM_LEDS_MAX) + "\n\n";
+            "    Max LEDs/line:    " + std::to_string(XEWE_LED_NUM_LEDS_MAX) + "\n\n";
     }
 
     text += "Live State:\n";

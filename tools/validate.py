@@ -146,7 +146,10 @@ def read_catalogue() -> set[str]:
 
 
 def check_module(
-    m, libraries: set[str] | None, catalogue: frozenset[str] | set[str] = frozenset()
+    m,
+    libraries: set[str] | None,
+    catalogue: frozenset[str] | set[str] = frozenset(),
+    owners: dict[str, str] | None = None,
 ) -> list[Problem]:
     problems: list[Problem] = []
     where = m.slug or m.dir.name
@@ -236,7 +239,7 @@ def check_module(
         ):
             err(f"source: {header.name} must contain '#include <XeWeCore.h>'")
         check_core21(src, p.get("requires_core", ""), err)
-        check_config(src, m.slug, err)
+        check_config(src, m.slug, err, owners)
 
     # stray (inside the module)
     for f in sorted(m.dir.rglob("*.ino")):
@@ -249,73 +252,292 @@ def check_module(
     return problems
 
 
-CONFIG_DEFINE_RE = re.compile(r"^#\s*define\s+([A-Za-z_]\w*)")
-CONFIG_COND_RE = re.compile(
-    r"^#\s*(ifndef|ifdef|if|elif|else|endif)\b\s*([A-Za-z_]\w*)?"
+CONFIG_MARKERS = (
+    "// ---- runtime defaults ----",
+    "// ---- first-boot values ----",
+    "// ---- compile-time constants ----",
 )
+"""The section markers of a module Config.h (XeWeCore doc/config.md), in this order."""
+RUNTIME, FIRST_BOOT, CONSTANTS = range(3)
+RESERVED_PREFIXES = {
+    "XEWE_CORE_": "core",
+    "XEWE_CHIP_": "the build",
+    "XEWE_TEST_": "the tools",
+}
+PROMPT = "_PROMPT"
+CONFIG_DIRECTIVE_RE = re.compile(r"^#\s*(\w+)\s*(.*)$")
+DEFINE_RE = re.compile(r"^#\s*(define|undef)\s+([A-Za-z_]\w*)")
+PROMPT_TEST_RE = re.compile(
+    r"^#\s*(?:ifdef|ifndef)\s+(\w+_PROMPT)\b|\bdefined\s*\(?\s*(\w+_PROMPT)\b", re.M
+)
+SETTING_CALL_RE = re.compile(r"xewe::setting<")
+SETTING_FLAGS = "xewe::SettingDef::"
+# arguments of a settings row without the flags: bool 3, string 4, number 5; index of the default
+ROW_DEFAULT_INDEX = {3: 1, 4: 2, 5: 3}
 
 
-def check_config(src: Path, slug: str, err) -> None:
-    """Rule config: `src/<Folder>/Config.h` (optional) is pure preprocessor without includes; every
-    define there is `XEWE_MODULE_<SLUG>_<VAR>` inside `#ifndef` of the same name, with a comment line
-    above that `#ifndef`; no other file under src/ defines a `XEWE_MODULE_` macro."""
-    prefix = "XEWE_MODULE_" + slug.upper().replace("-", "_") + "_"
+def config_prefix(slug: str) -> str:
+    """`XEWE_<SLUG>_`: the slug in upper case with `-` as `_`."""
+    return "XEWE_" + slug.upper().replace("-", "_") + "_"
+
+
+def config_owners(slugs) -> dict[str, str]:
+    """Every define prefix and who owns it: each module's, plus the core's."""
+    owners = {config_prefix(s): s for s in slugs}
+    owners["XEWE_CORE_"] = "core"
+    return owners
+
+
+def owner_of(name: str, owners: dict[str, str]) -> str | None:
+    """The owner of the longest prefix that starts `name` (XEWE_LED_WEB_X is led-web's, not led's)."""
+    best = max((p for p in owners if name.startswith(p)), key=len, default=None)
+    return owners[best] if best else None
+
+
+def _call_args(text: str, open_idx: int) -> list[str] | None:
+    """The top-level arguments of the call whose `(` is at open_idx, string and char literals and
+    nested brackets respected; None when the call is not closed."""
+    args, cur, depth, i = [], [], 0, open_idx + 1
+    while i < len(text):
+        c = text[i]
+        if c in "\"'":
+            j = i + 1
+            while j < len(text) and text[j] != c:
+                j += 2 if text[j] == "\\" else 1
+            cur.append(text[i : j + 1])
+            i = j + 1
+            continue
+        if c in "([{":
+            depth += 1
+        elif c in ")]}":
+            if depth == 0:
+                args.append("".join(cur).strip())
+                return [] if args == [""] else args
+            depth -= 1
+        elif c == "," and depth == 0:
+            args.append("".join(cur).strip())
+            cur = []
+            i += 1
+            continue
+        cur.append(c)
+        i += 1
+    return None
+
+
+def setting_rows(text: str) -> list[tuple[str, str | None, int]]:
+    """Every `xewe::setting<&X::m>(...)` row as (key, default argument, line); the default is None
+    when the row cannot be read."""
+    rows = []
+    for m in SETTING_CALL_RE.finditer(text):
+        depth, i = 1, m.end()
+        while i < len(text) and depth:
+            depth += {"<": 1, ">": -1}.get(text[i], 0)
+            i += 1
+        while i < len(text) and text[i].isspace():
+            i += 1
+        if i >= len(text) or text[i] != "(":
+            continue
+        args = _call_args(text, i)
+        line = text.count("\n", 0, m.start()) + 1
+        if not args:
+            rows.append(("", None, line))
+            continue
+        if args[-1].startswith(SETTING_FLAGS):
+            args = args[:-1]
+        key = args[0].strip('"') if args[0].startswith('"') else ""
+        index = ROW_DEFAULT_INDEX.get(len(args))
+        rows.append((key, args[index] if index is not None else None, line))
+    return rows
+
+
+def parse_config(
+    lines: list[str], prefix: str, owners: dict[str, str], err
+) -> dict[int, set[str]]:
+    """Check one module Config.h and return its names per section (RUNTIME, FIRST_BOOT, CONSTANTS)."""
+    names: dict[int, set[str]] = {RUNTIME: set(), FIRST_BOOT: set(), CONSTANTS: set()}
     name_re = re.compile(rf"^{re.escape(prefix)}[A-Z0-9_]+$")
+    section = -1
+    seen_markers: list[str] = []
+    stack: list[
+        str | None
+    ] = []  # the group name at depth 0, None for nested conditionals
+    prompts: set[str] = set()  # groups that define their <NAME>_PROMPT
+
+    def is_comment(n: int) -> bool:
+        text = lines[n - 1].strip() if 1 <= n <= len(lines) else ""
+        return text.startswith("//") and text not in CONFIG_MARKERS
+
+    for n, line in enumerate(lines, 1):
+        text = line.strip()
+        if text in CONFIG_MARKERS:
+            if text in seen_markers:
+                err(f"config: Config.h:{n}: marker '{text}' appears twice")
+            elif CONFIG_MARKERS.index(text) != len(seen_markers):
+                err(f"config: Config.h:{n}: marker '{text}' out of order")
+            seen_markers.append(text)
+            section = CONFIG_MARKERS.index(text)
+            if stack:
+                err(f"config: Config.h:{n}: marker '{text}' inside a conditional")
+            continue
+        if not text or text.startswith("//"):
+            continue
+        directive = CONFIG_DIRECTIVE_RE.match(text)
+        if not directive:
+            err(
+                f"config: Config.h:{n}: only comment and preprocessor lines are allowed"
+            )
+            continue
+        kind, rest = directive.group(1), directive.group(2).split("//")[0].strip()
+        if kind == "include":
+            err(
+                f"config: Config.h:{n}: no #include (the file must stay pure preprocessor)"
+            )
+        elif kind == "pragma":
+            if rest != "once":
+                err(f"config: Config.h:{n}: only '#pragma once' is allowed")
+        elif kind == "ifndef" and not stack:
+            name = rest.split()[0] if rest else ""
+            stack.append(name)
+            if section < 0:
+                err(
+                    f"config: Config.h:{n}: #ifndef {name} before the first section marker"
+                )
+            owner = owner_of(name, owners)
+            if not name_re.match(name):
+                err(
+                    f"config: Config.h:{n}: '{name}' must match {prefix}<PARAM> ([A-Z0-9_]+)"
+                )
+            elif owner != owners[prefix]:
+                err(
+                    f"config: Config.h:{n}: '{name}' has the prefix of {owner}, not {prefix}"
+                )
+            elif name.endswith(PROMPT):
+                err(f"config: Config.h:{n}: '{name}': the suffix {PROMPT} is reserved")
+            elif section >= 0:
+                names[section].add(name)
+            if not is_comment(n - 1) or is_comment(n - 2):
+                err(
+                    f"config: Config.h:{n}: #ifndef {name} needs exactly one comment line above it"
+                )
+        elif kind in ("ifndef", "ifdef", "if"):
+            if not stack:
+                err(f"config: Config.h:{n}: #{kind} outside an #ifndef group")
+            stack.append(None)
+        elif kind in ("elif", "else"):
+            if len(stack) < 2:
+                err(
+                    f"config: Config.h:{n}: #{kind} of an #ifndef group (no fallback branch)"
+                )
+        elif kind == "endif":
+            if stack:
+                stack.pop()
+            else:
+                err(f"config: Config.h:{n}: #endif without #if")
+        elif kind == "define":
+            name = rest.split()[0] if rest else ""
+            group = stack[0] if stack else None
+            if group is None:
+                err(
+                    f"config: Config.h:{n}: #define {name} must sit inside #ifndef {name}"
+                )
+            elif name == group:
+                pass
+            elif name == group + PROMPT:
+                value = rest[len(name) :].strip()
+                if section != FIRST_BOOT:
+                    err(f"config: Config.h:{n}: {name} outside the first-boot section")
+                elif len(stack) != 1 or value != "1":
+                    err(
+                        f"config: Config.h:{n}: {name} must be '#define {name} 1' in its group"
+                    )
+                else:
+                    prompts.add(group)
+            else:
+                err(
+                    f"config: Config.h:{n}: #define {name} must sit inside #ifndef {name}"
+                )
+        else:
+            err(f"config: Config.h:{n}: #{kind} is not allowed in Config.h")
+    if stack:
+        err("config: Config.h: unclosed #ifndef group")
+    for marker in CONFIG_MARKERS:
+        if marker not in seen_markers:
+            err(f"config: Config.h: marker '{marker}' missing")
+    for name in sorted(names[FIRST_BOOT] - prompts):
+        err(
+            f"config: Config.h: first-boot {name} must define {name}{PROMPT} 1 in its group"
+        )
+    return names
+
+
+def check_config(
+    src: Path, slug: str, err, owners: dict[str, str] | None = None
+) -> None:
+    """Rule config (XeWeCore doc/config.md). The module prefix is `XEWE_<SLUG>_`, clear of the
+    reserved XEWE_CORE_, XEWE_CHIP_ and XEWE_TEST_. `src/<Folder>/Config.h`, when present, is pure
+    preprocessor without includes: the three section markers once each, in order, before any group;
+    every define inside `#ifndef` of its own name, with exactly one comment line above the
+    `#ifndef`; names with the module prefix (longest-prefix ownership: XEWE_LED_WEB_* is led-web's);
+    `<NAME>_PROMPT 1` only inside a first-boot group, and every first-boot group has one. Outside
+    Config.h no source defines or undefines a name of any module's prefix or XEWE_CORE_. Every
+    settings row's default is exactly `XEWE_<SLUG>_<KEY>`, a runtime-default or first-boot define;
+    a module with rows has a Config.h. Every first-boot NAME is tested as `NAME_PROMPT` in the
+    sources, and every `*_PROMPT` tested there is a first-boot NAME of this module."""
+    prefix = config_prefix(slug)
+    owners = dict(owners or config_owners([slug]))
+    owners.setdefault(prefix, slug)
+    for reserved, who in RESERVED_PREFIXES.items():
+        if prefix.startswith(reserved) or reserved.startswith(prefix):
+            err(
+                f"config: prefix {prefix} collides with {reserved} (reserved for {who})"
+            )
     config = src / "Config.h"
+    names = {RUNTIME: set(), FIRST_BOOT: set(), CONSTANTS: set()}
     if config.is_file():
         lines = config.read_text(encoding="utf-8", errors="replace").splitlines()
-        stack: list[
-            str | None
-        ] = []  # the macro of each open `#ifndef NAME`, None for other conditionals
-        for n, line in enumerate(lines, 1):
-            text = line.strip()
-            if not text or text.startswith("//"):
-                continue
-            if not text.startswith("#"):
-                err(
-                    f"config: Config.h:{n}: only comment and preprocessor lines are allowed"
-                )
-                continue
-            if re.match(r"^#\s*include\b", text):
-                err(
-                    f"config: Config.h:{n}: no #include (the file must stay pure preprocessor)"
-                )
-                continue
-            cond = CONFIG_COND_RE.match(text)
-            if cond:
-                kind, name = cond.group(1), cond.group(2)
-                if kind in ("ifndef", "ifdef", "if"):
-                    stack.append(name if kind == "ifndef" else None)
-                    if kind == "ifndef" and name and name_re.match(name):
-                        above = lines[n - 2].strip() if n >= 2 else ""
-                        if not above.startswith("//"):
-                            err(
-                                f"config: Config.h:{n}: #ifndef {name} needs a comment line above it (what it is, unit)"
-                            )
-                elif kind == "endif":
-                    if stack:
-                        stack.pop()
-                continue
-            define = CONFIG_DEFINE_RE.match(text)
-            if define:
-                name = define.group(1)
-                if not name_re.match(name):
-                    err(
-                        f"config: Config.h:{n}: define '{name}' must match {prefix}<VAR> ([A-Z0-9_]+)"
-                    )
-                elif name not in stack:
-                    err(
-                        f"config: Config.h:{n}: #define {name} must sit inside #ifndef {name}"
-                    )
+        names = parse_config(lines, prefix, owners, err)
+    rows: list[tuple[str, str, str | None, int]] = []
+    tested: set[str] = set()
     for f in sorted(x for x in src.rglob("*") if x.is_file() and x != config):
-        for n, line in enumerate(
-            f.read_text(encoding="utf-8", errors="replace").splitlines(), 1
-        ):
-            define = CONFIG_DEFINE_RE.match(line.strip())
-            if define and define.group(1).startswith("XEWE_MODULE_"):
+        text = f.read_text(encoding="utf-8", errors="replace")
+        where = f.relative_to(src.parent.parent)
+        for n, line in enumerate(text.splitlines(), 1):
+            define = DEFINE_RE.match(line.strip())
+            owner = owner_of(define.group(2), owners) if define else None
+            if owner is not None:
+                verb = "defined" if define.group(1) == "define" else "undefined"
                 err(
-                    f"config: {f.relative_to(src.parent.parent)}:{n}: '{define.group(1)}' is defined outside Config.h"
+                    f"config: {where}:{n}: '{define.group(2)}' is {verb} outside Config.h "
+                    f"(a {owner} name)"
                 )
+        if f.suffix in (".h", ".hpp", ".cpp", ".tpp"):
+            rows.extend((str(where), *row) for row in setting_rows(text))
+            tested.update(a or b for a, b in PROMPT_TEST_RE.findall(text))
+    if rows and not config.is_file():
+        err("config: settings rows need src/<Folder>/Config.h with their defaults")
+    stored = names[RUNTIME] | names[FIRST_BOOT]
+    for where, key, default, n in rows:
+        want = prefix + key.upper()
+        if default is None:
+            err(
+                f"config: {where}:{n}: settings row '{key}' not readable (bool, string or number)"
+            )
+        elif default != want:
+            err(
+                f"config: {where}:{n}: settings row '{key}' default must be {want}, got '{default}'"
+            )
+        elif config.is_file() and want not in stored:
+            err(
+                f"config: {where}:{n}: {want} is not a runtime-default or first-boot define"
+            )
+    for name in sorted(names[FIRST_BOOT]):
+        if name + PROMPT not in tested:
+            err(f"config: first-boot {name} is never asked under #ifdef {name}{PROMPT}")
+    for name in sorted(tested):
+        if name[: -len(PROMPT)] not in names[FIRST_BOOT]:
+            err(
+                f"config: {name} is tested, but {name[: -len(PROMPT)]} is no first-boot value here"
+            )
 
 
 def check_core21(src: Path, requires_core: str, err) -> None:
@@ -432,11 +654,12 @@ def main(argv: list[str] | None = None) -> int:
         print(f"{CATALOGUE}: invalid TOML: {exc}", file=sys.stderr)
         return EXIT_USAGE
     problems = list(xm.validate(registry, core_ref))
+    owners = config_owners(m.slug for m in registry.all if m.slug)
     for m in registry.all:
         if (
             m.dir.parent == REPO / "modules"
         ):  # anything else is reported as stray by check_repo
-            problems.extend(check_module(m, libraries, catalogue))
+            problems.extend(check_module(m, libraries, catalogue, owners))
     problems.extend(check_repo(registry))
     index = REPO / INDEX
     if not index.is_file() or index.read_text(encoding="utf-8") != render_index(
