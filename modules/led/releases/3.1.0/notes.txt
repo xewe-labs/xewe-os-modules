@@ -23,6 +23,24 @@ Changed compared with xewe-led-os 2.3.0
 - The board test sends each command only after the board has echoed the previous one, so the
   core's input queue (4 lines) never overflows during the round-trip tests.
 
+Configuration
+
+- The module's values follow the configuration scheme of XeWeCore 3.1.0 (doc/config.md):
+  src/Led/Config.h has the three sections, and every name starts with XEWE_LED_ (XEWE_LED_PIN_DATA,
+  XEWE_LED_PIN_CLOCK, XEWE_LED_NUM_LEDS_MAX, XEWE_LED_MODE_FADE_MS, XEWE_LED_BRIGHTNESS_FADE_MS,
+  XEWE_LED_FRAME_MS, XEWE_LED_FPS_WINDOW_S, XEWE_LED_LISTENERS, XEWE_LED_TASK_STACK,
+  XEWE_LED_TASK_PRIORITY, XEWE_LED_TASK_CORE).
+- Six first-boot values pre-answer the wizard: XEWE_LED_USE_CLK, XEWE_LED_CHIP, XEWE_LED_VOLTAGE,
+  XEWE_LED_LINES, XEWE_LED_NUM_LED and XEWE_LED_COLORDER. xewe modules generate writes them to the
+  project's Config.h commented out; uncommenting one stores that answer without a question.
+- The wizard asks each of its six questions only when its _PROMPT define exists. The data-pin and
+  clock-pin confirmations appear only while some question still prompts, and the colour-order
+  calibration is skipped when the colour order is pre-answered (the module stores the order and
+  shows green at brightness 50). $led set_color_order "" still runs it.
+- With XEWE_LED_LINES set, XEWE_LED_NUM_LED is the length of every parallel line unless it still
+  prompts, in which case each line is asked.
+- The "Detailed guide" line of the wizard points to the module README on GitHub.
+
 Requirements
 
 - XeWeCore >=3.1.0,<4.0.0 (requires_core). ESP32-C3, C6 or S3 with arduino-esp32 3.x.

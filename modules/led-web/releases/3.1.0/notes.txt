@@ -17,6 +17,13 @@ Highlights
 - Unknown paths and OPTIONS requests are now answered by web-interface 3.1.0 (CORS, 204 or
   404: Not Found), and the page works on the first boot too, since the server now starts there.
 
+Configuration
+
+- src/LedWeb/Config.h follows the configuration scheme of XeWeCore 3.1.0 (doc/config.md) and holds
+  two compile-time constants, XEWE_LED_WEB_WS_PORT (81) and XEWE_LED_WEB_HEARTBEAT_MS (1000). The
+  prefix is XEWE_LED_WEB_; the led module defines no name with it. The module has no runtime
+  defaults and no first-boot values.
+
 Requirements
 
 - XeWeCore >=3.1.0,<4.0.0 (requires_core): the hex colour helpers in XeWeCore/Utils/Color.h.

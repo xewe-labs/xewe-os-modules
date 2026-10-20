@@ -46,7 +46,7 @@
 #     tests), or refuses (the draft is in the logs folder); prints the commit command.
 # A failing step does not stop the others; the cards refuse it. --resume (after a failed step):
 # keeps the run when commit and tree are unchanged and re-runs only the steps that are not green.
-# XEWE_RELEASE_DEFINES_<CHIP> (environment, e.g. XEWE_RELEASE_DEFINES_S3="XEWE_MODULE_LED_PIN_DATA=48")
+# XEWE_RELEASE_DEFINES_<CHIP> (environment, e.g. XEWE_RELEASE_DEFINES_S3="XEWE_LED_PIN_DATA=48")
 # are the defines of that chip's all-modules image, flash and board session. XEWE_ENV, else the
 # harness's dotenv file, else the tools checkout's is the dotenv the board run uses: the script
 # never reads it, the tools do.
@@ -94,7 +94,7 @@ EXPORT="build/release-venv/xewe-os-modules"          # the tree as a commit of i
 CHIPS=(c3 c6 s3)
 REQUIRE="setup,validate,unit,build,board"
 CHECKERS=("ruff==0.17.0" "clang-format==23.1.3")    # xewe-modules-tests.yml format job pins
-# the gated board tests the card session runs (SHIP-3.1.0 §3): one session per chip, all gates
+# the gated board tests the card session runs: one session per chip, all gates
 BOARD_GATES=(XEWE_TEST_LED_RESET=1 XEWE_TEST_LED_WEB_HTTP=1 XEWE_TEST_WEB_INTERFACE_HTTP=1 XEWE_TEST_WEB_INTERFACE_RESET=1)
 NOTES_MARKER="XEWE-NOTES-SKELETON"
 

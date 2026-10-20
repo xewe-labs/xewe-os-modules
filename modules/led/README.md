@@ -13,7 +13,7 @@ order, and other modules follow every change through a listener interface.
 
 - 46 FastLED chipsets compiled in with the compile-time pins; the stored one is registered once per boot (`Led::set_leds_chipset`)
 - Seven effects on FastLED primitives (`inoise8`/`inoise16`, `fill_rainbow`, rainbow `CHSV`, `beatsin8`, `blend`); a mode, colour or parameter change cross-fades for 900 ms
-- Frames come from a FreeRTOS render task every 20 ms (`XEWE_MODULE_LED_FRAME_MS`), the only writer of the pixel buffer; every command and API call changes the state as one step under the render lock (no frame in the middle of it), and NVS writes, console output, listener callbacks and `FastLED.show()` run outside the lock
+- Frames come from a FreeRTOS render task every 20 ms (`XEWE_LED_FRAME_MS`), the only writer of the pixel buffer; every command and API call changes the state as one step under the render lock (no frame in the middle of it), and NVS writes, console output, listener callbacks and `FastLED.show()` run outside the lock
 - Brightness is applied in software (linear 500 ms fade), then the colour order (RGB, RBG, GRB, GBR, BRG, BGR), in the output buffer; FastLED gets RGB order, `TypicalLEDStrip` correction and global brightness 255
 - Mode parameters for every mode used are kept in one FlexData blob (`led/mode_params`)
 - The 30 command names, arguments and texts are fixed: button and schedule command strings stored on devices keep working
@@ -66,18 +66,20 @@ Modes (id, name, parameters): 0 Solid (hue, sat) · 1 Color Fade (hue, sat 0..24
 
 ### Setup wizard
 
-On the first boot and after `$led reset` (prompts wait for an answer): data pin confirmation, clock line (and its pin), chipset (menu of 46), voltage (5/12/24 V), parallel strips (count and the length of each, the longest becomes `num_led`) or one strip length, then a colour-order calibration (the strip shows green, then red; answer what you see; the order found is used from that answer on, so the fade-out already shows the right colours). A "no" to a pin question prints how to change pins (`XEWE_MODULE_LED_PIN_*`) and the setup continues; with wrong pins the calibration shows nothing, and its "Other" answer restarts the device into the wizard.
+On the first boot and after `$led reset` (prompts wait for an answer) the wizard asks six questions: clock line (and its pin), chipset (menu of 46), voltage (5/12/24 V), parallel strips (count and the length of each, the longest becomes `num_led`) or one strip length, and the colour order, found by a calibration (the strip shows green, then red; answer what you see; the order found is used from that answer on, so the fade-out already shows the right colours). Before them it confirms the data pin.
+
+Each question is asked only while its `_PROMPT` define exists (see Build defines). A value set in the project's `Config.h` is stored without a question: `XEWE_LED_USE_CLK` answers the clock line, `XEWE_LED_CHIP` the chipset, `XEWE_LED_VOLTAGE` the voltage, `XEWE_LED_LINES` the parallel strips and `XEWE_LED_NUM_LED` the length (the length of every parallel line when `XEWE_LED_LINES` is set, too). The data-pin and clock-pin confirmations appear only while some question still prompts. When `XEWE_LED_COLORDER` is set the calibration is skipped: the module stores that order, shows green at brightness 50 and prints `Color order set to <ORDER>`; `$led set_color_order ""` still runs it. A "no" to a pin question prints how to change pins (`XEWE_LED_PIN_*`) and the setup continues; with wrong pins the calibration shows nothing, and its "Other" answer restarts the device into the wizard.
 
 ### Listeners
 
-`LedListener` (`src/Led/LedListener.h`): `on_color(rgb)`, `on_brightness(value)`, `on_state(on)`, `on_mode(id)`, `on_length(n)` and `on_all(rgb, brightness, on, mode, length)` (default: the five in the order state, length, mode, brightness, colour). Add one with `led.listeners.add(&l)` (up to `XEWE_MODULE_LED_LISTENERS`). Events carry the setter's `origin` (`nullptr` from the CLI; the `Led` object for changes the strip makes itself, such as the colour of a newly selected mode, which is announced before the mode). Callbacks run in the caller's task, outside the render lock, after the whole change has been applied; a callback may call the `Led` API again.
+`LedListener` (`src/Led/LedListener.h`): `on_color(rgb)`, `on_brightness(value)`, `on_state(on)`, `on_mode(id)`, `on_length(n)` and `on_all(rgb, brightness, on, mode, length)` (default: the five in the order state, length, mode, brightness, colour). Add one with `led.listeners.add(&l)` (up to `XEWE_LED_LISTENERS`). Events carry the setter's `origin` (`nullptr` from the CLI; the `Led` object for changes the strip makes itself, such as the colour of a newly selected mode, which is announced before the mode). Callbacks run in the caller's task, outside the render lock, after the whole change has been applied; a callback may call the `Led` API again.
 
 ### Requirements
 
 | | |
 |---|---|
 | Modules | none |
-| Libraries | FastLED 3.10.3 (`libraries.toml`), XeWeCore >=3.0.0,<4.0.0 |
+| Libraries | FastLED 3.10.3 (`libraries.toml`), XeWeCore >=3.1.0,<4.0.0 |
 | Boards | ESP32-C3, ESP32-C6, ESP32-S3 (arduino-esp32 3.x) |
 
 Metadata and dependencies are declared in [`module.properties`](module.properties).
@@ -101,17 +103,41 @@ Metadata and dependencies are declared in [`module.properties`](module.propertie
 
 ### Build defines (`src/Led/Config.h`)
 
+All names start with `XEWE_LED_` and hold a fallback: a line in the project's `Config.h`, a dotenv value behind `INJECTED_FROM_DOTENV` or `xewe build --define NAME=VALUE` wins (see [Config.h in a project](../../README.md#using-modules-in-a-project)). The file has the three sections of the scheme in [XeWeCore's `doc/config.md`](https://github.com/xewe-labs/xewe-os-core/blob/main/doc/config.md).
+
+**Runtime defaults:** none.
+
+**First-boot values.** Each pre-answers one wizard question and defines `XEWE_LED_<KEY>_PROMPT` only while the value is not set; the settings row takes the value as its default either way.
+
+| Define | Default | Setting | Meaning |
+|---|---|---|---|
+| `XEWE_LED_USE_CLK` | 0 | `use_clk` | 1 = the strip has a clock line |
+| `XEWE_LED_CHIP` | 0 | `chip` | chipset id 0..45 (wizard menu order) |
+| `XEWE_LED_VOLTAGE` | 5 | `voltage` | 5, 12 or 24 V |
+| `XEWE_LED_LINES` | 0 | `lines` | parallel strips on the data line, 0 = one strip |
+| `XEWE_LED_NUM_LED` | 600 | `num_led` | number of LEDs, per line when `XEWE_LED_LINES` > 0 |
+| `XEWE_LED_COLORDER` | 0 | `colorder` | 0..5 = RGB, RBG, GRB, GBR, BRG, BGR; set = no calibration |
+
+In the project's `Config.h`, `xewe modules generate` writes these six lines commented out (`// #define XEWE_LED_NUM_LED 600`), so a fresh project asks everything. Uncomment a line and set the value to pre-answer that question, for example a 144-LED strip with GRB order:
+
+```c
+#define XEWE_LED_NUM_LED 144
+#define XEWE_LED_COLORDER 2
+```
+
+**Compile-time constants** (the project's `Config.h` holds them as `#ifndef` groups to edit):
+
 | Define | Default | Meaning |
 |---|---|---|
-| `XEWE_MODULE_LED_PIN_DATA` | c3 4, c6 20, s3 13 (Led Dock V2), else 48 | data GPIO |
-| `XEWE_MODULE_LED_PIN_CLOCK` | c3 3, c6 19, s3 12, else 12 | clock GPIO (clocked chipsets) |
-| `XEWE_MODULE_LED_NUM_LEDS_MAX` | 600 | buffer size; every frame sends this many pixels |
-| `XEWE_MODULE_LED_MODE_FADE_MS` / `_BRIGHTNESS_FADE_MS` / `_FRAME_MS` | 900 / 500 / 20 | cross-fade, brightness fade, frame period |
-| `XEWE_MODULE_LED_FPS_WINDOW_S` | 3 | FPS window of `$led status` |
-| `XEWE_MODULE_LED_LISTENERS` | 4 | listener capacity |
-| `XEWE_MODULE_LED_TASK_STACK` / `_PRIORITY` / `_CORE` | 4096 / 3 / 0 | render task |
+| `XEWE_LED_PIN_DATA` | c3 4, c6 20, s3 13 (Led Dock V2), else 48 | data GPIO |
+| `XEWE_LED_PIN_CLOCK` | c3 3, c6 19, s3 12, else 12 | clock GPIO (clocked chipsets) |
+| `XEWE_LED_NUM_LEDS_MAX` | 600 | buffer size; every frame sends this many pixels |
+| `XEWE_LED_MODE_FADE_MS` / `_BRIGHTNESS_FADE_MS` / `_FRAME_MS` | 900 / 500 / 20 | cross-fade, brightness fade, frame period |
+| `XEWE_LED_FPS_WINDOW_S` | 3 | FPS window of `$led status` |
+| `XEWE_LED_LISTENERS` | 4 | listener capacity |
+| `XEWE_LED_TASK_STACK` / `_PRIORITY` / `_CORE` | 4096 / 3 / 0 | render task |
 
-Other pins: `xewe build --define XEWE_MODULE_LED_PIN_DATA=<gpio> --define XEWE_MODULE_LED_PIN_CLOCK=<gpio>`. The data pin, and the clock pin of clocked chipsets, are claimed in the core pin registry at boot; a pin held by another module leaves the strip without output (reported). Strapping pins are claimed with the core's warning.
+Other pins: set `XEWE_LED_PIN_DATA` and `XEWE_LED_PIN_CLOCK` in the project's `Config.h`, or `xewe build --define XEWE_LED_PIN_DATA=<gpio> --define XEWE_LED_PIN_CLOCK=<gpio>`. The data pin, and the clock pin of clocked chipsets, are claimed in the core pin registry at boot; a pin held by another module leaves the strip without output (reported). Strapping pins are claimed with the core's warning.
 
 ### Behaviour kept for stored commands and devices in use
 
@@ -142,7 +168,7 @@ These are deliberate, so that stored button and schedule strings, stored values 
 ### Known issues
 
 - Every chipset template is linked: about +330 KB flash on s3 and +360 KB on c3/c6 compared with no LED module.
-- `FastLED.show()` always sends `XEWE_MODULE_LED_NUM_LEDS_MAX` pixels (about 18 ms for 600 WS2812); a smaller maximum raises the frame rate.
+- `FastLED.show()` always sends `XEWE_LED_NUM_LEDS_MAX` pixels (about 18 ms for 600 WS2812); a smaller maximum raises the frame rate.
 - Effect speeds of the noise and rainbow modes are per frame, so they follow the frame rate; Pulse follows the clock.
 - Christmas Lights draws its flicker offsets from FastLED's unseeded `random16()`; the pattern depends on how many instances were built since boot.
 - The ESP32-S3 compiler fuses two float operations of the HSV conversion, so a few hue/saturation pairs give a colour one step apart from C3/C6.

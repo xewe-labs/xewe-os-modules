@@ -42,7 +42,7 @@ later boots: apply stored offset → SNTP sync wait (≤ 50 × 200 ms) → print
 | | |
 |---|---|
 | Modules | [wifi](../wifi) |
-| Libraries | XeWeCore >=3.0.0,<4.0.0 (Arduino libraries bundled with the esp32 core are not listed) |
+| Libraries | XeWeCore >=3.1.0,<4.0.0 (Arduino libraries bundled with the esp32 core are not listed) |
 | Boards | ESP32-C3, ESP32-C6, ESP32-S3 (arduino-esp32 3.x) |
 
 Metadata and dependencies are declared in [`module.properties`](module.properties).
@@ -52,6 +52,23 @@ Metadata and dependencies are declared in [`module.properties`](module.propertie
 | Key (namespace `time`) | Type | Default | Meaning |
 |---|---|---|---|
 | `tz_gmt_str` | str ≤ 9 | `GMT+00:00` | timezone offset `GMT±HH:MM`; `GMT-8` is normalised to `GMT-08:00` and applied at once; an unparsable value is put back |
+
+### In Config.h
+
+All names start with `XEWE_TIME_`. `./setup.sh` (and `xewe modules select`) appends the module's
+`src/Time/Config.h` as one marked block to the project's `Config.h`, following the scheme in
+[XeWeCore's `doc/config.md`](https://github.com/xewe-labs/xewe-os-core/blob/main/doc/config.md). The module has one first-boot value, written there as a commented-out line:
+
+```c
+// Timezone offset (time/tz_gmt_str), string literal GMT+HH:MM; detected and confirmed at first boot
+// #define XEWE_TIME_TZ_GMT_STR "GMT+00:00"
+```
+
+Uncomment it and set the offset to pre-answer the first boot, or write
+`#define XEWE_TIME_TZ_GMT_STR INJECTED_FROM_DOTENV` to take it from the dotenv file. A pre-answer
+that parses as `GMT±HH:MM` skips the detection and the confirmation; the clock still syncs over
+SNTP. One that does not parse falls back to the typed input. A `xewe build --define XEWE_TIME_TZ_GMT_STR=...` wins over the project's `Config.h`.
+The module has no runtime defaults and no compile-time constants.
 
 ### Tests
 

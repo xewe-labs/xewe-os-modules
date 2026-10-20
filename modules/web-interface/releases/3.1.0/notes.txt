@@ -16,6 +16,10 @@ Changed since 3.0.0
 - A module declared later that registers its own catch-all (Alexa) still replaces this one for
   that boot: the last registration wins.
 - Products no longer need their own fallback handler, and nothing else has to start the server.
+- New src/WebInterface/Config.h, following the configuration scheme of XeWeCore 3.1.0
+  (doc/config.md): the defaults of the two settings rows are XEWE_WEB_INTERFACE_PORT (80) and
+  XEWE_WEB_INTERFACE_ROOT (""), runtime defaults a project can change in its Config.h or with xewe
+  build --define. The module has no first-boot values and no compile-time constants.
 
 Requirements
 

@@ -13,16 +13,56 @@ What is new
   Found otherwise, and starts its server on every enabled boot, the first-boot setup boot
   included.
 - led-web reads colours with the core's hex parser from XeWeCore/Utils/Color.h.
-- buttons, pins, scheduler, time and wifi have no code change; they move to requires_core 3.1.0
-  with the rest of the set.
+- Every module that has build-time values keeps them in src/<Folder>/Config.h in the form of
+  XeWeCore 3.1.0's doc/config.md, under the names XEWE_<SLUG>_<PARAM>: led, led-web, wifi and
+  web-interface change their names, time gains a Config.h. See BREAKING and First-boot values.
+- buttons, pins and scheduler have no code change; they move to requires_core 3.1.0 with the rest
+  of the set.
 - Every module's release carries a generated release card (release_card.md) from one shared test
   run: unit tests, validator, format and brand checks, module-alone builds and all-modules builds
   on c3, c6 and s3, and the board session per chip. The set's card holds every module's tests.
 
+BREAKING
+
+- The defines are renamed. XEWE_MODULE_<SLUG>_<VAR> becomes XEWE_<SLUG>_<VAR>, with the slug in
+  upper case and "-" as "_": XEWE_MODULE_LED_PIN_DATA -> XEWE_LED_PIN_DATA,
+  XEWE_MODULE_LED_WEB_WS_PORT -> XEWE_LED_WEB_WS_PORT, XEWE_MODULE_WIFI_DEBUG -> XEWE_WIFI_DEBUG.
+  There is no alias: the old names are not read, so a project that sets one gets the module default
+  without a warning. This renaming is an announced exception to "renaming a define is breaking",
+  decided for the 3.1.0 set.
+- web-interface and time define names for the first time (XEWE_WEB_INTERFACE_PORT,
+  XEWE_WEB_INTERFACE_ROOT, XEWE_TIME_TZ_GMT_STR); they had no define under the old scheme, so they
+  need no rename.
+- Upgrade a project from 3.0.0: delete the old "// ---- <slug> (xewe modules generate) ----"
+  blocks (through their "// ---- end <slug> ----" lines) from the project's Config.h, then run
+  xewe modules generate again. generate never rewrites a block, so an old block stays as it is
+  until it is deleted; the new block comes back with the new names and the first-boot lines
+  commented out. Re-apply your edits with the new names, and rename any --define of an old name
+  (also in XEWE_RELEASE_DEFINES_<CHIP> and in the release matrix of the project).
+
+First-boot values
+
+- A first-boot value pre-answers a question of the first boot. In the module's Config.h it is an
+  #ifndef group that also defines <NAME>_PROMPT; the module asks only under #ifdef <NAME>_PROMPT.
+  xewe modules generate copies each module's block into the project's Config.h with its markers
+  and writes the first-boot lines commented out, so a fresh project asks everything.
+- To pre-answer, uncomment the line and set the value, or write INJECTED_FROM_DOTENV to take it
+  from the dotenv file at build time; xewe build --define NAME=VALUE wins over both. The values:
+  led XEWE_LED_USE_CLK, XEWE_LED_CHIP, XEWE_LED_VOLTAGE, XEWE_LED_LINES, XEWE_LED_NUM_LED,
+  XEWE_LED_COLORDER; wifi XEWE_WIFI_SSID, XEWE_WIFI_PSW; time XEWE_TIME_TZ_GMT_STR.
+- led asks each of its six wizard questions only when its _PROMPT is defined; the data-pin and
+  clock-pin confirmations appear only while some question still prompts, and the colour
+  calibration is skipped when the colour order is pre-answered.
+- wifi: with both ssid and psw set they are written to NVS, the scan is skipped and the join is
+  tried three times, then one "!" line and the scan menu. Only the ssid set: the password is
+  asked. Only the password set: ignored.
+- time: a pre-answer that parses skips the detection and the confirmation and the clock still
+  syncs over NTP; one that does not parse falls back to the typed input.
+
 Requirements
 
 - XeWeCore >=3.1.0,<4.0.0 (requires_core of every module).
-- xewe-os-tools 3.1.0 or later; ESP32-C3, C6 or S3 with arduino-esp32 3.x.
+- xewe-os-tools 3.1.2 or later; ESP32-C3, C6 or S3 with arduino-esp32 3.x.
 
 Tags
 

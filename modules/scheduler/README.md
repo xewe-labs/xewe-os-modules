@@ -43,7 +43,7 @@ Times are minutes from midnight (0-1439), days are 0 (Monday) to 6 (Sunday); sev
 | | |
 |---|---|
 | Modules | [time](../time) (and, through it, [wifi](../wifi)) |
-| Libraries | XeWeCore >=3.0.0,<4.0.0 (Arduino libraries bundled with the esp32 core are not listed) |
+| Libraries | XeWeCore >=3.1.0,<4.0.0 (Arduino libraries bundled with the esp32 core are not listed) |
 | Boards | ESP32-C3, ESP32-C6, ESP32-S3 (arduino-esp32 3.x) |
 
 Metadata and dependencies are declared in [`module.properties`](module.properties).

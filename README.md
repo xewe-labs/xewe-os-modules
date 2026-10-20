@@ -49,7 +49,7 @@ A project is a copy of the [xewe-os](https://github.com/xewe-labs/xewe-os) templ
 ```toml
 [modules]
 repo = "https://github.com/xewe-labs/xewe-os-modules"
-ref = "3.0.0"   # the set tag
+ref = "3.1.0"   # the set tag
 selected = ["wifi", "time", "scheduler"]
 ```
 
@@ -67,11 +67,17 @@ Select modules with `./setup.sh --modules wifi,time` or `xewe modules select wif
 After a build the modules' commands are on the console: `$help` lists them, `$<id> status` shows a
 module's state, and `$system schema` prints every module's settings as JSON lines.
 
-Compile-time values (a pin a driver needs as a constant, a buffer size, listener slots) live in
-the project's `Config.h`: `./setup.sh` and `xewe modules select` append each selected module's
-`src/<Folder>/Config.h` there once, as one marked block (`XEWE_MODULE_<SLUG>_<VAR>` defines), and
-the user edits the numbers. First-boot defaults that end up in NVS stay
-`--define` values: `xewe build --define KEY=VALUE`. Each module README lists both.
+Build-time values live in the project's `Config.h`: `./setup.sh` and `xewe modules select` append
+each selected module's `src/<Folder>/Config.h` there once, as one marked block, and the user edits
+it. Every name is `XEWE_<SLUG>_<PARAM>` (`XEWE_LED_PIN_DATA`, `XEWE_WIFI_SSID`; the slug in upper
+case, `-` as `_`). A block holds up to three sections: runtime defaults and compile-time constants
+(edit the number), and first-boot values, written commented out so a fresh device still asks at
+first boot. To pre-answer a question, uncomment its line and set the value, or write
+`INJECTED_FROM_DOTENV` to take it from the dotenv file at build time; `xewe build --define
+NAME=VALUE` wins over both. A block is never rewritten by a later generate. Each module README lists
+its values; the scheme is specified in XeWeCore's
+[`doc/config.md`](https://github.com/xewe-labs/xewe-os-core/blob/main/doc/config.md) and
+[doc/contract.md](doc/contract.md) section 3.2.
 
 ## How a module is built
 

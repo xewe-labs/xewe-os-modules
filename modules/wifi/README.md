@@ -19,6 +19,7 @@ to disable itself. Other modules (WebInterface, Time) take it as a requirement.
 
 ```
 first boot:  begin_routines_init → connect(prompt) → scan → choose → join → store ssid/psw in NVS
+             (XEWE_WIFI_SSID and XEWE_WIFI_PSW both set: store them, no scan, join 3 times)
 later boots: begin_routines_regular → connect(no prompt) → join(stored, 10 s × 3)
 loop:        while not connected → 5 s "disable and reset?" prompt → reconnect
 ```
@@ -42,7 +43,7 @@ loop:        while not connected → 5 s "disable and reset?" prompt → reconne
 | | |
 |---|---|
 | Modules | none |
-| Libraries | XeWeCore >=3.0.0,<4.0.0 (Arduino libraries bundled with the esp32 core are not listed) |
+| Libraries | XeWeCore >=3.1.0,<4.0.0 (Arduino libraries bundled with the esp32 core are not listed) |
 | Boards | ESP32-C3, ESP32-C6, ESP32-S3 (arduino-esp32 3.x) |
 
 Metadata and dependencies are declared in [`module.properties`](module.properties).
@@ -56,12 +57,40 @@ Metadata and dependencies are declared in [`module.properties`](module.propertie
 
 ### In Config.h
 
-Compile-time values, `XEWE_MODULE_WIFI_<VAR>`. `./setup.sh` (and `xewe modules select`) appends the
-module's `src/Wifi/Config.h` as one marked block to the project's `Config.h`; edit the value there.
+All names start with `XEWE_WIFI_`. `./setup.sh` (and `xewe modules select`) appends the module's
+`src/Wifi/Config.h` as one marked block to the project's `Config.h`; the file follows the scheme in
+[XeWeCore's `doc/config.md`](https://github.com/xewe-labs/xewe-os-core/blob/main/doc/config.md), and a line in the project's `Config.h`, a dotenv value behind `INJECTED_FROM_DOTENV` or
+`xewe build --define NAME=VALUE` wins over the module's default.
+
+**First-boot values.** The block holds them as commented-out lines, so a fresh project still asks:
+
+```c
+// Network name (wifi/ssid), string literal, up to 32 characters; asked at first boot
+// #define XEWE_WIFI_SSID ""
+// Network password (wifi/psw), string literal, up to 63 characters; asked at first boot
+// #define XEWE_WIFI_PSW ""
+```
+
+| Define | Setting | Meaning |
+|---|---|---|
+| `XEWE_WIFI_SSID` | `ssid` | network name; set = no network question |
+| `XEWE_WIFI_PSW` | `psw` | network password; set = no password question |
+
+Uncomment a line and set the value to pre-answer it, or write `#define XEWE_WIFI_PSW INJECTED_FROM_DOTENV`
+to take the password from the dotenv file at build time (the key is `XEWE_WIFI_PSW`; the value never
+reaches the repository). What the first boot does:
+
+- `XEWE_WIFI_SSID` and `XEWE_WIFI_PSW` both set: both are written to NVS, the scan is skipped and
+  the join is tried three times. If all three fail, the module prints one `!` line and shows the
+  scan menu.
+- Only `XEWE_WIFI_SSID` set: the password is asked.
+- Only `XEWE_WIFI_PSW` set: ignored, the network is chosen from the scan and the password is asked.
+
+**Compile-time constants**
 
 | Define | Default | Meaning |
 |---|---|---|
-| `XEWE_MODULE_WIFI_DEBUG` | 0 | 1 prints debug output, including the credentials (bench only) |
+| `XEWE_WIFI_DEBUG` | 0 | 1 prints debug output, including the credentials (bench only) |
 
 ### Known issues
 
@@ -74,7 +103,7 @@ module's `src/Wifi/Config.h` as one marked block to the project's `Config.h`; ed
   and scheduler (through time) need the network, so the device holds until it is back instead of
   running them offline. Answering yes to the prompt (and confirming) disables the module and its
   dependents, which ends the wait ([contract](../../doc/contract.md#6-known-limits), section 6).
-- Set `XEWE_MODULE_WIFI_DEBUG` to 1 only on a bench: it prints credentials to serial.
+- Set `XEWE_WIFI_DEBUG` to 1 only on a bench: it prints credentials to serial.
   Credentials are stored in NVS unencrypted.
 
 ### Tests

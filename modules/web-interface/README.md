@@ -81,7 +81,7 @@ There is no authentication: anyone on the same network can send any command, inc
 | | |
 |---|---|
 | Modules | [wifi](../wifi) |
-| Libraries | XeWeCore >=3.0.0,<4.0.0 (Arduino libraries bundled with the esp32 core are not listed) |
+| Libraries | XeWeCore >=3.1.0,<4.0.0 (Arduino libraries bundled with the esp32 core are not listed) |
 | Boards | ESP32-C3, ESP32-C6, ESP32-S3 (arduino-esp32 3.x) |
 
 Metadata and dependencies are declared in [`module.properties`](module.properties).
@@ -92,6 +92,20 @@ Metadata and dependencies are declared in [`module.properties`](module.propertie
 |---|---|---|---|
 | `port` | u16 1–65535 | 80 | HTTP port; applies after a restart (RESTART row) |
 | `root` | str ≤ 31 | empty | `GET /` redirects here (e.g. `/pad`); empty = the console page |
+
+### Build defines (`src/WebInterface/Config.h`)
+
+All names start with `XEWE_WEB_INTERFACE_` (the slug `web-interface` with `-` written as `_`). They
+are the defaults of the two settings rows, the runtime-defaults section of the scheme in [XeWeCore's `doc/config.md`](https://github.com/xewe-labs/xewe-os-core/blob/main/doc/config.md): a
+line in the project's `Config.h` (`xewe modules generate` copies them there as `#ifndef` groups to
+edit) or `xewe build --define NAME=VALUE` changes the default a fresh device starts with, and
+`$web_interface set` changes the stored value. The module has no first-boot values and no
+compile-time constants.
+
+| Define | Default | Setting | Meaning |
+|---|---|---|---|
+| `XEWE_WEB_INTERFACE_PORT` | 80 | `port` | HTTP port, 1 to 65535; takes effect after a restart |
+| `XEWE_WEB_INTERFACE_ROOT` | `""` | `root` | path `GET /` redirects to, up to 31 characters; empty = the console page |
 
 ### Tests
 
