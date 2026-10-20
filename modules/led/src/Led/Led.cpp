@@ -169,7 +169,7 @@ void Led::begin_routines_init() {
     wizard_active = true;
 
     os.serial.print(
-        "Detailed guide is available here:\nhttps://github.com/xewe-labs/xewe-os-modules/blob/main/modules/led/README.md");
+        "Guide: https://github.com/xewe-labs/xewe-os-modules/blob/main/modules/led/README.md");
 
     // Each value is asked only while its XEWE_LED_<KEY>_PROMPT is defined (Config.h); otherwise the
     // build's value is stored without a question. A "no" to a pin question prints how to change

@@ -405,7 +405,7 @@ def test_reset_clears_mode_params_and_stops_output():
 WIZARD_2_3_0 = [
     (
         "print",
-        "Detailed guide is available here:\\nhttps://github.com/xewe-labs/xewe-os-modules/blob/main/modules/led/README.md",
+        "Guide: https://github.com/xewe-labs/xewe-os-modules/blob/main/modules/led/README.md",
     ),
     ("get_yn", "Is LED data line connected to pin GPIO_{}?"),
     (
@@ -704,12 +704,15 @@ def test_wizard_sequence_is_2_3_0():
     assert 'os.serial.print("Shining the light", "");' in common
     if _find_golden() is not None:
         legacy = _legacy_wizard((_legacy_led_strip() / "LedStrip.cpp").read_text())
-        # not in 2.3.0: the parallel-lines num_led store (the first one) and the order reset
+        # not in 2.3.0: the parallel-lines num_led store (the first one) and the order reset; the
+        # guide line (the first event on both sides) names this module's README, not the 2.3.0 URL
         fixes = {
+            0,
             WIZARD_2_3_0.index(("store", "num_led", "{}")),
             WIZARD_2_3_0.index(("order_reset",)),
         }
-        assert legacy == [e for i, e in enumerate(WIZARD_2_3_0) if i not in fixes]
+        assert legacy[0][0] == "print"
+        assert legacy[1:] == [e for i, e in enumerate(WIZARD_2_3_0) if i not in fixes]
 
 
 @pytest.mark.unit
