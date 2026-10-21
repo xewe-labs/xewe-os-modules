@@ -10,4 +10,4 @@
 | [`scheduler`](../modules/scheduler) | Scheduler | `schedule` | 3.1.1 | Runs stored commands on a weekly schedule | time | `>=3.1.0,<4.0.0` |
 | [`time`](../modules/time) | Time | `time` | 3.1.1 | NTP time sync and timezone handling | wifi | `>=3.1.0,<4.0.0` |
 | [`web-interface`](../modules/web-interface) | Web Interface | `web_interface` | 3.1.1 | HTTP page and command endpoint for other devices on the network | wifi | `>=3.1.0,<4.0.0` |
-| [`wifi`](../modules/wifi) | Wifi | `wifi` | 3.1.1 | Connects to a local WiFi network and keeps the connection alive | - | `>=3.1.0,<4.0.0` |
+| [`wifi`](../modules/wifi) | Wifi | `wifi` | 3.1.2 | Connects to a local WiFi network and keeps the connection alive | - | `>=3.1.0,<4.0.0` |
