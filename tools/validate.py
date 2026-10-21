@@ -367,7 +367,7 @@ def parse_config(
     seen_markers: list[str] = []
     stack: list[
         str | None
-    ] = []  # the group name at depth 0, None for nested conditionals
+    ] = []  # the group name at depth 0, None for rejected conditionals
     in_block = False  # inside the multi-line header comment
 
     def is_comment(n: int) -> bool:
@@ -476,14 +476,19 @@ def parse_config(
                     "single-line /* ... */"
                 )
         elif kind in ("ifndef", "ifdef", "if"):
-            if not stack:
-                err(f"config: Config.h:{n}: #{kind} outside an #ifndef group")
-            stack.append(None)
-        elif kind in ("elif", "else"):
-            if len(stack) < 2:
+            if kind == "ifndef" and stack:
                 err(
-                    f"config: Config.h:{n}: #{kind} of an #ifndef group (no fallback branch)"
+                    f"config: Config.h:{n}: #ifndef {rest.split()[0] if rest else ''} nested "
+                    f"inside the #ifndef {stack[0]} group"
                 )
+            else:
+                err(
+                    f"config: Config.h:{n}: #{kind} is not allowed in Config.h (a value that "
+                    "differs per board is set by the project)"
+                )
+            stack.append(None)  # keeps the matching #endif from raising a second error
+        elif kind in ("elif", "else"):
+            err(f"config: Config.h:{n}: #{kind} is not allowed in Config.h")
         elif kind == "endif":
             if stack:
                 stack.pop()

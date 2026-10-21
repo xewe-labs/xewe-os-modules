@@ -51,11 +51,7 @@ Fixture.
 
 /* Data pin */
 #ifndef XEWE_LED_PIN_DATA
-#if defined(XEWE_CHIP_C3)
 #define XEWE_LED_PIN_DATA 4
-#else
-#define XEWE_LED_PIN_DATA 48
-#endif
 #endif
 
 /* ---- end compile time defined constants ---- */
@@ -176,6 +172,28 @@ def test_marker_inside_a_conditional(tmp_path):
     _one(_findings(tmp_path, config), "inside a conditional")
 
 
+def test_chip_conditional_inside_a_group(tmp_path):
+    config = GOOD_CONFIG.replace(
+        "#define XEWE_LED_PIN_DATA 4\n",
+        "#if defined(XEWE_CHIP_C3)\n#define XEWE_LED_PIN_DATA 4\n#else\n"
+        "#define XEWE_LED_PIN_DATA 48\n#endif\n",
+    )
+    found = _findings(tmp_path, config)
+    _one(found, "#if is not allowed")
+    _one(found, "#else is not allowed")
+    assert not any("unclosed" in f or "without #if" in f for f in found), found
+
+
+def test_nested_ifndef_inside_a_group(tmp_path):
+    config = GOOD_CONFIG.replace(
+        "#define XEWE_LED_PIN_DATA 4\n",
+        "#ifndef XEWE_LED_OTHER\n#endif\n#define XEWE_LED_PIN_DATA 4\n",
+    )
+    found = _findings(tmp_path, config)
+    _one(found, "nested inside the #ifndef XEWE_LED_PIN_DATA group")
+    assert not any("unclosed" in f or "without #if" in f for f in found), found
+
+
 def test_group_before_the_first_marker(tmp_path):
     config = GOOD_CONFIG.replace(
         "#pragma once\n",
@@ -211,8 +229,8 @@ def test_rows_without_config(tmp_path):
 
 def test_prompt_in_the_compile_time_section(tmp_path):
     config = GOOD_CONFIG.replace(
-        "#define XEWE_LED_PIN_DATA 48\n",
-        "#define XEWE_LED_PIN_DATA 48\n#define XEWE_LED_PIN_DATA_PROMPT 1\n",
+        "#define XEWE_LED_PIN_DATA 4\n",
+        "#define XEWE_LED_PIN_DATA 4\n#define XEWE_LED_PIN_DATA_PROMPT 1\n",
     )
     _one(
         _findings(tmp_path, config),
