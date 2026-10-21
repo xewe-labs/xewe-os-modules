@@ -3,11 +3,11 @@
 
 | Slug | Name | Id | Version | Description | Depends on | Requires core |
 |---|---|---|---|---|---|---|
-| [`buttons`](../modules/buttons) | Buttons | `buttons` | 3.1.0 | Binds commands to physical buttons with software debouncing | - | `>=3.1.0,<4.0.0` |
-| [`led`](../modules/led) | Led | `led` | 3.1.0 | Controls an addressable LED strip: 46 chipsets, 7 effects, brightness and colour order | - | `>=3.1.0,<4.0.0` |
-| [`led-web`](../modules/led-web) | Led Web | `led_web` | 3.1.0 | LED control page in the browser, with live sync of every LED change over a WebSocket | led, web-interface | `>=3.1.0,<4.0.0` |
-| [`pins`](../modules/pins) | Pins | `pins` | 3.1.0 | GPIO, ADC, PWM and I2C access from the command line | - | `>=3.1.0,<4.0.0` |
-| [`scheduler`](../modules/scheduler) | Scheduler | `schedule` | 3.1.0 | Runs stored commands on a weekly schedule | time | `>=3.1.0,<4.0.0` |
-| [`time`](../modules/time) | Time | `time` | 3.1.0 | NTP time sync and timezone handling | wifi | `>=3.1.0,<4.0.0` |
-| [`web-interface`](../modules/web-interface) | Web Interface | `web_interface` | 3.1.0 | HTTP page and command endpoint for other devices on the network | wifi | `>=3.1.0,<4.0.0` |
-| [`wifi`](../modules/wifi) | Wifi | `wifi` | 3.1.0 | Connects to a local WiFi network and keeps the connection alive | - | `>=3.1.0,<4.0.0` |
+| [`buttons`](../modules/buttons) | Buttons | `buttons` | 3.1.1 | Binds commands to physical buttons with software debouncing | - | `>=3.1.0,<4.0.0` |
+| [`led`](../modules/led) | Led | `led` | 3.1.1 | Controls an addressable LED strip: 46 chipsets, 7 effects, brightness and colour order | - | `>=3.1.0,<4.0.0` |
+| [`led-web`](../modules/led-web) | Led Web | `led_web` | 3.1.1 | LED control page in the browser, with live sync of every LED change over a WebSocket | led, web-interface | `>=3.1.0,<4.0.0` |
+| [`pins`](../modules/pins) | Pins | `pins` | 3.1.1 | GPIO, ADC, PWM and I2C access from the command line | - | `>=3.1.0,<4.0.0` |
+| [`scheduler`](../modules/scheduler) | Scheduler | `schedule` | 3.1.1 | Runs stored commands on a weekly schedule | time | `>=3.1.0,<4.0.0` |
+| [`time`](../modules/time) | Time | `time` | 3.1.1 | NTP time sync and timezone handling | wifi | `>=3.1.0,<4.0.0` |
+| [`web-interface`](../modules/web-interface) | Web Interface | `web_interface` | 3.1.1 | HTTP page and command endpoint for other devices on the network | wifi | `>=3.1.0,<4.0.0` |
+| [`wifi`](../modules/wifi) | Wifi | `wifi` | 3.1.1 | Connects to a local WiFi network and keeps the connection alive | - | `>=3.1.0,<4.0.0` |
