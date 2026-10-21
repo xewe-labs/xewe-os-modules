@@ -129,13 +129,22 @@ In the project's `Config.h`, `xewe modules generate` writes these six lines comm
 
 | Define | Default | Meaning |
 |---|---|---|
-| `XEWE_LED_PIN_DATA` | c3 4, c6 20, s3 13 (Led Dock V2), else 48 | data GPIO |
-| `XEWE_LED_PIN_CLOCK` | c3 3, c6 19, s3 12, else 12 | clock GPIO (clocked chipsets) |
+| `XEWE_LED_PIN_DATA` | 4 | data GPIO |
+| `XEWE_LED_PIN_CLOCK` | 3 | clock GPIO (clocked chipsets) |
 | `XEWE_LED_NUM_LEDS_MAX` | 600 | buffer size; every frame sends this many pixels |
 | `XEWE_LED_MODE_FADE_MS` / `_BRIGHTNESS_FADE_MS` / `_FRAME_MS` | 900 / 500 / 20 | cross-fade, brightness fade, frame period |
 | `XEWE_LED_FPS_WINDOW_S` | 3 | FPS window of `$led status` |
 | `XEWE_LED_LISTENERS` | 4 | listener capacity |
 | `XEWE_LED_TASK_STACK` / `_PRIORITY` / `_CORE` | 4096 / 3 / 0 | render task |
+
+Led Dock V2 pins per chip (the module default is 4 and 3; a release image sets its pins with
+`xewe build --define`, a project in its `Config.h`):
+
+| Chip | `XEWE_LED_PIN_DATA` | `XEWE_LED_PIN_CLOCK` |
+|---|---|---|
+| c3 | 4 | 3 |
+| c6 | 20 | 19 |
+| s3 | 13 | 12 |
 
 Other pins: uncomment `XEWE_LED_PIN_DATA` and `XEWE_LED_PIN_CLOCK` in the project's `Config.h` and set them, or `xewe build --define XEWE_LED_PIN_DATA=<gpio> --define XEWE_LED_PIN_CLOCK=<gpio>`. The data pin, and the clock pin of clocked chipsets, are claimed in the core pin registry at boot; a pin held by another module leaves the strip without output (reported). Strapping pins are claimed with the core's warning.
 

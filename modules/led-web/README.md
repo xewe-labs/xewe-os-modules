@@ -13,7 +13,7 @@ schedule, another module), is pushed to every open page as a WebSocket text fram
 
 - The page, stylesheet and script are served byte for byte from flash (`PROGMEM`, `src/LedWeb/pages/`)
 - Routes on the web interface's server: `/` (taken with `web_interface.set_root`), `/set`, `/state`, `/modes`, `/name` and the page assets; each answer carries the CORS headers `Access-Control-Allow-Origin: *`, `Access-Control-Allow-Methods: POST, GET, OPTIONS, DELETE, PUT`, `Access-Control-Allow-Headers: Content-Type`
-- WebSocket server on port 81 (`XEWE_LED_WEB_WS_PORT`): a `led` listener turns every change into one frame for all pages, including the page that made it; a heartbeat every second while a page is connected
+- WebSocket server on port 81: a `led` listener turns every change into one frame for all pages, including the page that made it; a heartbeat every second while a page is connected
 - A colour from the page is read with the core hex parser (`xewe::color::parse_hex_color` from `XeWeCore/Utils/Color.h`); anything that is not six hex digits is refused with `400 Invalid color`
 - The handlers and frames are in a pure header (`LedWebApi.h`) and are tested on the developer machine
 
@@ -61,7 +61,7 @@ project that has a schedule page registers it there.
 
 | Frame | Format | Sent on |
 |---|---|---|
-| `H` | literal | every `XEWE_LED_WEB_HEARTBEAT_MS` (1000 ms) while a page is connected; the page shows Offline after 2.2 s without one and reloads itself |
+| `H` | literal | every second while a page is connected; the page shows Offline after 2.2 s without one and reloads itself |
 | `C` | `C%02X%02X%02X` | `on_color` |
 | `B` | `B%u` | `on_brightness` |
 | `S` | `S0` / `S1` | `on_state` |
@@ -95,14 +95,7 @@ None of its own (namespace `led_web` holds only the core's `is_enabled` and `not
 
 ### Build defines (`src/LedWeb/Config.h`)
 
-All names start with `XEWE_LED_WEB_` (the slug `led-web` with `-` written as `_`; `led` defines no such name). They are compile time defined constants, the second section of the scheme in [XeWeCore's `doc/config.md`](https://github.com/xewe-labs/xewe-os-core/blob/main/doc/config.md): the module's `Config.h` holds the defaults as `#ifndef` fallbacks; `xewe modules generate` lists them in the project's `Config.h` commented out (`// #define XEWE_LED_WEB_WS_PORT 81`), and an uncommented line there, or `xewe build --define NAME=VALUE`, wins. The module has no default runtime values.
-
-The file frames its compile time defined constants with `/* ---- start compile time defined constants ---- */` ... `/* ---- end compile time defined constants ---- */`; its default runtime values section (`/* ---- start default runtime values ---- */` ... `/* ---- end default runtime values ---- */`) is empty.
-
-| Define | Default | Meaning |
-|---|---|---|
-| `XEWE_LED_WEB_WS_PORT` | 81 | WebSocket port; the page's script connects to 81, so change both together |
-| `XEWE_LED_WEB_HEARTBEAT_MS` | 1000 | heartbeat interval while a page is connected |
+The module has no configurable values: its `Config.h` has both sections empty. The WebSocket port (81) and the heartbeat interval (1000 ms) are constants in `LedWeb.h`, matched to the page script, which connects to port 81 and shows Offline after 2.2 s without a heartbeat.
 
 ### Known issues
 

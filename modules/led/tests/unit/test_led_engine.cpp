@@ -954,7 +954,7 @@ static void test_status_text() {
     in.voltage = 5;
     const std::string want = "Hardware:\n"
                              "    Chip:             WS2812B\n"
-                             "    Data Pin:         GPIO_48\n"
+                             "    Data Pin:         GPIO_4\n"
                              "    Voltage:          5 V\n"
                              "    Color Order:      GRB\n"
                              "    Length:           60\n"
@@ -981,8 +981,8 @@ static void test_status_text() {
     in.fps = 49;
     const std::string want2 = "Hardware:\n"
                               "    Chip:             Unknown\n"
-                              "    Data Pin:         GPIO_48\n"
-                              "    Clock Pin:        GPIO_12\n"
+                              "    Data Pin:         GPIO_4\n"
+                              "    Clock Pin:        GPIO_3\n"
                               "    Voltage:          12 V\n"
                               "    Color Order:      GRB\n"
                               "    Parallel Lines:   2\n"

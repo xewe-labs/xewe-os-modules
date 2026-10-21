@@ -5,7 +5,7 @@
 // The LED control page of the led module in a browser. The page, its stylesheet and script and
 // the /set, /state, /modes and /name routes are served by the web interface module's server (the
 // page takes `/` through set_root); every LED change, from any source, is pushed to the open pages
-// as WebSocket text frames on port XEWE_LED_WEB_WS_PORT. Route and frame formats:
+// as WebSocket text frames on port 81 (WS_PORT). Route and frame formats:
 // LedWebApi.h.
 #pragma once
 
@@ -24,6 +24,11 @@
 
 class LedWeb : public xewe::Module, public led_web_api::PageSessions {
 public:
+    // WebSocket port; the page script connects to :81, so the two stay equal
+    static constexpr uint16_t WS_PORT = 81;
+    // "H" interval, ms; the page shows Offline after 2200 ms, so this stays under half of that
+    static constexpr uint32_t HEARTBEAT_MS = 1000;
+
     LedWeb(xewe::Os& host, Led& led_ref, WebInterface& web_interface_ref);
 
     // routes on the web interface server, `/` through set_root, WebSocket server, led listener
@@ -43,7 +48,7 @@ public:
 private:
     Led& led;
     WebInterface& web_interface;
-    WebSocketsServer web_socket{XEWE_LED_WEB_WS_PORT};
+    WebSocketsServer web_socket{WS_PORT};
 
     bool started{false};
 

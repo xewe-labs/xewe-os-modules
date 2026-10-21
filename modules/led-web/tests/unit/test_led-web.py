@@ -249,9 +249,9 @@ def test_comments_describe_code_only():
 
 @pytest.mark.unit
 def test_config_matches_the_page_script():
-    config = (SRC / "Config.h").read_text()
-    port = int(re.search(r"#define XEWE_LED_WEB_WS_PORT (\d+)", config)[1])
-    beat = int(re.search(r"#define XEWE_LED_WEB_HEARTBEAT_MS (\d+)", config)[1])
+    header = (SRC / "LedWeb.h").read_text()
+    port = int(re.search(r"static constexpr uint16_t WS_PORT = (\d+);", header)[1])
+    beat = int(re.search(r"static constexpr uint32_t HEARTBEAT_MS = (\d+);", header)[1])
     js = _literal((SRC / "pages" / "index_js.h").read_bytes()).decode()
     assert f"ws://${{location.hostname}}:{port}/" in js
     timeout = int(re.search(r"HEARTBEAT_TIMEOUT_MS = (\d+);", js)[1])
@@ -315,7 +315,7 @@ def test_websocket_lifecycle_matches_v230():
     loop = body("void LedWeb::loop(")
     assert re.search(
         r"web_socket\.loop\(\);\s+if \(heartbeat_due\(millis\(\), "
-        r"XEWE_LED_WEB_HEARTBEAT_MS\)\) \{\s+"
+        r"HEARTBEAT_MS\)\) \{\s+"
         r"broadcast\(led_web_api::FRAME_HEARTBEAT, 1\);\s+heartbeat_sent\(millis\(\)\);",
         loop,
     )

@@ -66,7 +66,7 @@ void LedWeb::begin_routines_common() {
 void LedWeb::loop() {
     web_socket.loop();
 
-    if (heartbeat_due(millis(), XEWE_LED_WEB_HEARTBEAT_MS)) {
+    if (heartbeat_due(millis(), HEARTBEAT_MS)) {
         broadcast(led_web_api::FRAME_HEARTBEAT, 1);
         heartbeat_sent(millis());
     }
@@ -85,7 +85,7 @@ std::string LedWeb::status(const bool verbose) const {
         out += "\nPage: " +
             led_web_api::page_url(WiFi.localIP().toString().c_str(),
                 port_row ? web_settings.value(*port_row) : std::string());
-        out += "\nWebSocket Port: " + std::to_string(XEWE_LED_WEB_WS_PORT);
+        out += "\nWebSocket Port: " + std::to_string(WS_PORT);
         out += "\nWebSocket Clients: " + std::to_string(client_count());
     }
     if (verbose)

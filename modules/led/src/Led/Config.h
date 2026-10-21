@@ -6,8 +6,9 @@ The values of the led module, in the module Config.h form of XeWeCore's doc/conf
 so every name starts with XEWE_LED_. Pure preprocessor and no includes. Each value is a fallback:
 a line in the project's Config.h (an uncommented line of a value asked at first boot pre-answers
 that question), a dotenv value behind INJECTED_FROM_DOTENV or `xewe build --define` wins.
-The pins are FastLED template arguments, so they are compile-time constants; the chip defaults are
-the Led Dock V2 pinout (c3 4/3, c6 20/19, s3 13/12).
+The pins are FastLED template arguments, so they are compile-time constants; the defaults are 4
+and 3 on every chip, and a release image or a project sets its own (the Led Dock V2 pins per chip
+are in the README).
 */
 #pragma once
 
@@ -53,30 +54,14 @@ the Led Dock V2 pinout (c3 4/3, c6 20/19, s3 13/12).
 
 /* ---- start compile time defined constants ---- */
 
-/* GPIO of the LED data line (every chipset) */
+/* GPIO of the LED data line (every chipset); release images set it per board, see the README */
 #ifndef XEWE_LED_PIN_DATA
-#if defined(XEWE_CHIP_C3)
 #define XEWE_LED_PIN_DATA 4
-#elif defined(XEWE_CHIP_C6)
-#define XEWE_LED_PIN_DATA 20
-#elif defined(XEWE_CHIP_S3)
-#define XEWE_LED_PIN_DATA 13
-#else
-#define XEWE_LED_PIN_DATA 48
-#endif
 #endif
 
 /* GPIO of the LED clock line (used by the 14 clocked chipsets only) */
 #ifndef XEWE_LED_PIN_CLOCK
-#if defined(XEWE_CHIP_C3)
 #define XEWE_LED_PIN_CLOCK 3
-#elif defined(XEWE_CHIP_C6)
-#define XEWE_LED_PIN_CLOCK 19
-#elif defined(XEWE_CHIP_S3)
-#define XEWE_LED_PIN_CLOCK 12
-#else
-#define XEWE_LED_PIN_CLOCK 12
-#endif
 #endif
 
 /* Largest strip the firmware drives, LEDs; sizes the buffers, max fps about 1e6 / (value * 30) */
