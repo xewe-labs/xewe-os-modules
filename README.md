@@ -53,7 +53,8 @@ ref = "3.1.0"   # the set tag
 selected = ["wifi", "time", "scheduler"]
 ```
 
-`ref` is the set tag `X.Y.Z` (see [Releasing](#releasing)), or `latest` for the newest `main`.
+`ref` is the set tag `X.Y.Z`, a module tag `<module>/X.Y.Z` (see [Releasing](#releasing)), or
+`latest` for the newest `main`.
 
 Select modules with `./setup.sh --modules wifi,time` or `xewe modules select wifi,time` (`all` and
 `none` work too). Dependencies are added automatically. The tools then:
@@ -107,32 +108,35 @@ the tests.
 ## Releasing
 
 Maintainers only. Each module is released on its own, as tag `<module>/X.Y.Z` (`wifi/3.1.0`); the
-set tag `X.Y.Z` (`3.1.0`) then marks a commit where every module is released at that version, and
-is what projects pin (`[modules] ref`) and what the tools fetch. No `v` prefix (the old `v0.2.0`
-stays as it is). Every module is prepared together, in one run that makes no git change:
+set tag `X.Y.Z` (`3.1.0`) marks a commit where every module is released at that version. Projects
+pin either (`[modules] ref`): a module tag's commit holds every module at its then-released
+version. No `v` prefix (the old `v0.2.0` stays as it is). `--prepare <version> <module>...`
+prepares the named modules only, `--prepare <version> --all` every module and the set, in one run
+that makes no git change:
 
 ```sh
 scripts/release.sh --prepare 3.1.0 --all --dry-run                 # prints every step, changes nothing
 scripts/release.sh --prepare 3.1.0 --all --hardware c3,c6,s3       # boards attached; without --hardware: compiled, not run
 ```
 
-It refuses a tree with changes outside the version lines and the release folders, sets
-`version=3.1.0` and `requires_core=>=3.1.0,<4.0.0` in every `module.properties`, regenerates
+It refuses a tree with changes outside the prepared modules' version lines and release folders,
+sets `version=3.1.0` and `requires_core=>=3.1.0,<4.0.0` in their `module.properties`, regenerates
 `doc/modules.md`, and stops with exit 2 until `modules/<module>/releases/3.1.0/notes.txt` (each
-module's GitHub Release text) and the set's `releases/3.1.0/notes.txt` are filled (a missing one
-gets a skeleton; delete its marker line). Then it runs the checks once for the whole repository in a
-copy of the harness project (`--harness <dir>`, else `XEWE_RELEASE_HARNESS`, else `../xewe-os`)
-with every module selected and this tree as the modules source, each step recorded by `xewe
-release-card` into `releases/3.1.0/logs/` (gitignored, never published): `tools/validate.py
---harness`, the unit tests, `xewe format --check modules tools`, `xewe brand-lint`, every module
-built alone for c3, c6 and s3, the all-modules image and the board tests per chip (a `--hardware`
-chip is flashed and tested in one session with every gate; `XEWE_RELEASE_DEFINES_<CHIP>` gives its
-defines). From that one run it renders nine generated cards: `modules/<module>/releases/3.1.0/
-release_card.md` with that module's tests, and `releases/3.1.0/release_card.md` with every module's.
-A failed step does not stop the run; the cards refuse it, and `--resume` re-runs only the steps
-that are not green. Commit what it lists as `prepare 3.1.0` and push `main`; the `tests` workflow's
-card job checks every card against its own unit test run. Then, from that clean `main`, level with
-`origin/main`, one module at a time and the set last:
+module's GitHub Release text) and, with `--all`, the set's `releases/3.1.0/notes.txt` are filled (a
+missing one gets a skeleton; delete its marker line). Then it runs the checks once for the whole
+repository in a copy of the harness project (`--harness <dir>`, else `XEWE_RELEASE_HARNESS`, else
+`../xewe-os`) with every module selected and this tree as the modules source, each step recorded
+by `xewe release-card` into `releases/3.1.0/logs/` (gitignored, never published):
+`tools/validate.py --harness`, the unit tests, `xewe format --check modules tools`, `xewe
+brand-lint`, each prepared module built alone for c3, c6 and s3, the all-modules image and the
+board tests per chip (a `--hardware` chip is flashed and tested in one session with every gate;
+`XEWE_RELEASE_DEFINES_<CHIP>` gives its defines). From that one run it renders the generated cards:
+`modules/<module>/releases/3.1.0/release_card.md` of each prepared module with that module's
+tests, and with `--all` `releases/3.1.0/release_card.md` with every module's. A failed step does
+not stop the run; the cards refuse it, and `--resume` re-runs only the steps that are not green.
+Commit what it lists as `prepare 3.1.0` and push `main`; the `tests` workflow's card job checks
+every card against its own unit test run. Then, from that clean `main`, level with `origin/main`,
+one module at a time and, once every module is at the version, the set last:
 
 ```sh
 scripts/release.sh 3.1.0 wifi --dry-run   # prints every step and HEAD's CI state, changes nothing
@@ -146,8 +150,8 @@ origin; its `notes.txt` and `release_card.md` committed; no `testcard.md`; `modu
 the version; `gh` logged in); 2 `xewe release-card verify` on the module's card (its tested tree is
 HEAD's, the shared run's logs are here); 3 waits for the `tests` workflow on HEAD to pass with its
 card check run; 4 tags HEAD `<module>/<version>` (annotated), pushes the tag and creates the GitHub
-Release (not marked latest) with `release_card.md` as its only asset; 5 says how projects get it:
-through the set tag.
+Release (not marked latest) with `release_card.md` as its only asset; 5 says how projects pin it:
+`ref = "<module>/<version>"`, or `ref = "<version>"` when the set tag exists.
 
 `--set` refuses unless every module in `modules/` says `version=<version>` and has its tag
 `<module>/<version>` on HEAD or an ancestor, with `modules/<module>/` unchanged since that tag and

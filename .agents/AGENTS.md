@@ -67,12 +67,14 @@ modules and listeners: `doc/os/module.md`, pin registry: `doc/utils/pins.md`).
   inside an xewe-os project ("harness").
 - `scripts/release.sh` releases one module (tag `<slug>/X.Y.Z`, files in
   `modules/<slug>/releases/<version>/`) or the set (tag `X.Y.Z`, `releases/<version>/`) that
-  projects pin (README "Releasing"). `--prepare <version> --all` (no git change) sets every
-  `version=` and `requires_core=`, regenerates `doc/modules.md`, stops with exit 2 until the nine
-  `notes.txt` files are filled, then runs one shared check run through `xewe release-card record`
-  (harness setup with every module, validator, unit tests, format, brand-lint, module-alone and
-  all-modules builds and the board tests per chip; logs in `releases/<version>/logs/`, gitignored)
-  and renders the generated `release_card.md` of every module (only its tests) and of the set (no
+  projects pin (README "Releasing"; a module tag pins too). `--prepare <version> <module>...`
+  prepares the named modules, `--prepare <version> --all` every module and the set (no git
+  change): it sets their `version=` and `requires_core=`, regenerates `doc/modules.md`, stops with
+  exit 2 until their `notes.txt` files are filled, then runs one shared check run through `xewe
+  release-card record` (harness setup with every module, validator, unit tests, format,
+  brand-lint, module-alone builds of the prepared modules, all-modules builds and the board tests
+  per chip; logs in `releases/<version>/logs/`, gitignored) and renders the generated
+  `release_card.md` of each prepared module (only its tests) and, with `--all`, of the set (no
   hand-written test card). The tag runs verify the card, wait for the `tests` workflow with its
   card check green, and publish the card as the release's only asset. Agents may run `--dry-run`
   only, and `--prepare` only on a scratch copy unless asked; the owner commits, tags and pushes.
@@ -173,7 +175,6 @@ before 1.0 MINOR for breaking), update its README in the same change, keep store
 ### Module notes
 
 - **wifi.** `loop()` waits for the network while disconnected, by design (doc/contract.md section 6); no other module may block.
-  `-DDEBUG_Wifi=1` prints credentials; bench only.
 - **web-interface.** No authentication: every command is reachable over HTTP on the local network.
 - **time, scheduler.** The scheduler's id is `schedule`; its member for the time dependency is
   `time_module`.
