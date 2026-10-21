@@ -2,10 +2,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // xewe-os-modules/modules/led/src/Led/Led.h
 //
-// Addressable LED strip: 46 FastLED chipsets on compile-time pins, 7 effects with a 900 ms
-// cross-fade, software brightness with a 500 ms fade, 6 software colour orders, a first-boot
-// wizard, 30 `$led` commands and change events for other modules. Frames are rendered by a
-// FreeRTOS task every XEWE_LED_FRAME_MS; the main loop only changes state.
+// Addressable LED strip: 46 FastLED chipsets on compile-time pins, 7 effects with a cross-fade
+// (XEWE_LED_MODE_FADE_MS), software brightness with a fade (XEWE_LED_BRIGHTNESS_FADE_MS), 6
+// software colour orders, a first-boot wizard, 30 `$led` commands and change events for other
+// modules. Frames are rendered by a FreeRTOS task every XEWE_LED_FRAME_MS; the main loop only
+// changes state.
 #pragma once
 
 #include <FastLED.h>
@@ -170,14 +171,14 @@ private:
     LedModeParams mode_params;
 
     // settings table rows
-    bool use_clk{false};
-    uint8_t chip{0};
-    uint8_t voltage{5};
-    uint16_t lines{0};
+    bool use_clk{XEWE_LED_USE_CLK};
+    uint8_t chip{XEWE_LED_CHIP};
+    uint8_t voltage{XEWE_LED_VOLTAGE};
+    uint16_t lines{XEWE_LED_LINES};
     uint16_t num_led{XEWE_LED_NUM_LED};
-    uint8_t colorder{0};
+    uint8_t colorder{XEWE_LED_COLORDER};
 
-    uint8_t active_voltage{5}; // last accepted voltage
+    uint8_t active_voltage{XEWE_LED_VOLTAGE}; // last accepted voltage
     bool wizard_active{false};
     bool data_pin_claimed{false};
     bool clock_pin_claimed{false};

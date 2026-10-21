@@ -96,12 +96,14 @@ Metadata and dependencies are declared in [`module.properties`](module.propertie
 ### Build defines (`src/WebInterface/Config.h`)
 
 All names start with `XEWE_WEB_INTERFACE_` (the slug `web-interface` with `-` written as `_`). They
-are the defaults of the two settings rows, the runtime-defaults section of the scheme in [XeWeCore's `doc/config.md`](https://github.com/xewe-labs/xewe-os-core/blob/main/doc/config.md): a
+are the defaults of the two settings rows, the default-runtime-values section of the scheme in [XeWeCore's `doc/config.md`](https://github.com/xewe-labs/xewe-os-core/blob/main/doc/config.md): a
 line in the project's `Config.h` (`xewe modules generate` lists them there commented out, for example
 `// #define XEWE_WEB_INTERFACE_PORT 80`; uncomment one and set the value) or `xewe build --define
 NAME=VALUE` changes the default a fresh device starts with, and
-`$web_interface set` changes the stored value. The module has no first-boot values and no
-compile-time constants.
+`$web_interface set` changes the stored value. The module has no values asked at first boot and no
+compile time defined constants.
+
+The file frames its default runtime values with `/* ---- start default runtime values ---- */` ... `/* ---- end default runtime values ---- */`; its compile time defined constants section (`/* ---- start compile time defined constants ---- */` ... `/* ---- end compile time defined constants ---- */`) is empty.
 
 | Define | Default | Setting | Meaning |
 |---|---|---|---|

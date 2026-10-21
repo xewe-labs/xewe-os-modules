@@ -45,8 +45,8 @@ protected:
 private:
     Wifi& wifi;
     bool time_set{false};
-    std::string active_tz_string{"GMT+00:00"};
-    std::string tz_gmt_str{"GMT+00:00"}; // table row
+    std::string active_tz_string{XEWE_TIME_TZ_GMT_STR};
+    std::string tz_gmt_str{XEWE_TIME_TZ_GMT_STR}; // table row
 
     void get_time_from_web_init();
     bool get_time_from_web_wait(const bool verbose = true);

@@ -62,12 +62,14 @@ All names start with `XEWE_WIFI_`. `./setup.sh` (and `xewe modules select`) appe
 [XeWeCore's `doc/config.md`](https://github.com/xewe-labs/xewe-os-core/blob/main/doc/config.md), and an uncommented line in the project's `Config.h`, a dotenv value behind `INJECTED_FROM_DOTENV` or
 `xewe build --define NAME=VALUE` wins over the module's default.
 
-**First-boot values.** Like every entry, the block holds them as commented-out lines, so a fresh project still asks:
+The file frames its default runtime values with `/* ---- start default runtime values ---- */` ... `/* ---- end default runtime values ---- */` and its compile time defined constants with `/* ---- start compile time defined constants ---- */` ... `/* ---- end compile time defined constants ---- */`.
+
+**Default runtime values, asked at first boot.** Like every entry, the block holds them as a comment and a commented-out line, so a fresh project still asks:
 
 ```c
-// Network name (wifi/ssid), string literal, up to 32 characters; asked at first boot
+/* Network name (wifi/ssid), string literal, up to 32 characters; asked at first boot */
 // #define XEWE_WIFI_SSID ""
-// Network password (wifi/psw), string literal, up to 63 characters; asked at first boot
+/* Network password (wifi/psw), string literal, up to 63 characters; asked at first boot */
 // #define XEWE_WIFI_PSW ""
 ```
 
@@ -86,7 +88,7 @@ reaches the repository). What the first boot does:
 - Only `XEWE_WIFI_SSID` set: the password is asked.
 - Only `XEWE_WIFI_PSW` set: ignored, the network is chosen from the scan and the password is asked.
 
-**Compile-time constants**
+**Compile time defined constants**
 
 | Define | Default | Meaning |
 |---|---|---|

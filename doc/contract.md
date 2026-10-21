@@ -283,38 +283,47 @@ no `Config.h`.
 **File.** The file is pure preprocessor: comments, `#pragma once`, `#ifndef` groups and `#define`
 lines, no `#include` and no code. The module's main header and every pure sub-header include it
 relatively (`#include "Config.h"`, `"../Config.h"` from a subdirectory); a pure sub-header stays
-host-compilable because the file includes nothing. After the header (the SPDX lines, the path, one
-paragraph) come three sections, each opened by its marker line exactly as written, in this order,
-each marker once and before the first group (a section may be empty, its marker stays):
+host-compilable because the file includes nothing. The only `//` lines are the three header lines
+(the two SPDX lines and the path); every other text line is a single-line C block comment
+`/* ... */`, and the header paragraph after them is one multi-line `/* ... */` block. Two
+sections follow, each framed by a start and an end marker line exactly as written; the four lines
+come in this order, each once, outside any conditional, and every entry sits between a start and
+its end. Between an end and the next start, and after the last end, there are blank lines only.
+Layout: the start line, a blank line, the entries separated by blank lines, a blank line, the end
+line, and a blank line between the sections; an empty section is its start line, a blank line and
+its end line.
 
-| Marker | Holds |
-|---|---|
-| `// ---- runtime defaults ----` | the default of a settings row |
-| `// ---- first-boot values ----` | a value the first boot asks for; a project may pre-answer it |
-| `// ---- compile-time constants ----` | pins, sizes, task parameters, debug switches |
+| Section | Start and end marker | Holds |
+|---|---|---|
+| default runtime values | `/* ---- start default runtime values ---- */` ... `/* ---- end default runtime values ---- */` | the default of a settings row; some of them are asked at first boot |
+| compile time defined constants | `/* ---- start compile time defined constants ---- */` ... `/* ---- end compile time defined constants ---- */` | pins, sizes, task parameters, debug switches |
 
-**Entries.** Every value is one comment line (what it is, unit, range) followed by an `#ifndef`
-group of its own name that holds the `#define` (a first-boot entry adds its `_PROMPT` define; a
-chip-conditional default nests `#if`/`#elif`/`#else`/`#endif` inside the group). The `#ifndef` makes
+A single marker line (`/* ---- default runtime values ---- */`) or a `//` marker is an error.
+
+**Entries.** Every value is one `/* ... */` comment line (what it is, unit, range) followed by an
+`#ifndef` group of its own name that holds the `#define` (a value asked at first boot adds its
+`_PROMPT` define; a chip-conditional default nests `#if`/`#elif`/`#else`/`#endif` inside the group). The `#ifndef` makes
 the value a fallback. A chip-conditional default tests `XEWE_CHIP_C3`, `XEWE_CHIP_C6` or
 `XEWE_CHIP_S3`, which `xewe build` defines in `XeWeBuildInfo.h` before any other file is read; the
 core's `CONFIG_IDF_TARGET_*` comes from `sdkconfig.h` and is not visible there.
 
 **Names.** A define is named `XEWE_<SLUG>_<PARAM>`: the slug in upper case with `-` written as `_`
 (`wifi` gives `XEWE_WIFI_`, `led-web` gives `XEWE_LED_WEB_`, `web-interface` gives
-`XEWE_WEB_INTERFACE_`), and `<PARAM>` matching `[A-Z0-9_]+`. The `<PARAM>` of a runtime default or a
-first-boot value is the settings key in upper case (`tz_gmt_str` gives `XEWE_TIME_TZ_GMT_STR`), so
+`XEWE_WEB_INTERFACE_`), and `<PARAM>` matching `[A-Z0-9_]+`. The `<PARAM>` of a default runtime value
+is the settings key in upper case (`tz_gmt_str` gives `XEWE_TIME_TZ_GMT_STR`), so
 it is at most 15 characters and never renamed once stored; a compile-time constant takes any
 upper-case name. `_PROMPT` is reserved: no `<PARAM>` ends in it. The prefixes `XEWE_CORE_`
 (the core), `XEWE_CHIP_` (the build) and `XEWE_TEST_` (the tools) are reserved and no module slug
 may produce one. Ownership goes by the longest prefix, so `XEWE_LED_WEB_WS_PORT` is led-web's and
 `led` defines no `XEWE_LED_WEB_*` name. A module defines its prefix only in its `Config.h`.
 
-**First-boot values and `_PROMPT`.** A first-boot entry also defines `<NAME>_PROMPT 1` inside its
-`#ifndef` group:
+**Asked at first boot and `_PROMPT`.** Asked at first boot is a property of a default runtime value,
+not a section: its comment says "asked at first boot" and its `#ifndef` group also defines
+`<NAME>_PROMPT 1`. The validator infers the property from that line, which belongs only in the
+default-runtime-values section:
 
 ```c
-// Timezone offset (time/tz_gmt_str), string literal GMT+HH:MM; detected and confirmed at first boot
+/* Timezone offset (time/tz_gmt_str), string literal GMT+HH:MM; detected, asked at first boot */
 #ifndef XEWE_TIME_TZ_GMT_STR
 #define XEWE_TIME_TZ_GMT_STR "GMT+00:00"
 #define XEWE_TIME_TZ_GMT_STR_PROMPT 1
@@ -331,13 +340,14 @@ way, written exactly as `XEWE_<SLUG>_<KEY>` in the table.
 
 **How a value reaches the project.** The project's `Config.h` is a catalogue. `xewe modules generate`
 (run by `./setup.sh` and `xewe modules select`) appends each selected module's `Config.h`, without its
-header, as one marked block to it (`// ---- <slug> (xewe modules generate) ----` ... `// ---- end
-<slug> ----`), once. The section markers are copied; every entry becomes its comment line followed by
-its definition commented out, `// #define <NAME> <value>`, without `#ifndef` and without
+header, as one marked block to it, once: a `/* ---- start <slug> ---- */` line and a `/* ---- end <slug> ---- */`
+line, each framed above and below by a bar of `*` between `/` and `/` as long as the line. The four
+section markers are copied; every entry becomes its `/* ... */` comment
+line followed by its definition commented out, `// #define <NAME> <value>`, without `#ifndef` and without
 `<NAME>_PROMPT`; a chip-conditional entry keeps its `#if`/`#elif`/`#else`/`#endif` lines, each
 commented. Nothing in the project file is active until the user uncomments a line. An uncommented
 line is a bare `#define` with no `#ifndef`, because the generated `XeWeOverrides.h` is read after the
-project's `Config.h`. Uncommenting a first-boot line pre-answers its question; its value may be the
+project's `Config.h`. Uncommenting the line of a value asked at first boot pre-answers its question; its value may be the
 sentinel `INJECTED_FROM_DOTENV` to take it from the dotenv file at build time
 (`#define XEWE_WIFI_PSW INJECTED_FROM_DOTENV`). A block is never rewritten, so the user's edits
 survive every generate. The module's own `Config.h` keeps its `#ifndef` groups as the fallbacks.
@@ -348,26 +358,66 @@ fallback. The tools put three headers in front of every translation unit (`-incl
 order): `XeWeBuildInfo.h` (build information, `XEWE_CHIP_<chip>`), the project's `Config.h`, and
 `XeWeOverrides.h` (an `#undef` and `#define` for every injected value and every `--define`). The
 module's `Config.h` is read later, when its header includes it, so its groups yield to all three,
-and a first-boot value defined at any rung leaves `<NAME>_PROMPT` undefined. `Config.h` includes
+and a value asked at first boot, defined at any rung, leaves `<NAME>_PROMPT` undefined. `Config.h` includes
 nothing, neither `<XeWeBuildInfo.h>` nor `XeWeOverrides.h`.
 
 **What qualifies.** A value belongs in `Config.h` when code needs it at build time: a template
 argument (a FastLED pin, a `ListenerSet` size), a buffer size, a debug switch (constants), the
-default of a settings row (runtime defaults), or an answer the first boot would otherwise ask for
-(first-boot values).
+default of a settings row (default runtime values, some asked at first boot).
 
 ```c
-// modules/wifi/src/Wifi/Config.h (the first-boot group of the ssid, and a constant)
-// Network name (wifi/ssid), string literal, up to 32 characters; asked at first boot
+/* modules/wifi/src/Wifi/Config.h: a default runtime value asked at first boot, and a constant */
+/* ---- start default runtime values ---- */
+
+/* Network name (wifi/ssid), string literal, up to 32 characters; asked at first boot */
 #ifndef XEWE_WIFI_SSID
 #define XEWE_WIFI_SSID ""
 #define XEWE_WIFI_SSID_PROMPT 1
 #endif
 
-// Debug output of the module, 0 or 1; 1 prints every step, credentials included: bench only
+/* ---- end default runtime values ---- */
+
+/* ---- start compile time defined constants ---- */
+
+/* Debug output of the module, 0 or 1; 1 prints every step, credentials included: bench only */
 #ifndef XEWE_WIFI_DEBUG
 #define XEWE_WIFI_DEBUG 0
 #endif
+
+/* ---- end compile time defined constants ---- */
+```
+
+The same entries in a project's `Config.h`, prose in `/* */` and code in `//` (the file header is
+one sentence; a block has no header sentence of its own):
+
+```c
+// SPDX-FileCopyrightText: 2026 Maxim Dokukin (maxdokukin.com)
+// SPDX-License-Identifier: GPL-3.0-only
+// xewe-os/Config.h
+/*
+ * Uncomment #define line and change the value to override the default.
+ */
+#pragma once
+
+/************************/
+/* ---- start wifi ---- */
+/************************/
+/* ---- start default runtime values ---- */
+
+/* Network name (wifi/ssid), string literal, up to 32 characters; asked at first boot */
+// #define XEWE_WIFI_SSID ""
+
+/* ---- end default runtime values ---- */
+
+/* ---- start compile time defined constants ---- */
+
+/* Debug output of the module, 0 or 1; 1 prints every step, credentials included: bench only */
+// #define XEWE_WIFI_DEBUG 0
+
+/* ---- end compile time defined constants ---- */
+/************************/
+/* ---- end wifi ---- */
+/************************/
 ```
 
 **Versioning.** Renaming or removing a define of `Config.h` is a breaking change (MINOR before
@@ -543,7 +593,7 @@ Without the tools it exits 3 with `xewe-os-tools not importable; run with
 | `depends_libraries` | each name matches `^[A-Za-z0-9_.\- ]+$` and is not `XeWeCore`/`XeWeOS`. With `--harness`: a name in neither `libraries.toml` nor the harness `[libraries]` is an error. A name missing from `libraries.toml` is otherwise a warning |
 | `source` | no line of any file in `src/<folder>/` matches `\bcli\s*\(`, `<XeWeOS\.h>`, `xewe::os::`, `ModuleController`, `\bcontroller\b`, `xewe_cli`, `this->os\b` or `std::span` (comments included); the header contains `#include <XeWeCore.h>` |
 | `core21` | a module whose `src/` (`.h`, `.hpp`, `.cpp`, `.tpp`) uses `SettingDef`, `ListenerSet`, `SchemaOut` or `xewe::pins::` declares `requires_core` with a lower bound ≥ `2.1.0`; every `xewe::setting<...>("key", ...)` key is 1–15 characters without whitespace, quote or backslash, and unique within the module |
-| `config` | the scheme of section 3.2, per module. Prefix: `XEWE_<SLUG>_`, clear of `XEWE_CORE_`, `XEWE_CHIP_` and `XEWE_TEST_`. If `src/<folder>/Config.h` exists: only comment and preprocessor lines, no `#include`, `#pragma once` the only pragma; the three section markers once each, in order, outside any conditional, before any group; each `#define` sits inside `#ifndef` of its own name, and each `#ifndef` has exactly one comment line above it; inside a group only nested `#if`/`#ifdef`/`#ifndef` ... `#elif`/`#else` ... `#endif` (chip-conditional defaults) and the `#define`s are allowed, and an `#if`, `#ifdef`, `#else` or `#elif` outside a group is an error, as is any other directive; every name matches `<prefix>[A-Z0-9_]+`, has no other module's prefix (longest prefix owns) and does not end in `_PROMPT`; `<NAME>_PROMPT` is `#define`d as `1` only inside a first-boot group, and every first-boot group has one. Outside `Config.h`, no file in `src/<folder>/` defines or undefines a name with any module's prefix or `XEWE_CORE_`. Every settings row's default is exactly `XEWE_<SLUG>_<KEY>`, a runtime-default or first-boot define, and a module with rows has a `Config.h`. Every first-boot `NAME` is tested as `NAME_PROMPT` in the sources, and every `*_PROMPT` tested there is a first-boot name of the module |
+| `config` | the scheme of section 3.2, per module. Prefix: `XEWE_<SLUG>_`, clear of `XEWE_CORE_`, `XEWE_CHIP_` and `XEWE_TEST_`. If `src/<folder>/Config.h` exists: only comment and preprocessor lines, no `#include`, `#pragma once` the only pragma; no `//` line except the three header lines (the SPDX lines and the path), every other text a `/* ... */` comment (the header paragraph one multi-line block, any other comment one line); the four section markers `/* ---- start default runtime values ---- */`, `/* ---- end default runtime values ---- */`, `/* ---- start compile time defined constants ---- */` and `/* ---- end compile time defined constants ---- */`, in this order, each once, outside any conditional; every group sits between a start and its end, and only blank lines stand between an end and the next start or after the last end (a section may be empty); the single-marker form and the old `//` forms are errors whose message names the four expected lines; each `#define` sits inside `#ifndef` of its own name, and each `#ifndef` has exactly one single-line `/* ... */` comment above it; inside a group only nested `#if`/`#ifdef`/`#ifndef` ... `#elif`/`#else` ... `#endif` (chip-conditional defaults) and the `#define`s are allowed, and an `#if`, `#ifdef`, `#else` or `#elif` outside a group is an error, as is any other directive; every name matches `<prefix>[A-Z0-9_]+`, has no other module's prefix (longest prefix owns) and does not end in `_PROMPT`; `<NAME>_PROMPT` is `#define`d as `1` only inside a group of the default-runtime-values section, between its start and end markers (that line is what marks a value as asked at first boot). Outside `Config.h`, no file in `src/<folder>/` defines or undefines a name with any module's prefix or `XEWE_CORE_`. Every settings row's default is exactly `XEWE_<SLUG>_<KEY>`, a define of the default-runtime-values section, and a module with rows has a `Config.h`. Every `NAME` with a `NAME_PROMPT` define is tested as `NAME_PROMPT` in the sources, and every `*_PROMPT` tested there is such a name of the module |
 | `stray` (module) | no `*.ino` anywhere in the module, no `scripts/` and no `LICENSE.txt` in its directory |
 | `stray` (repository) | no `module.properties` other than `modules/<slug>/module.properties`, no `*.ino` outside `modules/`, no `xewe-os-module-*` directory at the root or under `modules/` |
 | `index` | `doc/modules.md` equals what `--write-index` would write |

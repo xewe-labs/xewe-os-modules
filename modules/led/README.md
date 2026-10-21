@@ -103,11 +103,11 @@ Metadata and dependencies are declared in [`module.properties`](module.propertie
 
 ### Build defines (`src/Led/Config.h`)
 
-All names start with `XEWE_LED_` and hold a fallback in the module's `Config.h`: an uncommented line in the project's `Config.h`, a dotenv value behind `INJECTED_FROM_DOTENV` or `xewe build --define NAME=VALUE` wins (see [Config.h in a project](../../README.md#using-modules-in-a-project)). The file has the three sections of the scheme in [XeWeCore's `doc/config.md`](https://github.com/xewe-labs/xewe-os-core/blob/main/doc/config.md).
+All names start with `XEWE_LED_` and hold a fallback in the module's `Config.h`: an uncommented line in the project's `Config.h`, a dotenv value behind `INJECTED_FROM_DOTENV` or `xewe build --define NAME=VALUE` wins (see [Config.h in a project](../../README.md#using-modules-in-a-project)). The file has the two sections of the scheme (default runtime values, compile time defined constants) in [XeWeCore's `doc/config.md`](https://github.com/xewe-labs/xewe-os-core/blob/main/doc/config.md).
 
-**Runtime defaults:** none.
+The file frames its default runtime values with `/* ---- start default runtime values ---- */` ... `/* ---- end default runtime values ---- */` and its compile time defined constants with `/* ---- start compile time defined constants ---- */` ... `/* ---- end compile time defined constants ---- */`.
 
-**First-boot values.** Each pre-answers one wizard question and defines `XEWE_LED_<KEY>_PROMPT` only while the value is not set; the settings row takes the value as its default either way.
+**Default runtime values**, all asked at first boot. Each pre-answers one wizard question and defines `XEWE_LED_<KEY>_PROMPT` only while the value is not set; the settings row takes the value as its default either way.
 
 | Define | Default | Setting | Meaning |
 |---|---|---|---|
@@ -125,7 +125,7 @@ In the project's `Config.h`, `xewe modules generate` writes these six lines comm
 #define XEWE_LED_COLORDER 2
 ```
 
-**Compile-time constants** (the project's `Config.h` lists them commented out; uncomment a line to override):
+**Compile time defined constants** (the project's `Config.h` lists them commented out; uncomment a line to override):
 
 | Define | Default | Meaning |
 |---|---|---|

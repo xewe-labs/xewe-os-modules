@@ -252,13 +252,18 @@ def check_module(
     return problems
 
 
-CONFIG_MARKERS = (
-    "// ---- runtime defaults ----",
-    "// ---- first-boot values ----",
-    "// ---- compile-time constants ----",
+SECTIONS = ("default runtime values", "compile time defined constants")
+CONFIG_MARKERS = tuple(
+    f"/* ---- {kind} {name} ---- */" for name in SECTIONS for kind in ("start", "end")
 )
-"""The section markers of a module Config.h (XeWeCore doc/config.md), in this order."""
-RUNTIME, FIRST_BOOT, CONSTANTS = range(3)
+"""The four section markers of a module Config.h (XeWeCore doc/config.md), in this order: start
+and end of the default runtime values, start and end of the compile time defined constants."""
+EXPECTED_MARKERS = "expected lines " + ", ".join(f"'{m}'" for m in CONFIG_MARKERS)
+LEGACY_MARKERS = {f"/* ---- {name} ---- */" for name in SECTIONS}
+RUNTIME, CONSTANTS, FIRST_BOOT = range(3)
+"""The two sections; FIRST_BOOT is not a section but the runtime values that define NAME_PROMPT."""
+MARKER_LIKE_RE = re.compile(r"^/\*\s*----.*----\s*\*/$")
+CONFIG_SPDX_LINES = 3
 RESERVED_PREFIXES = {
     "XEWE_CORE_": "core",
     "XEWE_CHIP_": "the build",
@@ -353,33 +358,78 @@ def setting_rows(text: str) -> list[tuple[str, str | None, int]]:
 def parse_config(
     lines: list[str], prefix: str, owners: dict[str, str], err
 ) -> dict[int, set[str]]:
-    """Check one module Config.h and return its names per section (RUNTIME, FIRST_BOOT, CONSTANTS)."""
-    names: dict[int, set[str]] = {RUNTIME: set(), FIRST_BOOT: set(), CONSTANTS: set()}
+    """Check one module Config.h and return its names per section (RUNTIME, CONSTANTS) and, as
+    FIRST_BOOT, the runtime names whose group defines `<NAME>_PROMPT 1`."""
+    names: dict[int, set[str]] = {RUNTIME: set(), CONSTANTS: set(), FIRST_BOOT: set()}
     name_re = re.compile(rf"^{re.escape(prefix)}[A-Z0-9_]+$")
     section = -1
+    in_group = False  # between a start marker and its end marker
     seen_markers: list[str] = []
     stack: list[
         str | None
     ] = []  # the group name at depth 0, None for nested conditionals
-    prompts: set[str] = set()  # groups that define their <NAME>_PROMPT
+    in_block = False  # inside the multi-line header comment
 
     def is_comment(n: int) -> bool:
         text = lines[n - 1].strip() if 1 <= n <= len(lines) else ""
-        return text.startswith("//") and text not in CONFIG_MARKERS
+        return text.endswith("*/") and text not in CONFIG_MARKERS
 
     for n, line in enumerate(lines, 1):
         text = line.strip()
-        if text in CONFIG_MARKERS:
-            if text in seen_markers:
-                err(f"config: Config.h:{n}: marker '{text}' appears twice")
-            elif CONFIG_MARKERS.index(text) != len(seen_markers):
-                err(f"config: Config.h:{n}: marker '{text}' out of order")
-            seen_markers.append(text)
-            section = CONFIG_MARKERS.index(text)
-            if stack:
-                err(f"config: Config.h:{n}: marker '{text}' inside a conditional")
+        if in_block:
+            in_block = "*/" not in text
             continue
-        if not text or text.startswith("//"):
+        if not text:
+            continue
+        if section >= 0 and not in_group and text not in CONFIG_MARKERS:
+            err(
+                f"config: Config.h:{n}: only blank lines between an end marker and the next "
+                "start marker, or after the last end marker"
+            )
+        if text.startswith("//"):
+            if n > CONFIG_SPDX_LINES:
+                if "----" in text or any(name in text for name in SECTIONS):
+                    err(
+                        f"config: Config.h:{n}: the '//' section marker form is gone; "
+                        f"{EXPECTED_MARKERS}"
+                    )
+                else:
+                    err(
+                        f"config: Config.h:{n}: no '//' line (only the {CONFIG_SPDX_LINES} SPDX "
+                        "header lines; every other text is a /* ... */ comment)"
+                    )
+            continue
+        if text.startswith("/*"):
+            if text in CONFIG_MARKERS:
+                if text in seen_markers:
+                    err(f"config: Config.h:{n}: marker '{text}' appears twice")
+                elif CONFIG_MARKERS.index(text) != len(seen_markers):
+                    err(f"config: Config.h:{n}: marker '{text}' out of order")
+                seen_markers.append(text)
+                index = CONFIG_MARKERS.index(text)
+                section = index // 2
+                in_group = index % 2 == 0
+                if stack:
+                    err(f"config: Config.h:{n}: marker '{text}' inside a conditional")
+            elif text in LEGACY_MARKERS:
+                err(
+                    f"config: Config.h:{n}: single section marker '{text}'; {EXPECTED_MARKERS}"
+                )
+            elif MARKER_LIKE_RE.match(text):
+                err(
+                    f"config: Config.h:{n}: unknown section marker '{text}'; {EXPECTED_MARKERS}"
+                )
+            elif "*/" not in text:
+                if in_group:
+                    err(
+                        f"config: Config.h:{n}: a comment below the header must be one "
+                        "single-line /* ... */"
+                    )
+                in_block = True
+            elif not text.endswith("*/") or text.count("*/") > 1:
+                err(
+                    f"config: Config.h:{n}: a comment line is one /* ... */ and nothing else"
+                )
             continue
         directive = CONFIG_DIRECTIVE_RE.match(text)
         if not directive:
@@ -400,7 +450,7 @@ def parse_config(
             stack.append(name)
             if section < 0:
                 err(
-                    f"config: Config.h:{n}: #ifndef {name} before the first section marker"
+                    f"config: Config.h:{n}: #ifndef {name} before the first start marker"
                 )
             owner = owner_of(name, owners)
             if not name_re.match(name):
@@ -413,11 +463,17 @@ def parse_config(
                 )
             elif name.endswith(PROMPT):
                 err(f"config: Config.h:{n}: '{name}': the suffix {PROMPT} is reserved")
-            elif section >= 0:
+            elif in_group:
                 names[section].add(name)
             if not is_comment(n - 1) or is_comment(n - 2):
                 err(
-                    f"config: Config.h:{n}: #ifndef {name} needs exactly one comment line above it"
+                    f"config: Config.h:{n}: #ifndef {name} needs exactly one single-line "
+                    "/* ... */ comment above it"
+                )
+            elif not lines[n - 2].strip().startswith("/*"):
+                err(
+                    f"config: Config.h:{n}: the comment above #ifndef {name} must be a "
+                    "single-line /* ... */"
                 )
         elif kind in ("ifndef", "ifdef", "if"):
             if not stack:
@@ -444,14 +500,16 @@ def parse_config(
                 pass
             elif name == group + PROMPT:
                 value = rest[len(name) :].strip()
-                if section != FIRST_BOOT:
-                    err(f"config: Config.h:{n}: {name} outside the first-boot section")
+                if not in_group or section != RUNTIME:
+                    err(
+                        f"config: Config.h:{n}: {name} outside the default runtime values section"
+                    )
                 elif len(stack) != 1 or value != "1":
                     err(
                         f"config: Config.h:{n}: {name} must be '#define {name} 1' in its group"
                     )
                 else:
-                    prompts.add(group)
+                    names[FIRST_BOOT].add(group)
             else:
                 err(
                     f"config: Config.h:{n}: #define {name} must sit inside #ifndef {name}"
@@ -460,13 +518,11 @@ def parse_config(
             err(f"config: Config.h:{n}: #{kind} is not allowed in Config.h")
     if stack:
         err("config: Config.h: unclosed #ifndef group")
+    if in_block:
+        err("config: Config.h: unclosed /* comment")
     for marker in CONFIG_MARKERS:
         if marker not in seen_markers:
             err(f"config: Config.h: marker '{marker}' missing")
-    for name in sorted(names[FIRST_BOOT] - prompts):
-        err(
-            f"config: Config.h: first-boot {name} must define {name}{PROMPT} 1 in its group"
-        )
     return names
 
 
@@ -475,14 +531,21 @@ def check_config(
 ) -> None:
     """Rule config (XeWeCore doc/config.md). The module prefix is `XEWE_<SLUG>_`, clear of the
     reserved XEWE_CORE_, XEWE_CHIP_ and XEWE_TEST_. `src/<Folder>/Config.h`, when present, is pure
-    preprocessor without includes: the three section markers once each, in order, before any group;
-    every define inside `#ifndef` of its own name, with exactly one comment line above the
+    preprocessor without includes: the four section markers `/* ---- start default runtime values
+    ---- */`, `/* ---- end default runtime values ---- */`, `/* ---- start compile time defined
+    constants ---- */` and `/* ---- end compile time defined constants ---- */` once each, in this
+    order, outside any conditional; every group between a start and its end marker, nothing but
+    blank lines between an end and the next start or after the last end (a section may be empty);
+    the single-marker and the `//` forms are errors; no `//` line except the three SPDX header lines, every other text a
+    `/* ... */` comment (the header paragraph one multi-line block, every other comment one line);
+    every define inside `#ifndef` of its own name, with exactly one single-line comment above the
     `#ifndef`; names with the module prefix (longest-prefix ownership: XEWE_LED_WEB_* is led-web's);
-    `<NAME>_PROMPT 1` only inside a first-boot group, and every first-boot group has one. Outside
-    Config.h no source defines or undefines a name of any module's prefix or XEWE_CORE_. Every
-    settings row's default is exactly `XEWE_<SLUG>_<KEY>`, a runtime-default or first-boot define;
-    a module with rows has a Config.h. Every first-boot NAME is tested as `NAME_PROMPT` in the
-    sources, and every `*_PROMPT` tested there is a first-boot NAME of this module."""
+    a value the first boot asks for is a default runtime value whose group holds
+    `#define <NAME>_PROMPT 1` (inferred from that line; only in a group of the default runtime
+    values section). Outside Config.h no source defines or undefines a name of any module's prefix or XEWE_CORE_. Every
+    settings row's default is exactly `XEWE_<SLUG>_<KEY>`, a define of the default runtime values
+    section; a module with rows has a Config.h. Every NAME with a `NAME_PROMPT` define is tested as
+    `NAME_PROMPT` in the sources, and every `*_PROMPT` tested there is such a NAME of this module."""
     prefix = config_prefix(slug)
     owners = dict(owners or config_owners([slug]))
     owners.setdefault(prefix, slug)
@@ -492,7 +555,7 @@ def check_config(
                 f"config: prefix {prefix} collides with {reserved} (reserved for {who})"
             )
     config = src / "Config.h"
-    names = {RUNTIME: set(), FIRST_BOOT: set(), CONSTANTS: set()}
+    names = {RUNTIME: set(), CONSTANTS: set(), FIRST_BOOT: set()}
     if config.is_file():
         lines = config.read_text(encoding="utf-8", errors="replace").splitlines()
         names = parse_config(lines, prefix, owners, err)
@@ -515,7 +578,7 @@ def check_config(
             tested.update(a or b for a, b in PROMPT_TEST_RE.findall(text))
     if rows and not config.is_file():
         err("config: settings rows need src/<Folder>/Config.h with their defaults")
-    stored = names[RUNTIME] | names[FIRST_BOOT]
+    stored = names[RUNTIME]
     for where, key, default, n in rows:
         want = prefix + key.upper()
         if default is None:
@@ -528,15 +591,17 @@ def check_config(
             )
         elif config.is_file() and want not in stored:
             err(
-                f"config: {where}:{n}: {want} is not a runtime-default or first-boot define"
+                f"config: {where}:{n}: {want} is not a define of the default runtime values section"
             )
     for name in sorted(names[FIRST_BOOT]):
         if name + PROMPT not in tested:
-            err(f"config: first-boot {name} is never asked under #ifdef {name}{PROMPT}")
+            err(
+                f"config: {name} defines {name}{PROMPT} but is never asked under #ifdef {name}{PROMPT}"
+            )
     for name in sorted(tested):
         if name[: -len(PROMPT)] not in names[FIRST_BOOT]:
             err(
-                f"config: {name} is tested, but {name[: -len(PROMPT)]} is no first-boot value here"
+                f"config: {name} is tested, but no default runtime value of Config.h defines it"
             )
 
 

@@ -3,7 +3,7 @@
 # brand-lint and, on a prepare commit, the release card check (every release_card.md of this
 # tree against the unit tests' JUnit and the c3 image: `xewe release-card verify --ci
 # --unit-only`; job "modules / release card check", which scripts/release.sh waits for), from the
-# tools release 3.1.2, for every push and PR.
+# tools release 3.1.5, for every push and PR.
 name: tests
 on:
   push:
@@ -17,7 +17,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   modules:
-    uses: xewe-labs/xewe-os-tools/.github/workflows/xewe-modules-tests.yml@3.1.2
+    uses: xewe-labs/xewe-os-tools/.github/workflows/xewe-modules-tests.yml@3.1.5
     with:
-      tools_ref: "3.1.2"
+      tools_ref: "3.1.5"
       strict_lint: true

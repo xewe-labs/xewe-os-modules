@@ -5,7 +5,7 @@
 // The LED control page of the led module in a browser. The page, its stylesheet and script and
 // the /set, /state, /modes and /name routes are served by the web interface module's server (the
 // page takes `/` through set_root); every LED change, from any source, is pushed to the open pages
-// as WebSocket text frames on port XEWE_LED_WEB_WS_PORT (81). Route and frame formats:
+// as WebSocket text frames on port XEWE_LED_WEB_WS_PORT. Route and frame formats:
 // LedWebApi.h.
 #pragma once
 

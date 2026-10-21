@@ -57,10 +57,12 @@ Metadata and dependencies are declared in [`module.properties`](module.propertie
 
 All names start with `XEWE_TIME_`. `./setup.sh` (and `xewe modules select`) appends the module's
 `src/Time/Config.h` as one marked block to the project's `Config.h`, every entry commented out, following the scheme in
-[XeWeCore's `doc/config.md`](https://github.com/xewe-labs/xewe-os-core/blob/main/doc/config.md). The module has one first-boot value, written there as a commented-out line:
+[XeWeCore's `doc/config.md`](https://github.com/xewe-labs/xewe-os-core/blob/main/doc/config.md). The module has one default runtime value, asked at first boot, written there as a comment and a commented-out line:
+
+The file frames its default runtime values with `/* ---- start default runtime values ---- */` ... `/* ---- end default runtime values ---- */`; its compile time defined constants section (`/* ---- start compile time defined constants ---- */` ... `/* ---- end compile time defined constants ---- */`) is empty.
 
 ```c
-// Timezone offset (time/tz_gmt_str), string literal GMT+HH:MM; detected and confirmed at first boot
+/* Timezone offset (time/tz_gmt_str), string literal GMT+HH:MM; detected, asked at first boot */
 // #define XEWE_TIME_TZ_GMT_STR "GMT+00:00"
 ```
 
@@ -68,7 +70,7 @@ Uncomment it and set the offset to pre-answer the first boot, or write
 `#define XEWE_TIME_TZ_GMT_STR INJECTED_FROM_DOTENV` to take it from the dotenv file. A pre-answer
 that parses as `GMT±HH:MM` skips the detection and the confirmation; the clock still syncs over
 SNTP. One that does not parse falls back to the typed input. A `xewe build --define XEWE_TIME_TZ_GMT_STR=...` wins over the project's `Config.h`.
-The module has no runtime defaults and no compile-time constants.
+The module has no compile time defined constants.
 
 ### Tests
 

@@ -69,12 +69,13 @@ module's state, and `$system schema` prints every module's settings as JSON line
 
 Build-time values live in the project's `Config.h`, which is a catalogue: `./setup.sh` and `xewe
 modules select` append each selected module's `src/<Folder>/Config.h` there once, as one marked
-block, and every entry in it is its comment line followed by the definition commented out
+block, and every entry in it is its `/* ... */` comment line followed by the definition commented out
 (`// #define XEWE_LED_NUM_LED 600`). Nothing in the project file is active until the user uncomments a
 line, which is a bare `#define`. Every name is `XEWE_<SLUG>_<PARAM>` (`XEWE_LED_PIN_DATA`,
-`XEWE_WIFI_SSID`; the slug in upper case, `-` as `_`). A block holds up to three sections: runtime
-defaults, first-boot values and compile-time constants. Uncommenting a first-boot line pre-answers
-its question; `INJECTED_FROM_DOTENV` as its value takes it from the dotenv file at build time;
+`XEWE_WIFI_SSID`; the slug in upper case, `-` as `_`). A block holds two sections, each framed by a start and an end marker
+(`/* ---- start default runtime values ---- */` ... `/* ---- end default runtime values ---- */` and
+`/* ---- start compile time defined constants ---- */` ... `/* ---- end compile time defined constants ---- */`). A default runtime value marked "asked at first boot"
+is pre-answered by uncommenting its line; `INJECTED_FROM_DOTENV` as its value takes it from the dotenv file at build time;
 `xewe build --define NAME=VALUE` wins over both. The module's own `Config.h` keeps the fallbacks, so
 a line left commented out changes nothing. A block is never rewritten by a later generate. Each
 module README lists its values; the scheme is specified in XeWeCore's

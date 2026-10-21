@@ -17,34 +17,39 @@ _SPEC = importlib.util.spec_from_file_location(
 validate = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(validate)
 
+S1 = "/* ---- start default runtime values ---- */"
+E1 = "/* ---- end default runtime values ---- */"
+S2 = "/* ---- start compile time defined constants ---- */"
+E2 = "/* ---- end compile time defined constants ---- */"
 OWNERS = validate.config_owners(["led", "led-web", "wifi"])
 
 GOOD_CONFIG = """\
 // SPDX-FileCopyrightText: 2026 Maxim Dokukin (maxdokukin.com)
 // SPDX-License-Identifier: GPL-3.0-only
 // xewe-os-modules/modules/led/src/Led/Config.h
-//
-// Fixture.
+/*
+Fixture.
+*/
 #pragma once
 
-// ---- runtime defaults ----
+/* ---- start default runtime values ---- */
 
-// Voltage (led/voltage), V
-#ifndef XEWE_LED_VOLTAGE
-#define XEWE_LED_VOLTAGE 5
-#endif
-
-// ---- first-boot values ----
-
-// Chip (led/chip), 0 to 45; asked at first boot
+/* Chip (led/chip), 0 to 45; asked at first boot */
 #ifndef XEWE_LED_CHIP
 #define XEWE_LED_CHIP 0
 #define XEWE_LED_CHIP_PROMPT 1
 #endif
 
-// ---- compile-time constants ----
+/* Voltage (led/voltage), V */
+#ifndef XEWE_LED_VOLTAGE
+#define XEWE_LED_VOLTAGE 5
+#endif
 
-// Data pin
+/* ---- end default runtime values ---- */
+
+/* ---- start compile time defined constants ---- */
+
+/* Data pin */
 #ifndef XEWE_LED_PIN_DATA
 #if defined(XEWE_CHIP_C3)
 #define XEWE_LED_PIN_DATA 4
@@ -52,6 +57,8 @@ GOOD_CONFIG = """\
 #define XEWE_LED_PIN_DATA 48
 #endif
 #endif
+
+/* ---- end compile time defined constants ---- */
 """
 
 GOOD_CPP = """\
@@ -109,28 +116,74 @@ def test_wrong_prefix(tmp_path):
 
 
 def test_missing_marker(tmp_path):
-    config = GOOD_CONFIG.replace("// ---- first-boot values ----\n", "")
-    found = _findings(tmp_path, config)
-    _one(found, "marker '// ---- first-boot values ----' missing")
+    found = _findings(tmp_path, GOOD_CONFIG.replace(S2 + "\n", ""))
+    _one(found, f"marker '{S2}' missing")
+
+
+def test_missing_end(tmp_path):
+    found = _findings(tmp_path, GOOD_CONFIG.replace(E1 + "\n", ""))
+    _one(found, f"marker '{E1}' missing")
+
+
+def test_end_before_start(tmp_path):
+    config = (
+        GOOD_CONFIG.replace(S1, "/* tmp */").replace(E1, S1).replace("/* tmp */", E1)
+    )
+    _one(_findings(tmp_path, config), "out of order")
 
 
 def test_markers_out_of_order(tmp_path):
-    config = GOOD_CONFIG.replace("// ---- runtime defaults ----", "// ---- tmp ----")
-    config = config.replace(
-        "// ---- compile-time constants ----", "// ---- runtime defaults ----"
+    config = (
+        GOOD_CONFIG.replace(S1, "/* tmp */").replace(S2, S1).replace("/* tmp */", S2)
     )
-    config = config.replace("// ---- tmp ----", "// ---- compile-time constants ----")
     _one(_findings(tmp_path, config), "out of order")
+
+
+def test_group_between_end_and_next_start(tmp_path):
+    config = GOOD_CONFIG.replace(
+        E1 + "\n",
+        E1 + "\n\n/* Late */\n#ifndef XEWE_LED_LATE\n#define XEWE_LED_LATE 1\n#endif\n",
+    )
+    _one(_findings(tmp_path, config), "only blank lines between an end marker")
+
+
+def test_group_after_the_last_end(tmp_path):
+    config = (
+        GOOD_CONFIG
+        + "\n/* Late */\n#ifndef XEWE_LED_LATE\n#define XEWE_LED_LATE 1\n#endif\n"
+    )
+    _one(_findings(tmp_path, config), "or after the last end marker")
+
+
+def test_single_marker_form(tmp_path):
+    config = GOOD_CONFIG.replace(S1, "/* ---- default runtime values ---- */").replace(
+        E1 + "\n\n", ""
+    )
+    found = _findings(tmp_path, config)
+    _one(found, "single section marker '/* ---- default runtime values ---- */'")
+    _one(found, f"expected lines '{S1}', '{E1}', '{S2}', '{E2}'")
+
+
+def test_old_slash_slash_marker_form(tmp_path):
+    config = GOOD_CONFIG.replace(S1, "// ---- default runtime values ----")
+    found = _findings(tmp_path, config)
+    _one(found, "the '//' section marker form is gone")
+    _one(found, f"expected lines '{S1}'")
+
+
+def test_marker_inside_a_conditional(tmp_path):
+    config = GOOD_CONFIG.replace(S2, "#if 1\n" + S2)
+    _one(_findings(tmp_path, config), "inside a conditional")
 
 
 def test_group_before_the_first_marker(tmp_path):
     config = GOOD_CONFIG.replace(
         "#pragma once\n",
-        "#pragma once\n\n// Early\n#ifndef XEWE_LED_EARLY\n#define XEWE_LED_EARLY 1\n#endif\n",
+        "#pragma once\n\n/* Early */\n#ifndef XEWE_LED_EARLY\n#define XEWE_LED_EARLY 1\n#endif\n",
     )
     _one(
         _findings(tmp_path, config),
-        "#ifndef XEWE_LED_EARLY before the first section marker",
+        "#ifndef XEWE_LED_EARLY before the first start marker",
     )
 
 
@@ -148,7 +201,7 @@ def test_row_default_must_be_a_stored_value(tmp_path):
     )
     _one(
         _findings(tmp_path, cpp=cpp),
-        "XEWE_LED_PIN_DATA is not a runtime-default or first-boot define",
+        "XEWE_LED_PIN_DATA is not a define of the default runtime values",
     )
 
 
@@ -156,22 +209,49 @@ def test_rows_without_config(tmp_path):
     _one(_findings(tmp_path, config=None), "settings rows need src/<Folder>/Config.h")
 
 
-def test_prompt_outside_first_boot(tmp_path):
+def test_prompt_in_the_compile_time_section(tmp_path):
     config = GOOD_CONFIG.replace(
-        "#define XEWE_LED_VOLTAGE 5\n",
-        "#define XEWE_LED_VOLTAGE 5\n#define XEWE_LED_VOLTAGE_PROMPT 1\n",
+        "#define XEWE_LED_PIN_DATA 48\n",
+        "#define XEWE_LED_PIN_DATA 48\n#define XEWE_LED_PIN_DATA_PROMPT 1\n",
     )
     _one(
         _findings(tmp_path, config),
-        "XEWE_LED_VOLTAGE_PROMPT outside the first-boot section",
+        "XEWE_LED_PIN_DATA_PROMPT outside the default runtime values section",
     )
 
 
-def test_first_boot_without_prompt_define(tmp_path):
-    config = GOOD_CONFIG.replace("#define XEWE_LED_CHIP_PROMPT 1\n", "")
+def test_empty_sections_pass(tmp_path):
+    config = GOOD_CONFIG.split(S1)[0] + f"{S1}\n\n{E1}\n\n{S2}\n\n{E2}\n"
+    assert _findings(tmp_path, config, cpp="") == []
+
+
+def test_slash_slash_comment_line(tmp_path):
+    config = GOOD_CONFIG.replace("/* Data pin */", "// Data pin")
+    found = _findings(tmp_path, config)
+    _one(found, "no '//' line")
+    _one(found, "#ifndef XEWE_LED_PIN_DATA needs exactly one single-line")
+
+
+def test_third_marker(tmp_path):
+    config = GOOD_CONFIG + "\n/* ---- first-boot values ---- */\n"
+    _one(_findings(tmp_path, config), "unknown section marker")
+
+
+def test_marker_twice(tmp_path):
+    config = GOOD_CONFIG + "\n" + E2 + "\n"
+    _one(_findings(tmp_path, config), "appears twice")
+
+
+def test_multi_line_comment_below_the_header(tmp_path):
+    config = GOOD_CONFIG.replace("/* Data pin */", "/* Data\npin */")
+    _one(_findings(tmp_path, config), "must be one single-line")
+
+
+def test_prompt_define_must_be_one(tmp_path):
+    config = GOOD_CONFIG.replace("XEWE_LED_CHIP_PROMPT 1", "XEWE_LED_CHIP_PROMPT 0")
     _one(
         _findings(tmp_path, config),
-        "first-boot XEWE_LED_CHIP must define XEWE_LED_CHIP_PROMPT 1",
+        "XEWE_LED_CHIP_PROMPT must be '#define XEWE_LED_CHIP_PROMPT 1'",
     )
 
 
@@ -179,22 +259,22 @@ def test_first_boot_never_guarded(tmp_path):
     cpp = GOOD_CPP.replace("#ifdef XEWE_LED_CHIP_PROMPT", "#if 1")
     _one(
         _findings(tmp_path, cpp=cpp),
-        "first-boot XEWE_LED_CHIP is never asked under #ifdef XEWE_LED_CHIP_PROMPT",
+        "XEWE_LED_CHIP defines XEWE_LED_CHIP_PROMPT but is never asked under #ifdef XEWE_LED_CHIP_PROMPT",
     )
 
 
-def test_prompt_tested_for_a_value_that_is_not_first_boot(tmp_path):
+def test_prompt_tested_without_a_prompt_define(tmp_path):
     cpp = GOOD_CPP + "#if defined(XEWE_LED_VOLTAGE_PROMPT)\n#endif\n"
     _one(
         _findings(tmp_path, cpp=cpp),
-        "XEWE_LED_VOLTAGE_PROMPT is tested, but XEWE_LED_VOLTAGE is no first-boot value",
+        "XEWE_LED_VOLTAGE_PROMPT is tested, but no default runtime value",
     )
 
 
 def test_missing_guard(tmp_path):
     config = GOOD_CONFIG.replace(
-        "// ---- compile-time constants ----\n",
-        "// ---- compile-time constants ----\n\n#define XEWE_LED_BARE 1\n",
+        S2 + "\n",
+        S2 + "\n\n#define XEWE_LED_BARE 1\n",
     )
     _one(
         _findings(tmp_path, config),
@@ -203,17 +283,17 @@ def test_missing_guard(tmp_path):
 
 
 def test_comment_line_above_each_ifndef(tmp_path):
-    none = GOOD_CONFIG.replace("// Voltage (led/voltage), V\n", "")
+    none = GOOD_CONFIG.replace("/* Voltage (led/voltage), V */\n", "")
     _one(
         _findings(tmp_path / "a", none),
-        "#ifndef XEWE_LED_VOLTAGE needs exactly one comment line",
+        "#ifndef XEWE_LED_VOLTAGE needs exactly one single-line",
     )
     two = GOOD_CONFIG.replace(
-        "// Voltage (led/voltage), V\n", "// Voltage\n// (led/voltage), V\n"
+        "/* Voltage (led/voltage), V */\n", "/* Voltage */\n/* (led/voltage), V */\n"
     )
     _one(
         _findings(tmp_path / "b", two),
-        "#ifndef XEWE_LED_VOLTAGE needs exactly one comment line",
+        "#ifndef XEWE_LED_VOLTAGE needs exactly one single-line",
     )
 
 
@@ -229,7 +309,7 @@ def test_include_and_code_refused(tmp_path):
 def test_led_may_not_define_a_led_web_name(tmp_path):
     config = (
         GOOD_CONFIG
-        + "\n// Not ours\n#ifndef XEWE_LED_WEB_X\n#define XEWE_LED_WEB_X 1\n#endif\n"
+        + "\n/* Not ours */\n#ifndef XEWE_LED_WEB_X\n#define XEWE_LED_WEB_X 1\n#endif\n"
     )
     _one(
         _findings(tmp_path / "a", config),

@@ -95,7 +95,9 @@ None of its own (namespace `led_web` holds only the core's `is_enabled` and `not
 
 ### Build defines (`src/LedWeb/Config.h`)
 
-All names start with `XEWE_LED_WEB_` (the slug `led-web` with `-` written as `_`; `led` defines no such name). They are compile-time constants, the third section of the scheme in [XeWeCore's `doc/config.md`](https://github.com/xewe-labs/xewe-os-core/blob/main/doc/config.md): the module's `Config.h` holds the defaults as `#ifndef` fallbacks; `xewe modules generate` lists them in the project's `Config.h` commented out (`// #define XEWE_LED_WEB_WS_PORT 81`), and an uncommented line there, or `xewe build --define NAME=VALUE`, wins. The module has no runtime defaults and no first-boot values.
+All names start with `XEWE_LED_WEB_` (the slug `led-web` with `-` written as `_`; `led` defines no such name). They are compile time defined constants, the second section of the scheme in [XeWeCore's `doc/config.md`](https://github.com/xewe-labs/xewe-os-core/blob/main/doc/config.md): the module's `Config.h` holds the defaults as `#ifndef` fallbacks; `xewe modules generate` lists them in the project's `Config.h` commented out (`// #define XEWE_LED_WEB_WS_PORT 81`), and an uncommented line there, or `xewe build --define NAME=VALUE`, wins. The module has no default runtime values.
+
+The file frames its compile time defined constants with `/* ---- start compile time defined constants ---- */` ... `/* ---- end compile time defined constants ---- */`; its default runtime values section (`/* ---- start default runtime values ---- */` ... `/* ---- end default runtime values ---- */`) is empty.
 
 | Define | Default | Meaning |
 |---|---|---|
