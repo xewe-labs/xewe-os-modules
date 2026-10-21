@@ -88,12 +88,6 @@ reaches the repository). What the first boot does:
 - Only `XEWE_WIFI_SSID` set: the password is asked.
 - Only `XEWE_WIFI_PSW` set: ignored, the network is chosen from the scan and the password is asked.
 
-**Compile time defined constants**
-
-| Define | Default | Meaning |
-|---|---|---|
-| `XEWE_WIFI_DEBUG` | 0 | 1 prints debug output, including the credentials (bench only) |
-
 ### Known issues
 
 - **`loop()` waits for the network, by design.** While the module is enabled and disconnected,
@@ -105,8 +99,7 @@ reaches the repository). What the first boot does:
   and scheduler (through time) need the network, so the device holds until it is back instead of
   running them offline. Answering yes to the prompt (and confirming) disables the module and its
   dependents, which ends the wait ([contract](../../doc/contract.md#6-known-limits), section 6).
-- Set `XEWE_WIFI_DEBUG` to 1 only on a bench: it prints credentials to serial.
-  Credentials are stored in NVS unencrypted.
+- Credentials are stored in NVS unencrypted.
 
 ### Tests
 

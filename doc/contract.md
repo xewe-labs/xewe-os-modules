@@ -379,11 +379,6 @@ default of a settings row (default runtime values, some asked at first boot).
 
 /* ---- start compile time defined constants ---- */
 
-/* Debug output of the module, 0 or 1; 1 prints every step, credentials included: bench only */
-#ifndef XEWE_WIFI_DEBUG
-#define XEWE_WIFI_DEBUG 0
-#endif
-
 /* ---- end compile time defined constants ---- */
 ```
 
@@ -411,10 +406,8 @@ one sentence; a block has no header sentence of its own):
 
 /* ---- start compile time defined constants ---- */
 
-/* Debug output of the module, 0 or 1; 1 prints every step, credentials included: bench only */
-// #define XEWE_WIFI_DEBUG 0
-
 /* ---- end compile time defined constants ---- */
+
 /************************/
 /* ---- end wifi ---- */
 /************************/

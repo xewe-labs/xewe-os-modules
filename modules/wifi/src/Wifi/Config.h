@@ -28,9 +28,4 @@ that question), a dotenv value behind INJECTED_FROM_DOTENV (the usual way for th
 
 /* ---- start compile time defined constants ---- */
 
-/* Debug output of the module, 0 or 1; 1 prints every step, credentials included: bench only */
-#ifndef XEWE_WIFI_DEBUG
-#define XEWE_WIFI_DEBUG 0
-#endif
-
 /* ---- end compile time defined constants ---- */

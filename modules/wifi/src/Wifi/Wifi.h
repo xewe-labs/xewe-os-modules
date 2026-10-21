@@ -10,12 +10,6 @@
 
 #include "Config.h"
 
-// The core's DBG_PRINTF(Wifi, ...) reads DEBUG_Wifi; a -DDEBUG_Wifi=1 on the command line still
-// wins.
-#ifndef DEBUG_Wifi
-#define DEBUG_Wifi XEWE_WIFI_DEBUG
-#endif
-
 class Wifi : public xewe::Module {
 public:
     explicit Wifi(xewe::Os& host);
