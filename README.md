@@ -92,7 +92,6 @@ modules/<slug>/
 ├── src/<Folder>/<Folder>.cpp
 ├── tests/board/test_<slug>.py # tests on a board, through the xewe-os tools
 ├── tests/unit/                # optional tests on the developer machine
-├── releases/<version>/        # notes.txt and release_card.md of the module's release
 └── README.md
 ```
 
@@ -110,58 +109,45 @@ the tests.
 Maintainers only. Each module is released on its own, as tag `<module>/X.Y.Z` (`wifi/3.1.0`); the
 set tag `X.Y.Z` (`3.1.0`) marks a commit where every module is released at that version. Projects
 pin either (`[modules] ref`): a module tag's commit holds every module at its then-released
-version. No `v` prefix (the old `v0.2.0` stays as it is). `--prepare <version> <module>...`
-prepares the named modules only, `--prepare <version> --all` every module and the set, in one run
-that makes no git change:
+version. No `v` prefix. One command does the whole release:
 
 ```sh
-scripts/release.sh --prepare 3.1.0 --all --dry-run                 # prints every step, changes nothing
-scripts/release.sh --prepare 3.1.0 --all --hardware c3,c6,s3       # boards attached; without --hardware: compiled, not run
+scripts/release.sh 3.1.0 wifi --notes "What changed, in one line."
+scripts/release.sh 3.1.0 --all --hardware c3 --notes "First line." --notes "Second line."
 ```
 
-It refuses a tree with changes outside the prepared modules' version lines and release folders,
-sets `version=3.1.0` and `requires_core=>=3.1.0,<4.0.0` in their `module.properties`, regenerates
-`doc/modules.md`, and stops with exit 2 until `modules/<module>/releases/3.1.0/notes.txt` (each
-module's GitHub Release text) and, with `--all`, the set's `releases/3.1.0/notes.txt` are filled (a
-missing one gets a skeleton; delete its marker line). Then it runs the checks once for the whole
-repository in a copy of the harness project (`--harness <dir>`, else `XEWE_RELEASE_HARNESS`, else
-`../xewe-os`) with every module selected and this tree as the modules source, each step recorded
-by `xewe release-card` into `releases/3.1.0/logs/` (gitignored, never published):
-`tools/validate.py --harness`, the unit tests, `xewe format --check modules tools`, `xewe
-brand-lint`, each prepared module built alone for c3, c6 and s3, the all-modules image and the
-board tests per chip (a `--hardware` chip is flashed and tested in one session with every gate;
-`XEWE_RELEASE_DEFINES_<CHIP>` gives its defines). From that one run it renders the generated cards:
-`modules/<module>/releases/3.1.0/release_card.md` of each prepared module with that module's
-tests, and with `--all` `releases/3.1.0/release_card.md` with every module's. A failed step does
-not stop the run; the cards refuse it, and `--resume` re-runs only the steps that are not green.
-Commit what it lists as `prepare 3.1.0` and push `main`; the `tests` workflow's card job checks
-every card against its own unit test run. Then, from that clean `main`, level with `origin/main`,
-one module at a time and, once every module is at the version, the set last:
+`<version>` is `X.Y.Z` or `X.Y.Z-suffix` (a pre-release). Name the modules to release, or `--all`
+for every module and the set tag. The notes are 1 to 3 lines (`--notes` once per line, and/or
+`--notes-file FILE`) and apply to every tag of the run, so name together only the modules that share
+one reason; otherwise run the script once per module. The run writes under `build/release/<version>/`
+(gitignored), in 6 stages:
 
-```sh
-scripts/release.sh 3.1.0 wifi --dry-run   # prints every step and HEAD's CI state, changes nothing
-scripts/release.sh 3.1.0 wifi
-scripts/release.sh 3.1.0 --set
-```
+1. Preflight. It refuses, and lists every problem, unless: on `main`; the work tree has no change at
+   all; `main` is level with `origin/main` after a fetch; every tag of the run is free here and on
+   origin; `tests.yml` calls the tools workflow at its `tools_ref`; the notes pass `xewe
+   release-notes check`; `gh` is logged in.
+2. Tests. It sets `version=` and `requires_core=` (`>=X.Y.0,<X+1.0.0`) in the named modules'
+   `module.properties` and regenerates `doc/modules.md`, then runs, recorded by `xewe
+   release-card`, in a copy of the harness project (`XEWE_RELEASE_HARNESS`, else `../xewe-os`) with
+   every module selected and this tree as the modules source: `tools/validate.py --harness`, the
+   unit tests, the all-modules build and the board tests. With `--hardware c3` (one chip, `c3`,
+   `c6` or `s3`) that board is flashed and tested with every gate; without it the board tests are
+   compiled, not run (chip `c3`). `XEWE_RELEASE_DEFINES_<CHIP>` gives the chip's defines. A failed
+   step does not stop the run; the cards refuse it.
+3. Cards. One `release_card.md` per named module with that module's tests and, with `--all`, the
+   set's with every module's, under `build/release/<version>/`.
+4. Commit. Only the version-line files, as `release <version>` (`--all`) or `release <version>
+   <module>...`; it refuses when anything else changed.
+5. Tags. Each tag's message is the notes, one blank line and that tag's card
+   (`git tag -a --cleanup=verbatim`). It pushes `main`, checks that `origin/main` is `HEAD`, then
+   pushes the tags one by one.
+6. Releases. For each tag it waits for the `tests` workflow run (`--ci-timeout <min>`, default 60,
+   for all tags), requires its `xewe release-card verify --ci` step to have passed, then creates the
+   GitHub Release (notes as the text, the card as the asset `release_card.md`, `--prerelease` for a
+   suffix) and prints its URL. The `tests` workflow runs on a tag only when `tests.yml` triggers on
+   tags; without that the script reports that no run exists for the tag.
 
-A module release runs five numbered stages: 1 preflight (version `X.Y.Z`; the module exists; on
-`main`, clean and level with `origin/main` after a fetch; tag `<module>/<version>` free here and on
-origin; its `notes.txt` and `release_card.md` committed; no `testcard.md`; `module.properties` says
-the version; `gh` logged in); 2 `xewe release-card verify` on the module's card (its tested tree is
-HEAD's, the shared run's logs are here); 3 waits for the `tests` workflow on HEAD to pass with its
-card check run; 4 tags HEAD `<module>/<version>` (annotated), pushes the tag and creates the GitHub
-Release (not marked latest) with `release_card.md` as its only asset; 5 says how projects pin it:
-`ref = "<module>/<version>"`, or `ref = "<version>"` when the set tag exists.
-
-`--set` refuses unless every module in `modules/` says `version=<version>` and has its tag
-`<module>/<version>` on HEAD or an ancestor, with `modules/<module>/` unchanged since that tag and
-its GitHub Release present. It then verifies the set's card, waits for CI on HEAD, tags HEAD
-`<version>` and creates the set's GitHub Release: `releases/<version>/notes.txt` plus a link to each
-module's release, with the set's `release_card.md` as its only asset.
-
-Options: `--ci-timeout <min>` (default 30) bounds the CI wait; `--skip-ci` skips it, for
-emergencies only, with a loud warning. If a tag exists but its GitHub Release does not, the same
-command only creates the release (pushing the tag first if origin lacks it) from the tagged
-commit's notes and card, provided the tagged commit's `module.properties` says the version (for the
-set: the checks above hold there); the branch, clean-tree and origin checks are skipped then. Tag
-and release both present: already released.
+`--resume` continues a run that stopped: tags that exist are not made again (the missing ones are
+made on the same commit), the results under `build/release/<version>/` are reused when their cards
+exist, and a missing GitHub Release is created from its tag's own message. Exit codes: 0 done, 1 a
+refusal or a failed check.

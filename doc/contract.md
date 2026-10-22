@@ -19,15 +19,13 @@ xewe-os-modules/
 │       ├── src/<Folder>/Config.h        # optional: the module's build-time values (section 3.2)
 │       ├── tests/board/test_<slug>.py   # pytest on the ESP32 through `xewe test` (required)
 │       ├── tests/unit/                  # optional: developer-machine tests (`unit` pytest, C++ for g++)
-│       ├── releases/<version>/          # notes.txt and the generated release_card.md of the module's release (README "Releasing")
 │       └── README.md
 ├── doc/
 │   ├── contract.md         # this file
 │   └── modules.md          # generated index: `tools/validate.py --write-index`
 ├── libraries.toml          # library catalogue: repo and ref of every depends_libraries name
 ├── tools/validate.py       # the tools' validator plus the repository rules (section 5)
-├── scripts/release.sh      # prepares every module in one card run; releases one module (tag <slug>/X.Y.Z) or the set (tag X.Y.Z)
-├── releases/<version>/     # notes.txt and release_card.md of the set release; logs/ of the card run (gitignored)
+├── scripts/release.sh      # one command: tests, release commit, tags and GitHub Releases for the named modules (tag <slug>/X.Y.Z) or, with --all, every module and the set (tag X.Y.Z)
 ├── README.md               # what the modules are and how a project uses them
 ├── .github/workflows/      # CI: tests.yml
 ├── .agents/                # agent workspace: AGENTS.md (how to work here), RULES.md (hard rules)
@@ -88,7 +86,7 @@ and `depends_libraries`, which they accept as legacy keys; any other key is a T 
 
 `requires_core` uses the comma form with full versions, `>=3.1.0,<4.0.0`; `>=3.1.0 <4` does not
 parse. A module that uses a settings table, `xewe::ListenerSet`, `xewe::SchemaOut` or the pin registry
-needs core 2.1 or later (R `core21`). `scripts/release.sh --prepare <X.Y.Z> --all` sets every module's
+needs core 2.1 or later (R `core21`). `scripts/release.sh <X.Y.Z> --all` sets every module's
 `requires_core` to `>=X.Y.0,<(X+1).0.0` (3.1.0: `>=3.1.0,<4.0.0`).
 
 Each module is released on its own under the tag `<slug>/X.Y.Z` (for example `wifi/3.1.0`), with

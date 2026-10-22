@@ -4,5 +4,5 @@ __pycache__/
 build/
 .venv/
 .DS_Store
-# the shared release run of scripts/release.sh --prepare <version> --all (local only, never committed)
+# card-run logs kept in release folders (local only, never committed)
 releases/*/logs/

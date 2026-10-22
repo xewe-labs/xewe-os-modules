@@ -58,26 +58,19 @@ modules and listeners: `doc/os/module.md`, pin registry: `doc/utils/pins.md`).
 ### Layout
 
 - `modules/<slug>/`: `module.properties`, `src/<Folder>/<Folder>.h` + `.cpp` (plus pure headers for
-  host-tested logic), `tests/board/test_<slug>.py`, optional `tests/unit/`, `README.md`, and
-  `releases/<version>/` once released. Nothing else (X-02).
+  host-tested logic), `tests/board/test_<slug>.py`, optional `tests/unit/` and `README.md`. Nothing else (X-02). No release folder is tracked: the
+  notes and the card of a release live in its tag message and its GitHub Release.
 - `tools/validate.py`: the tools' validator plus the repository rules (doc/contract.md section 5).
 - `libraries.toml`: the catalogue of Arduino libraries the modules may list in `depends_libraries`.
 - `doc/modules.md`: generated from the `module.properties` files; never edit it by hand (X-12).
 - No module is an Arduino library and nothing here is compiled on its own: modules are compiled
   inside an xewe-os project ("harness").
-- `scripts/release.sh` releases one module (tag `<slug>/X.Y.Z`, files in
-  `modules/<slug>/releases/<version>/`) or the set (tag `X.Y.Z`, `releases/<version>/`) that
-  projects pin (README "Releasing"; a module tag pins too). `--prepare <version> <module>...`
-  prepares the named modules, `--prepare <version> --all` every module and the set (no git
-  change): it sets their `version=` and `requires_core=`, regenerates `doc/modules.md`, stops with
-  exit 2 until their `notes.txt` files are filled, then runs one shared check run through `xewe
-  release-card record` (harness setup with every module, validator, unit tests, format,
-  brand-lint, module-alone builds of the prepared modules, all-modules builds and the board tests
-  per chip; logs in `releases/<version>/logs/`, gitignored) and renders the generated
-  `release_card.md` of each prepared module (only its tests) and, with `--all`, of the set (no
-  hand-written test card). The tag runs verify the card, wait for the `tests` workflow with its
-  card check green, and publish the card as the release's only asset. Agents may run `--dry-run`
-  only, and `--prepare` only on a scratch copy unless asked; the owner commits, tags and pushes.
+- `scripts/release.sh <version> (<module>... | --all) --notes "line"` is the owner's one command
+  (README "Releasing"): it tests, commits the version lines, tags `<slug>/X.Y.Z` per named module
+  (with `--all` every module and the set tag `X.Y.Z`, which projects pin) with the notes and that
+  tag's card in the tag message, pushes, waits for the `tests` workflow and creates the GitHub
+  Releases. Agents never run it against the real repository or origin; the owner runs it. Try it
+  only in a scratch clone with a scratch origin.
 
 ### How a project installs a module
 

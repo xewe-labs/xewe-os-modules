@@ -3,85 +3,63 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # xewe-os-modules/scripts/release.sh
 #
-# release.sh: test the named modules (or every module) in one shared run, write their release
-# cards, then tag and publish each module and the module set.
-# Usage: scripts/release.sh --prepare <version> <module>...|--all [--hardware c3,c6,s3] [--harness <dir>] [--resume] [--dry-run] | <version> <module>|--set [--dry-run] [--ci-timeout <min>] [--skip-ci]
-# Each module is released on its own, as tag <module>/<version> (e.g. wifi/3.1.0); the set tag
-# <version> marks a commit where every module is released at <version>. Projects pin either
-# (xewe.toml [modules] ref). No `v` prefix anywhere. A release is two kinds of runs with one
-# commit in between.
-# `scripts/release.sh --prepare <version> <module>...` (10 stages) prepares the named modules (one
-# or more, each once); `--prepare <version> --all` prepares every module and the set. It makes no
-# git change:
-#   1 preflight: refuses a detached HEAD, a merge/rebase/cherry-pick/revert in progress, unmerged
-#     paths, any change outside the prepared modules' version lines (module.properties version=
-#     and requires_core=, the matching cells of doc/modules.md), their
-#     modules/<module>/releases/<version>/ and, with --all, releases/<version>/, a testcard.md in
-#     any of those release folders, and a .gitignore that does not ignore
-#     releases/*/logs/; finds the tools ref (tests.yml's xewe-modules-tests.yml@<ref>, a tag),
-#     Python >= 3.11 and the harness project (an xewe project: --harness, else
-#     XEWE_RELEASE_HARNESS, else ../xewe-os);
-#   2 card tools: a venv with the tools (build/release-venv/card);
-#   3 versions: version=<version> and requires_core=>=<major>.<minor>.0,<<major+1>.0.0 in each
-#     prepared module's module.properties, then doc/modules.md regenerated (tools/validate.py
-#     --write-index);
-#   4 release notes: modules/<module>/releases/<version>/notes.txt for each prepared module and,
-#     with --all, the set's releases/<version>/notes.txt; a missing one gets a skeleton, and while
-#     any skeleton marker is left the run stops with exit 2 (fill them, run again);
-#   5 card run: `xewe release-card init` on releases/<version>/logs/ (gitignored), the ONE run every
-#     card of this release is rendered from;
-#   6 setup (recorded): the checkers' venv (tools + ruff + clang-format, as CI's format job) and two
-#     copies of the harness project with every module selected and this tree as the modules source
-#     (XEWE_MODULES_SOURCE=<this tree, exported to build/release-venv/xewe-os-modules>):
-#     build/release-harness/project (tests, all-modules images) and build/release-harness/alone
-#     (module-alone builds);
-#   7 checks (recorded): tools/validate.py --harness on the export (validate; the validator flags
-#     every .ino under its repo, so it never sees build/), `xewe test --unit-only` (unit, JUnit, the
-#     command CI runs), `xewe format --check modules tools`, `xewe brand-lint .`;
-#   8 module-alone builds (recorded, build): for each prepared module and every chip, `xewe
-#     modules select <module>` (the module and what it depends on) and `xewe build --chip C`;
-#   9 boards (recorded, per chip): the all-modules image (build), then `xewe test --chip C -- -m
-#     board` (board, JUnit) with the board-test gates set. A chip without --hardware is built with
-#     XEWE_NO_BOARD=1: its board tests are "compiled, not run". A --hardware chip is flashed (a
-#     flash step) and tested with --require-board, all gates in one session;
-#  10 cards: `xewe release-card render` writes one card per prepared module
-#     (modules/<module>/releases/<version>/release_card.md, only that module's tests: --tests
-#     modules/<module>/) and, with --all, the set card (releases/<version>/release_card.md, every
-#     module's tests), or refuses (the draft is in the logs folder); prints the commit command.
-# A failing step does not stop the others; the cards refuse it. --resume (after a failed step):
-# keeps the run when commit and tree are unchanged and re-runs only the steps that are not green.
-# XEWE_RELEASE_DEFINES_<CHIP> (environment, e.g. XEWE_RELEASE_DEFINES_S3="XEWE_LED_PIN_DATA=48")
-# are the defines of that chip's all-modules image, flash and board session. XEWE_ENV, else the
-# harness's dotenv file, else the tools checkout's is the dotenv the board run uses: the script
-# never reads it, the tools do.
-# Then commit the listed files as "prepare <version>" and push; the tests workflow's card job checks
-# every card against its own unit test run.
-# `scripts/release.sh <version> <module>` (5 stages), one module's tag run:
-#   1 preflight: version X.Y.Z; the module exists; on main, clean, level with origin/main after a
-#     fetch; tag <module>/<version> free here and on origin; its notes.txt (no skeleton marker) and
-#     release_card.md committed; no testcard.md; module.properties says version=<version>; gh
-#     logged in;
-#   2 release card: `xewe release-card verify` on the module's card (as rendered, its tested tree
-#     is HEAD's clean tree, the shared run's local logs present with their sha256);
-#   3 CI gate on HEAD: the newest `tests` run for HEAD on main must succeed, with the card job's
-#     verify step run and green (waits; --ci-timeout minutes, default 30);
-#   4 annotated tag <module>/<version> on HEAD, push it, `gh release create` (not marked latest,
-#     notes from notes.txt, release_card.md the only asset);
-#   5 print how consumers pin it: ref = "<module>/<version>" (that commit holds every module at its
-#     then-released version) and, when the set tag <version> exists, ref = "<version>".
-# `scripts/release.sh <version> --set`, after every module's release: the same preflight for tag
-# <version> and releases/<version>/, plus for every module in modules/: version=<version>, tag
-# <module>/<version> on HEAD or an ancestor, its files unchanged since that tag, its GitHub Release
-# present; then verify on the set card, the CI gate, tag <version> on HEAD and a GitHub Release
-# whose notes are releases/<version>/notes.txt plus a list of the module releases, with the set's
-# release_card.md as the only asset.
-# Re-running a tag run resumes: a tag without a GitHub Release only creates the release (pushing the
-# tag first if origin lacks it) from the tagged commit's notes.txt and release_card.md, provided the
-# tagged commit's files say <version> (for the set: pass the module checks). Tag and release both
-# present: already released. --skip-ci skips the CI gate (emergencies only). --dry-run prints every
-# command and changes nothing: only read-only git, gh and tool lookups and `release-card verify`
-# run; it reports every failed check, never waits, and exits 1 if a check failed.
-# Exit codes: 0 done, 1 a refusal or a failed check, 2 notes.txt files to fill.
+# release.sh: test the named modules (or every module) once, tag the commit with the notes and one
+# release card per tag in the tag message, then create the GitHub Releases.
+# Usage: scripts/release.sh <version> (<module>... | --all) [--hardware c3] [--notes "line" ...] [--notes-file FILE] [--resume] [--ci-timeout <min>]
+#
+# One command, 6 stages. <version> is X.Y.Z or X.Y.Z-suffix (a pre-release), no `v`; the version
+# lines get X.Y.Z. Each named module is released as tag <module>/<version> (e.g. wifi/3.1.7);
+# --all releases every module and also the set tag <version>, which marks a commit where every module
+# is released at <version>. Projects pin either (xewe.toml [modules] ref). The notes are 1 to 3 lines
+# and apply to every tag of the run: --notes once per line, and/or the lines of --notes-file. Run
+# the script once per module when the modules do not share one reason. Everything the run writes
+# is under build/release/<version>/ (gitignored).
+#   1 preflight: refuses, and lists every problem, unless: on main; the work tree has no change at
+#     all (untracked files included); main is level with origin/main after a fetch; every tag of
+#     the run is free here and on origin (--resume excepted); tests.yml calls the tools workflow at
+#     the ref of its tools_ref input (a tools tag, unless XEWE_TOOLS_SOURCE is set); the notes pass
+#     `xewe release-notes check`; build/ is ignored; Python >= 3.11, the harness project (an xewe
+#     project: XEWE_RELEASE_HARNESS, else ../xewe-os) and gh (logged in) are there;
+#   2 tests: the version lines set (module.properties version= and requires_core= of the named
+#     modules, the matching cells of doc/modules.md via tools/validate.py --write-index), then a
+#     card run (`xewe release-card init` on the logs folder), every step recorded by `xewe
+#     release-card record`: the checkers' venv (ruff, clang-format) and two copies of the harness
+#     project with every module selected and this tree as the modules source
+#     (XEWE_MODULES_SOURCE; one for the tests and the all-modules image, one for module-alone
+#     builds), tools/validate.py --harness, `xewe format --check modules tools`, `xewe brand-lint .`,
+#     for each named module and every chip (c3, c6, s3) `xewe modules select <module>` and `xewe
+#     build --chip C`, then `xewe test --unit-only` (unit, JUnit), the all-modules build for the
+#     chip and its board tests. A failing step stops the run before the cards, the commit and the
+#     tags (the log is in the logs folder). The chip
+#     is the --hardware chip, else c3: a --hardware chip is flashed and tested with
+#     --require-board and the gates in BOARD_GATES; without it the board tests are compiled, not
+#     run. XEWE_RELEASE_DEFINES_<CHIP> (environment, KEY=VALUE separated by spaces) are the defines
+#     of the build, flash and board steps. XEWE_ENV, else the harness's dotenv file, else the
+#     tools checkout's is the dotenv the board run uses: the script never reads it, the tools do;
+#   3 release cards: `xewe release-card render` writes build/release/<version>/<module>/
+#     release_card.md for each named module (only that module's tests) and, with --all,
+#     build/release/<version>/_set/release_card.md (every module's tests), or refuses (the draft
+#     is in the logs folder);
+#   4 commit: only the version-line files are added, `release <version>` with --all, else
+#     `release <version> <module>...` (`<n> modules` when there are many); refuses when any other
+#     file changed;
+#   5 tag: per tag the message is the notes, one blank line, that tag's card; `git tag -a
+#     --cleanup=verbatim` (git would drop the card's `#` lines otherwise). Then `git push origin
+#     main`, a check that origin/main equals HEAD, and one `git push origin <tag>` per tag (GitHub
+#     starts no workflow when more than 3 tags arrive in one push): main first, so that the
+#     workflow is registered before a tag triggers it;
+#   6 release: per tag waits for its tests.yml run (--ci-timeout minutes in all, default 60); its
+#     card job compares the tag's card with the run (the `xewe release-card verify --ci` step must
+#     have run and passed). Then `gh release create` (--verify-tag, the notes as the text, the
+#     card as its only asset release_card.md; --prerelease for a suffix); prints the release URLs.
+#     The modules CI runs on tags only when tests.yml triggers on them (`push: tags`); a tag
+#     without a run is reported as such when the wait ends.
+# A run that stops before stage 4 puts the version lines back. --resume: tags that exist (here or on
+# origin) are not made again; the missing ones are made on the same commit. When HEAD is the
+# release commit and no tag exists, build/release/<version>/ is reused if every card is there (else
+# stage 2 runs again), then the run goes on from stage 4. A release that exists is only reported;
+# a missing one is created from its tag's own message.
+# Exit codes: 0 done, 1 a refusal or a failed check.
 set -euo pipefail
 
 REPO="xewe-labs/xewe-os-modules"
@@ -93,36 +71,36 @@ CI_CARD_JOB="modules / release card check"           # caller job id / xewe-modu
 CI_CARD_STEP="xewe release-card verify --ci"         # its step that compares the cards with the run
 CI_POLL="${RELEASE_CI_POLL:-15}"                     # seconds between CI polls
 VENVS="build/release-venv"                           # gitignored (build/)
-HARNESS="build/release-harness/project"             # harness copy: tests and all-modules images
-ALONE="build/release-harness/alone"                  # harness copy: module-alone builds
+HARNESS="build/release-harness/project"             # harness copy: tests and the all-modules image
 EXPORT="build/release-venv/xewe-os-modules"          # the tree as a commit of it would hold it
-CHIPS=(c3 c6 s3)
 REQUIRE="setup,validate,unit,build,board"
+SET_SLUG="_set"                                      # the set's folder under build/release/<version>/
+CHIPS=(c3 c6 s3)
+ALONE="build/release-harness/alone"                  # harness copy: module-alone builds
 CHECKERS=("ruff==0.17.0" "clang-format==23.1.3")    # xewe-modules-tests.yml format job pins
-# the gated board tests the card session runs: one session per chip, all gates
+# the gated board tests the card session runs: all gates in one session
 BOARD_GATES=(XEWE_TEST_LED_RESET=1 XEWE_TEST_LED_WEB_HTTP=1 XEWE_TEST_WEB_INTERFACE_HTTP=1 XEWE_TEST_WEB_INTERFACE_RESET=1)
-NOTES_MARKER="XEWE-NOTES-SKELETON"
 
 die() { echo "error: $*" >&2; exit 1; }
 warn() { echo "warning: $*" >&2; }
-STAGES=5
+STAGES=6
 stage() { echo "== $1/${STAGES} $2"; }
 
-# A failed preflight check: fatal in a real run; a dry run notes it and goes on.
-FAILED=0
-fail() {
-  [[ "${DRY_RUN}" == 1 ]] || die "$*"
-  echo "error: $*" >&2
-  FAILED=$((FAILED + 1))
+# A failed preflight check: noted, and all of them are listed before the run stops.
+PROBLEMS=()
+fail() { PROBLEMS+=("$*"); }
+check_problems() {
+  [[ "${#PROBLEMS[@]}" -eq 0 ]] && return 0
+  local p
+  echo "error: the release cannot start:" >&2
+  for p in "${PROBLEMS[@]}"; do echo "  - ${p}" >&2; done
+  exit 1
 }
 
-# Runs a command, or only prints it with --dry-run.
+# Prints a command and runs it.
 run() {
-  if [[ "${DRY_RUN}" == 1 ]]; then
-    printf '+'; printf ' %q' "$@"; printf '\n'
-  else
-    "$@"
-  fi
+  printf '+'; printf ' %q' "$@"; printf '\n'
+  "$@"
 }
 
 # file_at REF FILE: FILE's content at commit REF, or in the working tree when REF is empty.
@@ -144,21 +122,14 @@ module_names() {
   return 0
 }
 
-# PREP_MODULES: the modules a `--prepare <version> <module>...` names; empty for --all (every
-# module and the set).
-PREP_MODULES=()
+# MODULES: the modules of the run (every module with --all).
+MODULES=()
 
-# prepared MODULE: true when --prepare prepares MODULE (every module with --all).
-prepared() {
+# in_run MODULE: true when MODULE is one of MODULES.
+in_run() {
   local m
-  [[ "${#PREP_MODULES[@]}" -eq 0 ]] && return 0
-  for m in "${PREP_MODULES[@]}"; do [[ "${m}" == "$1" ]] && return 0; done
+  for m in "${MODULES[@]}"; do [[ "${m}" == "$1" ]] && return 0; done
   return 1
-}
-
-# prepared_names: the modules --prepare prepares, one per line (module_names with --all).
-prepared_names() {
-  if [[ "${#PREP_MODULES[@]}" -eq 0 ]]; then module_names; else printf '%s\n' "${PREP_MODULES[@]}"; fi
 }
 
 # core_range VERSION: the requires_core value of a release VERSION: >=MAJOR.MINOR.0,<MAJOR+1.0.0.
@@ -179,11 +150,11 @@ versioned_props() {
 }
 
 # versioned_index VERSION REF: doc/modules.md at REF with the Version and Requires core cells of
-# every prepared module's row set for VERSION (what `tools/validate.py --write-index` writes after
-# stage 3).
+# every module of the run set for VERSION (what `tools/validate.py --write-index` writes after
+# stage 2's version lines).
 versioned_index() {
   file_at "$2" doc/modules.md | awk -v ver="$1" -v req="\`$(core_range "$1")\` |" \
-    -v mods=" $(prepared_names | tr '\n' ' ')" '
+    -v mods=" ${MODULES[*]} " '
     BEGIN { FS = " \\| "; OFS = " | " }
     /^\| \[`/ && NF == 7 {
       slug = $1; sub(/^\| \[`/, "", slug); sub(/`.*/, "", slug)
@@ -192,22 +163,16 @@ versioned_index() {
     { print }'
 }
 
-# allowed_change PATH VERSION: true for a path --prepare may find changed: for a prepared module,
-# anything under modules/<module>/releases/VERSION/ and a module.properties whose only change from
-# HEAD is its version lines; doc/modules.md whose only change is those modules' cells; with --all,
-# anything under releases/VERSION/.
+# allowed_change PATH VERSION: true for a path stage 4 may find changed: the module.properties of a
+# module of the run whose only change from HEAD is its version lines, and doc/modules.md whose only
+# change is those modules' cells.
 allowed_change() {
   local p slug
-  [[ "${#PREP_MODULES[@]}" -eq 0 && "$1" == "releases/$2/"* ]] && return 0
-  if [[ "$1" == modules/* ]]; then
+  if [[ "$1" == modules/*/module.properties ]]; then
     p="${1#modules/}"; slug="${p%%/*}"
-    prepared "${slug}" || return 1
-    [[ "${p}" == "${slug}/releases/$2/"* ]] && return 0
-    if [[ "${p}" == "${slug}/module.properties" ]]; then
-      [[ -f "$1" ]] && git cat-file -e "HEAD:$1" 2>/dev/null && cmp -s "$1" <(versioned_props "${slug}" "$2" HEAD)
-      return
-    fi
-    return 1
+    in_run "${slug}" || return 1
+    [[ -f "$1" ]] && git cat-file -e "HEAD:$1" 2>/dev/null && cmp -s "$1" <(versioned_props "${slug}" "$2" HEAD)
+    return
   fi
   if [[ "$1" == doc/modules.md ]]; then
     [[ -f "$1" ]] && git cat-file -e "HEAD:$1" 2>/dev/null && cmp -s "$1" <(versioned_index "$2" HEAD)
@@ -216,45 +181,26 @@ allowed_change() {
   return 1
 }
 
-# release_dirs VERSION: the release folders of VERSION --prepare writes: one per prepared module,
-# plus the set's with --all (nine).
-release_dirs() {
+# version_files: the files the release commit holds: the module.properties of the run and doc/modules.md.
+version_files() {
   local m
-  while IFS= read -r m; do echo "modules/${m}/releases/$1"; done < <(prepared_names)
-  [[ "${#PREP_MODULES[@]}" -gt 0 ]] || echo "releases/$1"
+  for m in "${MODULES[@]}"; do echo "modules/${m}/module.properties"; done
+  echo doc/modules.md
 }
 
-# tree_problems VERSION: one line per reason the work tree cannot be prepared; none when it can.
+# tree_problems: one line per reason the work tree cannot be released from; none when it can.
 tree_problems() {
-  local v="$1" p path entry code unmerged dir scope dirty=()
-  git symbolic-ref -q HEAD >/dev/null || echo "HEAD is detached: check out the branch to release from"
+  local p path unmerged dirty
+  git symbolic-ref -q HEAD >/dev/null || echo "HEAD is detached: check out main"
   for p in MERGE_HEAD CHERRY_PICK_HEAD REVERT_HEAD REBASE_HEAD rebase-merge rebase-apply; do
     path="$(git rev-parse --git-path "${p}")"
     [[ -e "${path}" ]] && echo "a merge, rebase, cherry-pick or revert is in progress (${path} exists): finish or abort it first"
   done
   unmerged="$(git diff --name-only --diff-filter=U)"
   [[ -z "${unmerged}" ]] || echo "unmerged (conflicted) paths: $(tr '\n' ' ' <<< "${unmerged}")"
-  # porcelain v1 -z: "XY path", a rename or copy followed by its original path as its own field
-  while IFS= read -r -d '' entry; do
-    code="${entry:0:2}"; path="${entry:3}"
-    allowed_change "${path}" "${v}" || dirty+=("${path}")
-    if [[ "${code}" == *[RC]* ]]; then
-      IFS= read -r -d '' path || true
-      allowed_change "${path}" "${v}" || dirty+=("${path}")
-    fi
-  done < <(git status --porcelain=v1 -z --untracked-files=all)
-  if [[ "${#dirty[@]}" -gt 0 ]]; then
-    scope="the version lines, releases/${v}/ and modules/*/releases/${v}/"
-    [[ "${#PREP_MODULES[@]}" -eq 0 ]] \
-      || scope="the version lines and modules/<module>/releases/${v}/ of ${PREP_MODULES[*]}"
-    echo "changes outside ${scope} (commit or stash them first): ${dirty[*]}"
-  fi
-  git check-ignore -q "releases/${v}/logs/run.json" \
-    || echo ".gitignore does not ignore releases/*/logs/ (the run folder must never be committed)"
-  while IFS= read -r dir; do
-    [[ ! -e "${dir}/testcard.md" ]] \
-      || echo "${dir}/testcard.md exists: the generated release_card.md replaces it; delete it"
-  done < <(release_dirs "${v}")
+  dirty="$(git status --porcelain=v1 --untracked-files=all | cut -c4- | head -n 10 | tr '\n' ' ')"
+  [[ -z "${dirty}" ]] || echo "the work tree is not clean (commit, stash or remove): ${dirty% }"
+  return 0
 }
 
 # tools_ref: the ref of tests.yml's `uses: …/xewe-modules-tests.yml@<ref>` (the tools CI runs with).
@@ -293,97 +239,59 @@ tag_commit() {
   fi
 }
 
-# ci_run SHA: the newest run of CI_WORKFLOW for SHA on main, as "id status url conclusion" (empty
-# when there is none yet; conclusion is empty while the run is not completed).
+# ci_run SHA REF: the newest run of CI_WORKFLOW for SHA on REF (the tag name for a tag push), as
+# "id status url conclusion" (empty when there is none yet; conclusion is empty while the run is
+# not completed).
 ci_run() {
-  gh run list --commit "$1" --workflow "${CI_WORKFLOW}" --branch main --limit 20 \
+  gh run list --commit "$1" --workflow "${CI_WORKFLOW}" --branch "$2" --limit 20 \
     --json databaseId,status,url,conclusion \
     --jq '.[0] | select(. != null) | "\(.databaseId) \(.status) \(.url) \(.conclusion)"'
 }
 
 # card_step_result RUN_ID: the conclusion of the card job's verify step in that run (skipped when
-# the job found no card for the commit).
+# the job found no card).
 card_step_result() {
   gh run view "$1" --json jobs \
     --jq ".jobs[] | select(.name == \"${CI_CARD_JOB}\") | .steps[] | select(.name == \"${CI_CARD_STEP}\") | .conclusion"
 }
 
-# ci_gate SHA: wait for CI_WORKFLOW on SHA and fail unless it succeeds with the cards compared,
-# within CI_TIMEOUT minutes.
+# ci_gate TAG SHA: wait for CI_WORKFLOW on SHA and TAG; 0 when it succeeded (CI_RUN_ID is its id),
+# else 1 with the reason on stderr. CI_DEADLINE (seconds) bounds the whole stage; every tag is
+# polled at least once.
+CI_RUN_ID=""
+CI_DEADLINE=0
 ci_gate() {
-  local sha="$1" deadline=$((SECONDS + CI_TIMEOUT * 60)) line id status url conclusion pid card
-  if [[ "${SKIP_CI}" == 1 ]]; then
-    warn "!!!!!!!! --skip-ci: CI on ${sha:0:12} is NOT checked; this release may ship a red build !!!!!!!!"
-    return 0
-  fi
-  if [[ "${DRY_RUN}" == 1 ]]; then
-    echo "+ gh run list --commit ${sha} --workflow ${CI_WORKFLOW} --branch main ... (poll every ${CI_POLL}s until a run appears, up to ${CI_TIMEOUT} min)"
-    echo "+ gh run watch <run id> --exit-status (if not completed; fail unless success)"
-    echo "+ gh run view <run id> --json jobs (job '${CI_CARD_JOB}', step '${CI_CARD_STEP}' must be success, not skipped)"
-    if [[ "${GH_OK}" == 1 && "${sha}" =~ ^[0-9a-f]{40}$ ]]; then
-      line="$(ci_run "${sha}" 2>/dev/null)" || line="(gh run list failed)"
-      echo "   current CI state of ${sha:0:12}: ${line:-no ${CI_WORKFLOW} run yet}"
-      read -r id status url conclusion <<< "${line:-x x x x}"
-      if [[ "${status}" == completed ]]; then
-        card="$(card_step_result "${id}" 2>/dev/null)" || card="(gh run view failed)"
-        echo "   card check of that run: ${card:-no \"${CI_CARD_STEP}\" step}"
-      fi
-    fi
-    return 0
-  fi
-  echo "   waiting for a ${CI_WORKFLOW} run on ${sha:0:12} (timeout ${CI_TIMEOUT} min)"
+  local tag="$1" sha="$2" line id status url conclusion pid
+  CI_RUN_ID=""
+  echo "   ${tag}: waiting for a ${CI_WORKFLOW} run on ${sha:0:12} (timeout ${CI_TIMEOUT} min in all)"
   while :; do
-    line="$(ci_run "${sha}")" || die "gh run list failed"
+    line="$(ci_run "${sha}" "${tag}")" || { echo "error: ${tag}: gh run list failed" >&2; return 1; }
     [[ -n "${line}" ]] && break
-    (( SECONDS < deadline )) || die "timed out after ${CI_TIMEOUT} min: no ${CI_WORKFLOW} run for ${sha:0:12} on main"
+    if (( SECONDS >= CI_DEADLINE )); then
+      echo "error: ${tag}: no ${CI_WORKFLOW} run for this tag within ${CI_TIMEOUT} min; ${CI_FILE} must trigger on tags (push: tags) for the modules CI to run on a tag. Re-run with --resume once it does" >&2
+      return 1
+    fi
     sleep "${CI_POLL}"
   done
   read -r id status url conclusion <<< "${line}"
-  echo "   run ${url} (${status})"
+  echo "   ${tag}: run ${url} (${status})"
   if [[ "${status}" != completed ]]; then
-    gh run watch "${id}" --exit-status --interval "${CI_POLL}" &
+    gh run watch "${id}" --exit-status --interval "${CI_POLL}" >/dev/null &
     pid=$!
     while kill -0 "${pid}" 2>/dev/null; do
-      if (( SECONDS >= deadline )); then
+      if (( SECONDS >= CI_DEADLINE )); then
         kill "${pid}" 2>/dev/null || true
-        die "timed out after ${CI_TIMEOUT} min, CI still running: ${url}"
+        echo "error: ${tag}: timed out after ${CI_TIMEOUT} min, CI still running: ${url} (re-run with --resume)" >&2
+        return 1
       fi
       sleep 2
     done
-    wait "${pid}" || die "CI failed: ${url}"
+    wait "${pid}" || { echo "error: ${tag}: CI failed: ${url}" >&2; return 1; }
     conclusion=success
   fi
-  [[ "${conclusion}" == success ]] || die "CI ${conclusion:-did not succeed}: ${url}"
-  card="$(card_step_result "${id}")" || die "gh run view ${id} failed"
-  [[ "${card}" == success ]] \
-    || die "CI ${url}: the '${CI_CARD_JOB}' job compared no card with this commit (step '${CI_CARD_STEP}': ${card:-not found}); are the release cards of ${VERSION} the cards of this tree?"
-  echo "   CI passed, cards compared: ${url}"
-}
-
-# set_problems VERSION REF: print one line per module that keeps commit REF from being the set
-# VERSION: version= is not VERSION, tag <module>/VERSION is missing or not REF or an ancestor of it,
-# the module's files differ between that tag and REF, or the module's GitHub Release is missing.
-set_problems() {
-  local v="$1" ref="$2" dir m have tagged
-  for dir in modules/*/; do
-    m="$(basename "${dir}")"
-    [[ -n "$(file_at "${ref}" "modules/${m}/module.properties" 2>/dev/null)" ]] || continue
-    have="$(module_version "${m}" "${ref}")"
-    if [[ "${have}" != "${v}" ]]; then
-      echo "${m}: module.properties says version=${have}"
-    elif ! { tag_local "${m}/${v}" || tag_remote "${m}/${v}"; }; then
-      echo "${m}: no tag ${m}/${v} (scripts/release.sh ${v} ${m})"
-    else
-      tagged="$(tag_commit "${m}/${v}")"
-      if ! git merge-base --is-ancestor "${tagged}" "${ref}" 2>/dev/null; then
-        echo "${m}: tag ${m}/${v} (${tagged:0:12}) is not ${ref:0:12} or an ancestor of it"
-      elif ! git diff --quiet "${tagged}" "${ref}" -- "modules/${m}"; then
-        echo "${m}: modules/${m} changed since tag ${m}/${v}: release it again under a new version"
-      elif [[ "${GH_OK}" == 1 ]] && ! gh release view "${m}/${v}" >/dev/null 2>&1; then
-        echo "${m}: tag ${m}/${v} has no GitHub Release (scripts/release.sh ${v} ${m} resumes it)"
-      fi
-    fi
-  done
+  [[ "${conclusion}" == success ]] || { echo "error: ${tag}: CI ${conclusion:-did not succeed}: ${url}" >&2; return 1; }
+  CI_RUN_ID="${id}"
+  echo "   ${tag}: CI passed: ${url}"
 }
 
 # tools_spec: what pip installs as the tools: XEWE_TOOLS_SOURCE (a local checkout), else the tools
@@ -400,10 +308,6 @@ card_tools() {
   run "$1" -m venv --clear "${VENVS}/card"
   run "${VENVS}/card/bin/python" -m pip install -q --disable-pip-version-check --progress-bar off "$(tools_spec)"
   # the tools commit the card header names (the venv is not an editable install)
-  if [[ "${DRY_RUN}" == 1 ]]; then
-    echo "+ (tools commit) > ${VENVS}/card/xewe-tools-commit"
-    return 0
-  fi
   if [[ -n "${XEWE_TOOLS_SOURCE:-}" ]]; then
     commit="$(git -C "${XEWE_TOOLS_SOURCE}" rev-parse HEAD 2>/dev/null || echo -)"
   else
@@ -414,17 +318,12 @@ card_tools() {
 }
 
 # step LABEL RECORD_ARGS...: one recorded step; a failed command is noted and the run goes on (the
-# cards refuse it), a usage error stops. STEP_RESUME (default RESUME_ARGS) is what it passes as
-# --resume.
+# cards refuse it), a usage error stops.
 FAILED_STEPS=()
 step() {
   local label="$1" rc=0
   shift
-  if [[ "${DRY_RUN}" == 1 ]]; then
-    run "${XEWE[@]}" release-card record --dir "${LOGS}" ${STEP_RESUME[@]+"${STEP_RESUME[@]}"} "$@"
-    return 0
-  fi
-  "${XEWE[@]}" release-card record --dir "${LOGS}" ${STEP_RESUME[@]+"${STEP_RESUME[@]}"} "$@" || rc=$?
+  "${XEWE[@]}" release-card record --dir "${LOGS}" "$@" </dev/null || rc=$?
   case "${rc}" in
     0) ;;
     1|3) FAILED_STEPS+=("${label}"); warn "${label} failed (exit ${rc}; the log is in ${LOGS}); going on" ;;
@@ -432,15 +331,16 @@ step() {
   esac
 }
 
+# stop_on_failed: a failed step stops the run (nothing is committed or tagged).
+stop_on_failed() {
+  [[ "${#FAILED_STEPS[@]}" -eq 0 ]] || die "failed steps: ${FAILED_STEPS[*]} (the logs are in ${LOGS}); nothing was committed. Fix the cause, then run again"
+}
+
 # tree_export: EXPORT = the files a commit of this work tree would hold (tracked, plus untracked
 # files that are not ignored; deleted ones left out), so nothing of build/: tools/validate.py runs
-# on it (it reports every .ino and module.properties under its repo as stray, and the harness copies
-# hold sketches and libraries) and the harnesses use it as the modules source, as CI's checkout.
+# on it (it reports every .ino and module.properties under its repo as stray, and the harness copy
+# holds sketches and libraries) and the harness uses it as the modules source, as CI's checkout.
 tree_export() {
-  if [[ "${DRY_RUN}" == 1 ]]; then
-    echo "+ (export) git ls-files --cached --others --exclude-standard -> ${EXPORT}"
-    return 0
-  fi
   rm -rf "${EXPORT}"
   mkdir -p "${EXPORT}"
   git ls-files -z --cached --others --exclude-standard \
@@ -448,19 +348,11 @@ tree_export() {
     | tar --null -T - -cf - | tar -C "${EXPORT}" -xf -
 }
 
-# harness_copy DEST: (re)create a harness project at DEST from HARNESS_SRC: the
-# project without .git, build/, releases/, static/firmware/, its tests/ (the cards hold this
-# repo's tests only) and dotenv files; [tools] ref set to TOOLS_REF when that is a tag
-# (XEWE_TOOLS_SOURCE wins in setup.sh). --resume keeps an existing copy (its setup is green).
+# harness_copy DEST: (re)create a harness project at DEST from HARNESS_SRC: the project without
+# .git, build/, releases/, static/firmware/, its tests/ (the cards hold this repo's tests only) and
+# dotenv files; [tools] ref set to TOOLS_REF when that is a tag (XEWE_TOOLS_SOURCE wins in setup.sh).
 harness_copy() {
   local dest="$1"
-  if [[ "${DRY_RUN}" == 1 ]]; then
-    echo "+ (copy) ${HARNESS_SRC} -> ${dest} without .git build releases static/firmware tests .env*; [tools] ref = \"${TOOLS_REF}\" (a tag only)"
-    return 0
-  fi
-  if [[ "${#RESUME_ARGS[@]}" -gt 0 && -f "${dest}/xewe.toml" ]]; then
-    return 0
-  fi
   rm -rf "${dest}"
   mkdir -p "${dest}"
   tar -C "${HARNESS_SRC}" --exclude=./.git --exclude=./build --exclude=./releases --exclude=./static/firmware \
@@ -482,201 +374,68 @@ chip_defines() {
   for d in ${!var-}; do printf '%s\n%s\n' --define "${d}"; done
 }
 
-# last_build_is_all CHIP: true when the newest build step of CHIP in run.json is the green
-# all-modules one, so the card's image of CHIP (the newest build step's) is the all-modules image.
-last_build_is_all() {
-  [[ -f "${LOGS}/run.json" ]] || return 1
-  "${VENVS}/card/bin/python" - "${LOGS}/run.json" "$1" <<'PY'
-import json, sys
-steps = json.load(open(sys.argv[1], encoding="utf-8")).get("steps", [])
-latest = {}
-for s in steps:
-    latest[json.dumps(s.get("key"))] = s
-builds = sorted((s for s in latest.values() if s.get("kind") == "build" and s.get("chip") == sys.argv[2]), key=lambda s: int(s["n"]))
-sys.exit(0 if builds and builds[-1].get("label") == "all-modules" and builds[-1].get("exit") == 0 else 1)
-PY
+# write_notes: the notes lines into NOTES_FILE.
+write_notes() {
+  mkdir -p "${OUT}"
+  if [[ "${#NOTES[@]}" -gt 0 ]]; then printf '%s\n' "${NOTES[@]}" > "${NOTES_FILE}"; else : > "${NOTES_FILE}"; fi
 }
 
-module_notes_skeleton() {
-  cat <<EOF
-${NOTES_MARKER}: fill in this file, then delete this line (--prepare stops while it is here)
-$1 $2
-
-What the module does and what this release brings, in two or three sentences.
-
-CHANGED
-
-- ...
-
-REQUIREMENTS
-
-- XeWeCore $(core_range "$2") (requires_core); libraries; modules it depends on.
-
-TESTING
-
-What was tested, on which tree and with which result: release_card.md, generated by
-scripts/release.sh --prepare $2 --all and attached to this release.
-EOF
+# notes_problems: one line per problem of the notes (none when `xewe release-notes check` accepts them).
+notes_problems() {
+  local out line
+  if [[ "${#NOTES[@]}" -eq 0 ]]; then
+    echo "no release notes: give 1 to 3 lines with --notes \"line\" (repeated) or --notes-file FILE"
+    return 0
+  fi
+  out="$("${XEWE[@]}" release-notes check "${NOTES_FILE}" 2>&1)" || {
+    while IFS= read -r line; do [[ -z "${line}" ]] || echo "release notes: ${line}"; done <<< "${out}"
+  }
 }
 
-set_notes_skeleton() {
-  cat <<EOF
-${NOTES_MARKER}: fill in this file, then delete this line (--prepare stops while it is here)
-${TITLE} $1
-
-The module set $1: every module in modules/ released at $1. Projects pin this tag.
-
-MODULES
-
-- <module> $1, ... (each one's release is linked below)
-
-REQUIREMENTS
-
-- XeWeCore $(core_range "$1"); xewe-os-tools <X.Y.Z> or later.
-
-TESTING
-
-release_card.md, generated by scripts/release.sh --prepare $1 --all and attached to this release.
-EOF
+# restore_versions: put the version files back to HEAD when a run stops before the commit.
+VERSIONS_WRITTEN=0
+VFILES=()
+restore_versions() {
+  if [[ "${VERSIONS_WRITTEN}" == 1 ]]; then
+    VERSIONS_WRITTEN=0
+    git checkout -q -- "${VFILES[@]}" 2>/dev/null || true
+    echo "   version lines put back" >&2
+  fi
 }
 
-# prepare VERSION: the 10 stages of --prepare (see the header): the modules of PREP_MODULES, or
-# every module and the set when it is empty (--all).
-prepare() {
-  local v="$1" set_dir="releases/$1" problems x py chip m hw hp ahp file rc dir notes what
-  local modules=() changed=() todo=() cards=() refused=() defines=() resume_build=()
-  LOGS="${set_dir}/logs"
-  STAGES=10
-  while IFS= read -r m; do modules+=("${m}"); done < <(prepared_names)
-  [[ "${#modules[@]}" -gt 0 ]] || die "no modules in modules/"
-  what="--all"
-  [[ "${#PREP_MODULES[@]}" -eq 0 ]] || what="${PREP_MODULES[*]}"
-
-  stage 1 preflight
-  problems="$(tree_problems "${v}")"
-  if [[ -n "${problems}" ]]; then
-    if [[ "${DRY_RUN}" == 1 ]]; then
-      while IFS= read -r x; do fail "${x}"; done <<< "${problems}"
-    else
-      die "the work tree cannot be prepared:"$'\n'"${problems}"
-    fi
-  fi
-  TOOLS_REF="$(tools_ref)"
-  if [[ -z "${TOOLS_REF}" ]]; then
-    fail "${CI_FILE} does not call xewe-os-tools/.github/workflows/xewe-modules-tests.yml@<ref>"
-    TOOLS_REF="?"
-  elif [[ ! "${TOOLS_REF}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-    if [[ -n "${XEWE_TOOLS_SOURCE:-}" ]]; then
-      warn "${CI_FILE} calls xewe-modules-tests.yml@${TOOLS_REF}, not a tools tag; XEWE_TOOLS_SOURCE is used here"
-    else
-      fail "${CI_FILE} calls xewe-modules-tests.yml@${TOOLS_REF}: pin a tools tag (X.Y.Z), so the cards and CI use the same tools"
-    fi
-  fi
-  x="$(tools_ref_input)"
-  [[ "${x}" == "${TOOLS_REF}" ]] \
-    || fail "${CI_FILE}: tools_ref \"${x:-unset}\" is not the workflow's @${TOOLS_REF} (the card job installs tools_ref)"
-  echo "   tools: $(tools_spec) (CI: xewe-modules-tests.yml@${TOOLS_REF})"
-  py="$(find_python)"
-  [[ -n "${py}" ]] || die "Python >= 3.11 is required (python3.12 is what CI's card job uses)"
-  echo "   python: ${py}"
-  command -v tar >/dev/null 2>&1 || fail "tar is required"
-  HARNESS_SRC="${HARNESS_SRC:-${XEWE_RELEASE_HARNESS:-../xewe-os}}"
-  if [[ -f "${HARNESS_SRC}/xewe.toml" && -f "${HARNESS_SRC}/setup.sh" ]]; then
-    HARNESS_SRC="$(cd "${HARNESS_SRC}" && pwd)"
-    echo "   harness: ${HARNESS_SRC} (copied to ${HARNESS} and ${ALONE}; modules all, source this tree)"
-  else
-    fail "no xewe project at ${HARNESS_SRC} (xewe.toml and setup.sh): --harness <dir> or XEWE_RELEASE_HARNESS"
-  fi
-  # the dotenv the board run uses (the tools read it; this script only checks that it exists)
-  if [[ -z "${XEWE_ENV:-}" ]]; then
-    if [[ -f "${HARNESS_SRC}/.env" ]]; then
-      export XEWE_ENV="${HARNESS_SRC}/.env"
-    elif [[ -n "${XEWE_TOOLS_SOURCE:-}" && -f "${XEWE_TOOLS_SOURCE}/.env" ]]; then
-      export XEWE_ENV="${XEWE_TOOLS_SOURCE}/.env"
-    fi
-  fi
-  echo "   dotenv: ${XEWE_ENV:-none}"
-  echo "   modules: ${modules[*]}"
-  echo "   hardware: ${HARDWARE:-none} (other chips: compiled, not run)"
-  for chip in "${CHIPS[@]}"; do
-    x="$(chip_defines "${chip}" | { grep -v '^--define$' || true; } | tr '\n' ' ')"
-    [[ -z "${x}" ]] || echo "   ${chip} defines: ${x% }"
-  done
-  [[ "${FAILED}" -eq 0 ]] && echo "   ok: $(git symbolic-ref --short HEAD 2>/dev/null || echo '(detached)') at $(git rev-parse --short=12 HEAD)"
-
-  stage 2 "card tools"
-  card_tools "${py}"
-
-  stage 3 versions
-  for m in "${modules[@]}"; do
+# tests VERSION: stage 2 (see the header).
+tests() {
+  local v="$1" m file x hp ahp py chip hw fw_bin
+  local changed=0 defines=()
+  stage 2 tests
+  for m in "${MODULES[@]}"; do
     file="modules/${m}/module.properties"
-    versioned_props "${m}" "${v}" "" >/dev/null || die "${file}: expected exactly one version= and one requires_core= line"
-    if ! cmp -s "${file}" <(versioned_props "${m}" "${v}" ""); then
-      if [[ "${DRY_RUN}" != 1 ]]; then
-        versioned_props "${m}" "${v}" "" > "${file}.tmp"
-        cat "${file}.tmp" > "${file}" # cat keeps the file's mode
-        rm -f "${file}.tmp"
-      fi
-      changed+=("${file}")
+    versioned_props "${m}" "${BASE}" "" >/dev/null || die "${file}: expected exactly one version= and one requires_core= line"
+    if ! cmp -s "${file}" <(versioned_props "${m}" "${BASE}" ""); then
+      [[ "${MODE}" == fresh ]] && VERSIONS_WRITTEN=1
+      versioned_props "${m}" "${BASE}" "" > "${file}.tmp"
+      cat "${file}.tmp" > "${file}" # cat keeps the file's mode
+      rm -f "${file}.tmp"
+      changed=$((changed + 1))
     fi
   done
-  if [[ "${#changed[@]}" -gt 0 ]]; then
-    echo "   version ${v}, requires_core $(core_range "${v}"): ${#changed[@]} of ${#modules[@]} module.properties$([[ "${DRY_RUN}" == 1 ]] && echo ' (would change)')"
-  else
-    echo "   version ${v}: every prepared module.properties already says it"
-  fi
+  [[ "${MODE}" == fresh ]] && VERSIONS_WRITTEN=1
+  echo "   version ${BASE}, requires_core $(core_range "${BASE}"): ${changed} of ${#MODULES[@]} module.properties changed"
   run "${VENVS}/card/bin/python" tools/validate.py --write-index
+  run "${XEWE[@]}" release-card init --dir "${LOGS}" --repo "${REPO}" --version "${v}" --tag "${v}"
 
-  stage 4 "release notes"
-  for dir in $(release_dirs "${v}"); do
-    notes="${dir}/notes.txt"
-    if [[ ! -s "${notes}" ]]; then
-      echo "   create ${notes} (skeleton)"
-      if [[ "${DRY_RUN}" != 1 ]]; then
-        mkdir -p "${dir}"
-        if [[ "${dir}" == "${set_dir}" ]]; then
-          set_notes_skeleton "${v}" > "${notes}"
-        else
-          m="${dir#modules/}"
-          module_notes_skeleton "${m%%/*}" "${v}" > "${notes}"
-        fi
-      fi
-      todo+=("${notes}")
-    elif grep -q -- "${NOTES_MARKER}" "${notes}"; then
-      echo "   ${notes} is still the skeleton"
-      todo+=("${notes}")
-    else
-      echo "   ${notes}: filled ($(wc -l < "${notes}" | tr -d ' ') lines)"
-    fi
-  done
-  if [[ "${#todo[@]}" -gt 0 ]]; then
-    if [[ "${DRY_RUN}" == 1 ]]; then
-      echo "   a real run stops here (exit 2) until these are filled: ${todo[*]}"
-    else
-      echo "error: fill ${todo[*]} (each the GitHub Release text, embedded in its card), delete each ${NOTES_MARKER} line, then run scripts/release.sh --prepare ${v} ${what} again" >&2
-      exit 2
-    fi
-  fi
-
-  stage 5 "card run"
-  # every card's tested tree leaves out the release folders (the notes and cards themselves)
-  run "${XEWE[@]}" release-card init --dir "${LOGS}" --repo "${REPO}" --version "${v}" --tag "${v}" \
-    --exclude 'modules/*/releases' ${RESUME_ARGS[@]+"${RESUME_ARGS[@]}"}
-
-  stage 6 setup
-  STEP_RESUME=(${RESUME_ARGS[@]+"${RESUME_ARGS[@]}"})
-  x="${VENVS}/py/bin/python"
-  step venv --kind setup --name venv -- "${py}" -m venv --clear "${VENVS}/py"
-  step install --kind setup --name install -- "${x}" -m pip install --disable-pip-version-check --progress-bar off \
-    "$(tools_spec)" "${CHECKERS[@]}"
+  # setup.sh installs the tools of [tools] (or XEWE_TOOLS_SOURCE), the shared toolchain, every
+  # module's libraries and the modules from this tree (XEWE_MODULES_SOURCE: the export, used in place)
   tree_export
   harness_copy "${HARNESS}"
   harness_copy "${ALONE}"
   # record --kind setup keeps build/config/build_config.toml of the repo root: the harness's (pins)
   run mkdir -p build/config
   run ln -sfn "../../${HARNESS}/build/config/build_config.toml" build/config/build_config.toml
-  # setup.sh installs the tools of [tools] (or XEWE_TOOLS_SOURCE), the shared toolchain, every
-  # module's libraries and the modules from this tree (XEWE_MODULES_SOURCE: the export, used in place)
+  py="$(find_python)"
+  step venv --kind setup --name venv -- "${py}" -m venv --clear "${VENVS}/py"
+  step install --kind setup --name install -- "${VENVS}/py/bin/python" -m pip install --disable-pip-version-check \
+    --progress-bar off "$(tools_spec)" "${CHECKERS[@]}"
   for x in "${HARNESS}" "${ALONE}"; do
     step "setup ${x}" --kind setup --name "harness-${x##*/}" -- env -u XEWE_PROJECT "XEWE_MODULES_SOURCE=${ROOT}/${EXPORT}" \
       XEWE_NO_BOARD=1 bash "${x}/setup.sh" --modules all
@@ -684,20 +443,13 @@ prepare() {
   hp="${HARNESS}/build/tools/.venv/bin/python"
   ahp="${ALONE}/build/tools/.venv/bin/python"
 
-  stage 7 checks
   step validate --kind validate --name validate -- "${hp}" "${EXPORT}/tools/validate.py" --harness "${HARNESS}"
-  # the command of xewe-modules-tests.yml's unit step, so the card's unit rows are CI's
-  step unit --kind unit --name unit --junit "${VENVS}/junit-unit.xml" -- env XEWE_NO_BOARD=1 "${hp}" -m xewe \
-    --project "${HARNESS}" test --unit-only -- "--junitxml=${ROOT}/${VENVS}/junit-unit.xml" -o junit_family=xunit1 \
-    -o junit_logging=no -ra
   step format --kind check --name format -- env "XEWE_CLANG_FORMAT=${VENVS}/py/bin/clang-format" \
     "${VENVS}/py/bin/python" -m xewe format --check modules tools
   step brand-lint --kind check --name brand-lint -- "${VENVS}/py/bin/python" -m xewe brand-lint .
-
-  stage 8 "module-alone builds"
-  # each module with only what it depends on; the build steps are named <n>-build-<chip>-<module>
+  # each named module with only what it depends on; the build steps are named <n>-build-<chip>-<module>
   for chip in "${CHIPS[@]}"; do
-    for m in "${modules[@]}"; do
+    for m in "${MODULES[@]}"; do
       # shellcheck disable=SC2016 # expanded by the inner bash
       step "build ${m} ${chip}" --kind build --chip "${chip}" --name "${m}" \
         --meta "${ALONE}/build/builds/${chip}/out/meta.json" -- env XEWE_NO_BOARD=1 bash -c \
@@ -705,150 +457,196 @@ prepare() {
         "${ahp}" "${ALONE}" "${m}" "${chip}"
     done
   done
+  stop_on_failed
+  # the command of xewe-modules-tests.yml's unit step, so the card's unit rows are CI's
+  step unit --kind unit --name unit --junit "${OUT}/junit-unit.xml" -- env XEWE_NO_BOARD=1 "${hp}" -m xewe \
+    --project "${HARNESS}" test --unit-only -- "--junitxml=${ROOT}/${OUT}/junit-unit.xml" -o junit_family=xunit1 \
+    -o junit_logging=no -ra
 
-  stage 9 boards
-  for chip in "${CHIPS[@]}"; do
-    hw=0
-    [[ ",${HARDWARE}," == *",${chip},"* ]] && hw=1
-    defines=()
-    while IFS= read -r x; do defines+=("${x}"); done < <(chip_defines "${chip}")
-    # the card's image of a chip is its newest build step: the all-modules build must come last
-    # (CI compares it with its own all-modules build); on --resume it runs again unless it already
-    # is the newest green build, and then the flash and board steps of a --hardware chip run again
-    # too (a new image)
-    resume_build=(${RESUME_ARGS[@]+"${RESUME_ARGS[@]}"})
-    if [[ "${#RESUME_ARGS[@]}" -gt 0 && "${DRY_RUN}" != 1 ]] && ! last_build_is_all "${chip}"; then
-      resume_build=()
-    fi
-    STEP_RESUME=(${resume_build[@]+"${resume_build[@]}"})
-    if [[ "${hw}" == 1 ]]; then
-      step "build all ${chip}" --kind build --chip "${chip}" --name all-modules \
-        --meta "${HARNESS}/build/builds/${chip}/out/meta.json" -- env -u XEWE_NO_BOARD "${hp}" -m xewe \
-        --project "${HARNESS}" build --chip "${chip}" ${defines[@]+"${defines[@]}"}
-      x="${HARNESS}/build/builds/${chip}/out/<image>.bin"
-      if [[ "${DRY_RUN}" != 1 ]]; then
-        x="$(find "${HARNESS}/build/builds/${chip}/out" -maxdepth 1 -name "*-${chip}-*.bin" ! -name '*bootloader*' ! -name '*partitions*' 2>/dev/null | head -n 1)"
-        [[ -n "${x}" ]] || x="${HARNESS}/build/builds/${chip}/out/missing.bin"
-      fi
-      step "flash ${chip}" --kind flash --chip "${chip}" --firmware "${x}" --meta "${HARNESS}/build/builds/${chip}/out/meta.json" \
-        -- env -u XEWE_NO_BOARD "${hp}" -m xewe --project "${HARNESS}" flash --chip "${chip}" --no-build --require-board \
-        ${defines[@]+"${defines[@]}"}
-      step "board ${chip}" --kind board --chip "${chip}" --junit "${VENVS}/junit-board-${chip}.xml" \
-        -- env -u XEWE_NO_BOARD "${BOARD_GATES[@]}" "${hp}" -m xewe --project "${HARNESS}" test --chip "${chip}" \
-        --require-board ${defines[@]+"${defines[@]}"} -- -m board -o junit_family=xunit1 -ra \
-        "--junitxml=${ROOT}/${VENVS}/junit-board-${chip}.xml"
-    else
-      step "build all ${chip}" --kind build --chip "${chip}" --name all-modules \
-        --meta "${HARNESS}/build/builds/${chip}/out/meta.json" -- env XEWE_NO_BOARD=1 "${hp}" -m xewe \
-        --project "${HARNESS}" build --chip "${chip}" ${defines[@]+"${defines[@]}"}
-      STEP_RESUME=(${RESUME_ARGS[@]+"${RESUME_ARGS[@]}"})
-      step "board ${chip}" --kind board --chip "${chip}" --junit "${VENVS}/junit-board-${chip}.xml" \
-        -- env XEWE_NO_BOARD=1 "${BOARD_GATES[@]}" "${hp}" -m xewe --project "${HARNESS}" test --chip "${chip}" \
-        ${defines[@]+"${defines[@]}"} -- -m board -o junit_family=xunit1 -ra \
-        "--junitxml=${ROOT}/${VENVS}/junit-board-${chip}.xml"
-    fi
-  done
-  if [[ "${#FAILED_STEPS[@]}" -gt 0 ]]; then
-    warn "failed steps: ${FAILED_STEPS[*]} (the cards will refuse them)"
+  chip="${RUN_CHIP}"
+  hw=0
+  [[ -z "${HARDWARE}" ]] || hw=1
+  while IFS= read -r x; do defines+=("${x}"); done < <(chip_defines "${chip}")
+  if [[ "${hw}" == 1 ]]; then
+    step "build ${chip}" --kind build --chip "${chip}" --name all-modules \
+      --meta "${HARNESS}/build/builds/${chip}/out/meta.json" -- env -u XEWE_NO_BOARD "${hp}" -m xewe \
+      --project "${HARNESS}" build --chip "${chip}" ${defines[@]+"${defines[@]}"}
+    fw_bin="$(find "${HARNESS}/build/builds/${chip}/out" -maxdepth 1 -name "*-${chip}-*.bin" ! -name '*bootloader*' ! -name '*partitions*' 2>/dev/null | head -n 1)"
+    [[ -n "${fw_bin}" ]] || fw_bin="${HARNESS}/build/builds/${chip}/out/missing.bin"
+    step "flash ${chip}" --kind flash --chip "${chip}" --firmware "${fw_bin}" --meta "${HARNESS}/build/builds/${chip}/out/meta.json" \
+      -- env -u XEWE_NO_BOARD "${hp}" -m xewe --project "${HARNESS}" flash --chip "${chip}" --no-build --require-board \
+      ${defines[@]+"${defines[@]}"}
+    step "board ${chip}" --kind board --chip "${chip}" --junit "${OUT}/junit-board-${chip}.xml" \
+      -- env -u XEWE_NO_BOARD "${BOARD_GATES[@]}" "${hp}" -m xewe --project "${HARNESS}" test --chip "${chip}" \
+      --require-board ${defines[@]+"${defines[@]}"} -- -m board -o junit_family=xunit1 -ra \
+      "--junitxml=${ROOT}/${OUT}/junit-board-${chip}.xml"
+  else
+    step "build ${chip}" --kind build --chip "${chip}" --name all-modules \
+      --meta "${HARNESS}/build/builds/${chip}/out/meta.json" -- env XEWE_NO_BOARD=1 "${hp}" -m xewe \
+      --project "${HARNESS}" build --chip "${chip}" ${defines[@]+"${defines[@]}"}
+    step "board ${chip}" --kind board --chip "${chip}" --junit "${OUT}/junit-board-${chip}.xml" \
+      -- env XEWE_NO_BOARD=1 "${BOARD_GATES[@]}" "${hp}" -m xewe --project "${HARNESS}" test --chip "${chip}" \
+      ${defines[@]+"${defines[@]}"} -- -m board -o junit_family=xunit1 -ra \
+      "--junitxml=${ROOT}/${OUT}/junit-board-${chip}.xml"
   fi
+  stop_on_failed
+}
 
-  stage 10 cards
-  for dir in $(release_dirs "${v}"); do
-    rc=0
-    if [[ "${dir}" == "${set_dir}" ]]; then
-      # every module's tests (the harness's own tests/ is not copied; CI's is left out by the prefix)
-      run "${XEWE[@]}" release-card render --dir "${LOGS}" --notes "${dir}/notes.txt" --out "${dir}/release_card.md" \
-        --require "${REQUIRE}" --chips "$(IFS=,; echo "${CHIPS[*]}")" ${HARDWARE:+--hardware "${HARDWARE}"} \
-        --title "${TITLE}" --tests modules/ || rc=$?
+# card_stage: stage 3 (see the header).
+card_stage() {
+  local i slug rc refused=() tests_prefix title
+  stage 3 "release cards"
+  for i in "${!SLUGS[@]}"; do
+    slug="${SLUGS[i]}"
+    if [[ "${slug}" == "${SET_SLUG}" ]]; then
+      tests_prefix="modules/"; title="${TITLE}"
     else
-      m="${dir#modules/}"; m="${m%%/*}"
-      run "${XEWE[@]}" release-card render --dir "${LOGS}" --notes "${dir}/notes.txt" --out "${dir}/release_card.md" \
-        --require "${REQUIRE}" --chips "$(IFS=,; echo "${CHIPS[*]}")" ${HARDWARE:+--hardware "${HARDWARE}"} \
-        --title "${m}" --tests "modules/${m}/" || rc=$?
+      tests_prefix="modules/${slug}/"; title="${slug}"
     fi
+    mkdir -p "${OUT}/${slug}"
+    rc=0
+    run "${XEWE[@]}" release-card render --dir "${LOGS}" --notes "${NOTES_FILE}" --out "${OUT}/${slug}/release_card.md" \
+      --require "${REQUIRE}" --chips "${RUN_CHIP}" ${HARDWARE:+--hardware "${HARDWARE}"} \
+      --title "${title}" --tests "${tests_prefix}" || rc=$?
     case "${rc}" in
-      0) cards+=("${dir}/release_card.md") ;;
-      1) refused+=("${dir}/release_card.md") ;;
+      0) [[ "$(head -n 1 "${OUT}/${slug}/release_card.md")" == "# "* ]] || die "${OUT}/${slug}/release_card.md does not start with a '# ' title line" ;;
+      1) refused+=("${TAGS[i]}") ;;
       *) die "xewe release-card render exited ${rc}" ;;
     esac
   done
-  if [[ "${#refused[@]}" -gt 0 ]]; then
-    die "refused: ${refused[*]} (reasons above; draft of the last refusal: ${LOGS}/release_card.draft.md). Fix the cause, then: scripts/release.sh --prepare ${v} ${what} --resume"
-  fi
-  changed=()
-  if [[ "${DRY_RUN}" != 1 ]]; then
-    for m in "${modules[@]}"; do
-      git diff --quiet HEAD -- "modules/${m}/module.properties" || changed+=("modules/${m}/module.properties")
-    done
-    git diff --quiet HEAD -- doc/modules.md || changed+=(doc/modules.md)
-    echo "   prepared in ${SECONDS} s; no git change was made. Review the ${#cards[@]} cards, then commit and push:"
+  [[ "${#refused[@]}" -eq 0 ]] \
+    || die "no card for ${refused[*]} (reasons above; draft of the last refusal: ${LOGS}/release_card.draft.md). Fix the cause, then run again"
+}
+
+# commit_message: the release commit's subject: the version, and the modules unless --all.
+commit_message() {
+  if [[ "${ALL}" == 1 ]]; then
+    echo "release ${VERSION}"
+  elif [[ "${#MODULES[@]}" -gt 4 ]]; then
+    echo "release ${VERSION} ${#MODULES[@]} modules"
   else
-    echo "   dry run: nothing was prepared; a real run ends with:"
-    if [[ "${#PREP_MODULES[@]}" -eq 0 ]]; then
-      changed=("modules/*/module.properties" doc/modules.md)
-    else
-      changed=()
-      for m in "${modules[@]}"; do changed+=("modules/${m}/module.properties"); done
-      changed+=(doc/modules.md)
+    echo "release ${VERSION} ${MODULES[*]}"
+  fi
+}
+
+# commit_stage: stage 4 (see the header).
+commit_stage() {
+  local entry path stray=()
+  stage 4 commit
+  if [[ "${MODE}" != fresh ]]; then
+    echo "   HEAD is already the release commit"
+    return 0
+  fi
+  while IFS= read -r -d '' entry; do
+    path="${entry:3}"
+    allowed_change "${path}" "${BASE}" || stray+=("${path}")
+  done < <(git status --porcelain=v1 -z --untracked-files=all)
+  [[ "${#stray[@]}" -eq 0 ]] || die "files other than the version lines changed (${stray[*]}): nothing was committed"
+  run git add -- "${VFILES[@]}"
+  run git commit -q --allow-empty -m "$(commit_message)"
+  VERSIONS_WRITTEN=0
+}
+
+# push_main: push main and check that origin/main is HEAD (main first: the workflow is registered
+# before a tag triggers it).
+push_main() {
+  run git push origin main
+  [[ "$(git rev-parse origin/main)" == "$(git rev-parse HEAD)" ]] \
+    || die "origin/main ($(git rev-parse --short=12 origin/main)) is not HEAD ($(git rev-parse --short=12 HEAD)) after the push"
+}
+
+# tag_stage COMMIT: stage 5 (see the header): the tags that do not exist are made on COMMIT.
+tag_stage() {
+  local c="$1" i tag slug
+  stage 5 tag
+  for i in "${!TAGS[@]}"; do
+    tag="${TAGS[i]}"; slug="${SLUGS[i]}"
+    if tag_local "${tag}"; then
+      echo "   ${tag} exists"
+      continue
     fi
+    { cat "${NOTES_FILE}"; echo; cat "${OUT}/${slug}/release_card.md"; } > "${OUT}/${slug}/tag_message.txt"
+    cp "${NOTES_FILE}" "${OUT}/${slug}/notes.txt"
+    run git tag -a --cleanup=verbatim -F "${OUT}/${slug}/tag_message.txt" "${tag}" "${c}"
+  done
+  if ! git merge-base --is-ancestor "${c}" refs/remotes/origin/main 2>/dev/null; then
+    if [[ "$(git symbolic-ref --quiet --short HEAD || true)" != main ]] || ! git merge-base --is-ancestor "${c}" HEAD; then
+      die "origin/main lacks the tagged commit ${c:0:12} and this clone's main does not hold it: push main first"
+    fi
+    push_main
   fi
-  if [[ "${#PREP_MODULES[@]}" -eq 0 ]]; then
-    x="modules/*/releases/${v} ${set_dir}/notes.txt ${set_dir}/release_card.md"
-  else
-    x="$(for m in "${modules[@]}"; do printf 'modules/%s/releases/%s ' "${m}" "${v}"; done)"
-    x="${x% }"
-  fi
-  echo "  git add ${changed[*]+${changed[*]} }${x} && git commit -m \"prepare ${v}\" && git push origin $(git symbolic-ref --short HEAD 2>/dev/null || echo '<branch>')"
-  echo "then, once on main with the ${CI_WORKFLOW} workflow green (card job included):"
-  if [[ "${#PREP_MODULES[@]}" -eq 0 ]]; then
-    echo "  for m in ${modules[*]}; do scripts/release.sh ${v} \"\$m\"; done; scripts/release.sh ${v} --set"
-  else
-    for m in "${modules[@]}"; do echo "  scripts/release.sh ${v} ${m}"; done
-  fi
-  if [[ "${DRY_RUN}" == 1 && "${FAILED}" -gt 0 ]]; then
-    echo "== dry run: ${FAILED} check(s) failed; a real run stops at the first"
-    exit 1
-  fi
+  # one push per tag: GitHub starts no workflow when more than 3 tags arrive in one push
+  for tag in "${TAGS[@]}"; do
+    tag_remote "${tag}" || run git push origin "refs/tags/${tag}"
+  done
+}
+
+# release_stage: stage 6 (see the header).
+release_stage() {
+  local i tag slug card url failed=() urls=() pre=()
+  [[ -z "${PRE}" ]] || pre=(--prerelease)
+  stage 6 "release CI and GitHub Releases"
+  CI_DEADLINE=$((SECONDS + CI_TIMEOUT * 60))
+  for i in "${!TAGS[@]}"; do
+    tag="${TAGS[i]}"; slug="${SLUGS[i]}"
+    ci_gate "${tag}" "$1" || { failed+=("${tag}"); continue; }
+    card="$(card_step_result "${CI_RUN_ID}")" || { echo "error: ${tag}: gh run view ${CI_RUN_ID} failed" >&2; failed+=("${tag}"); continue; }
+    if [[ "${card}" != success ]]; then
+      echo "error: ${tag}: CI passed, but the '${CI_CARD_JOB}' job compared no card with this tag (step '${CI_CARD_STEP}': ${card:-not found})" >&2
+      failed+=("${tag}")
+      continue
+    fi
+    echo "   ${tag}: card check: ${card}"
+    if gh release view "${tag}" >/dev/null 2>&1; then
+      echo "   GitHub Release ${tag} exists already"
+    else
+      if [[ "${slug}" == "${SET_SLUG}" ]]; then
+        run gh release create "${tag}" --verify-tag --title "${TITLE} ${tag}" ${pre[@]+"${pre[@]}"} \
+          --notes-file "${OUT}/${slug}/notes.txt" "${OUT}/${slug}/release_card.md"
+      else
+        run gh release create "${tag}" --verify-tag --latest=false --title "${slug} ${VERSION}" ${pre[@]+"${pre[@]}"} \
+          --notes-file "${OUT}/${slug}/notes.txt" "${OUT}/${slug}/release_card.md"
+      fi
+    fi
+    url="$(gh release view "${tag}" --json url --jq .url)" || { failed+=("${tag}"); continue; }
+    urls+=("${url}")
+  done
+  for url in ${urls[@]+"${urls[@]}"}; do echo "   GitHub Release: ${url}"; done
+  [[ "${#failed[@]}" -eq 0 ]] || die "no release for ${failed[*]} (reasons above; scripts/release.sh ${VERSION} ... --resume continues)"
+  echo "Projects: xewe.toml [modules] ref = \"<tag>\" (${TAGS[*]}), then ./setup.sh."
 }
 
 usage() { sed -n 's/^# Usage: //p' "${BASH_SOURCE[0]}"; }
 
-# cleanup: the temporary release files of a tag run (EXIT trap).
-UPLOAD_DIR=""
-SET_NOTES_TMP=""
-cleanup() { rm -rf ${UPLOAD_DIR:+"${UPLOAD_DIR}"} ${SET_NOTES_TMP:+"${SET_NOTES_TMP}"}; }
-
 main() {
   VERSION=""
-  MODULE=""
-  SET=0
   ALL=0
-  DRY_RUN=0
-  SKIP_CI=0
-  PREPARE=0
-  RESUME_ARGS=()
-  STEP_RESUME=()
+  RESUME=0
   HARDWARE=""
-  HARNESS_SRC=""
-  CI_TIMEOUT=30
-  PREP_MODULES=()
-  local names=() m n
+  CI_TIMEOUT=60
+  NOTES=()
+  XEWE=()
+  TAGS=()
+  SLUGS=()
+  local names=() line file x m n i p
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --dry-run) DRY_RUN=1 ;;
-      --skip-ci) SKIP_CI=1 ;;
-      --prepare) PREPARE=1 ;;
-      --set) SET=1 ;;
       --all) ALL=1 ;;
-      --resume) RESUME_ARGS=(--resume) ;;
+      --resume) RESUME=1 ;;
       --hardware)
-        [[ "${2:-}" =~ ^(c3|c6|s3)(,(c3|c6|s3))*$ ]] || die "--hardware needs a list of c3, c6, s3 ($(usage))"
+        [[ "${2:-}" =~ ^(c3|c6|s3)$ ]] || die "--hardware needs one chip: c3, c6 or s3 ($(usage))"
         HARDWARE="$2"
         shift
         ;;
-      --harness)
-        [[ -n "${2:-}" ]] || die "--harness needs a directory ($(usage))"
-        HARNESS_SRC="$2"
+      --notes)
+        [[ $# -ge 2 ]] || die "--notes needs a line ($(usage))"
+        NOTES+=("$2")
+        shift
+        ;;
+      --notes-file)
+        file="${2:-}"
+        [[ -f "${file}" ]] || die "--notes-file needs a file: ${file}"
+        while IFS= read -r line || [[ -n "${line}" ]]; do NOTES+=("${line}"); done < "${file}"
         shift
         ;;
       --ci-timeout)
@@ -859,217 +657,198 @@ main() {
       -h|--help) usage; exit 0 ;;
       -*) die "unknown option $1 ($(usage))" ;;
       *)
-        if [[ -z "${VERSION}" ]]; then
-          VERSION="$1"
-        else
-          names+=("$1")
-        fi
+        if [[ -z "${VERSION}" ]]; then VERSION="$1"; else names+=("$1"); fi
         ;;
     esac
     shift
   done
   [[ -n "${VERSION}" ]] || die "no version given ($(usage))"
-  [[ "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] \
-    || die "version must be X.Y.Z with no 'v' (the ecosystem's tags are un-prefixed): ${VERSION}"
-  if [[ "${PREPARE}" == 1 ]]; then
-    [[ "${SET}" == 0 ]] || die "--prepare takes module names or --all, not --set (--all prepares the set) ($(usage))"
-    if [[ "${ALL}" == 1 ]]; then
-      [[ "${#names[@]}" -eq 0 ]] || die "--prepare takes module names or --all, not both ($(usage))"
-    else
-      [[ "${#names[@]}" -gt 0 ]] || die "--prepare needs one or more module names, or --all ($(usage))"
-      for m in "${names[@]}"; do
-        for n in ${PREP_MODULES[@]+"${PREP_MODULES[@]}"}; do
-          [[ "${n}" != "${m}" ]] || die "module ${m} is named twice"
-        done
-        PREP_MODULES+=("${m}")
-      done
-    fi
-    [[ "${SKIP_CI}" == 0 ]] || die "--skip-ci does not apply to --prepare"
+  [[ "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z][0-9A-Za-z.-]*)?$ ]] \
+    || die "version must be X.Y.Z or X.Y.Z-suffix with no 'v' (the ecosystem's tags are un-prefixed): ${VERSION}"
+  BASE="${VERSION%%-*}"
+  PRE=""
+  [[ "${VERSION}" == "${BASE}" ]] || PRE=1
+  if [[ "${ALL}" == 1 ]]; then
+    [[ "${#names[@]}" -eq 0 ]] || die "module names or --all, not both ($(usage))"
   else
-    [[ "${#names[@]}" -le 1 ]] || die "one version and one module only ($(usage))"
-    MODULE="${names[0]:-}"
-    [[ "${ALL}" == 0 ]] || die "--all applies to --prepare only; tag runs are one module or --set ($(usage))"
-    [[ "${#RESUME_ARGS[@]}" -eq 0 ]] || die "--resume applies to --prepare only (the tag run resumes by itself)"
-    [[ -z "${HARDWARE}" && -z "${HARNESS_SRC}" ]] || die "--hardware and --harness apply to --prepare only"
-    [[ "${SET}" == 1 && -n "${MODULE}" ]] && die "a module or --set, not both ($(usage))"
-    [[ "${SET}" == 1 || -n "${MODULE}" ]] || die "name a module or --set ($(usage))"
+    [[ "${#names[@]}" -gt 0 ]] || die "name one or more modules, or --all ($(usage))"
   fi
 
   # Repo root: the top of the git work tree this is run in.
   command -v git >/dev/null 2>&1 || die "git is required"
   ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || die "not inside a git work tree"
-  # a relative --harness is taken from where the script was started
-  if [[ -n "${HARNESS_SRC}" && "${HARNESS_SRC}" != /* ]]; then HARNESS_SRC="${PWD}/${HARNESS_SRC}"; fi
   cd "${ROOT}"
   [[ -f tools/validate.py && -d modules ]] || die "${ROOT} is not the xewe-os-modules repo"
-  for m in ${MODULE:+"${MODULE}"} ${PREP_MODULES[@]+"${PREP_MODULES[@]}"}; do
-    [[ "${m}" =~ ^[a-z0-9][a-z0-9-]*$ && -f "modules/${m}/module.properties" ]] \
-      || die "no module ${m}: modules/${m}/module.properties is missing"
-  done
-  [[ "${DRY_RUN}" == 1 ]] && echo "== dry run: nothing is changed; commands are printed with a leading +"
+  if [[ "${ALL}" == 1 ]]; then
+    while IFS= read -r m; do MODULES+=("${m}"); done < <(module_names)
+    [[ "${#MODULES[@]}" -gt 0 ]] || die "no modules in modules/"
+  else
+    for m in "${names[@]}"; do
+      [[ "${m}" =~ ^[a-z0-9][a-z0-9-]*$ && -f "modules/${m}/module.properties" ]] \
+        || die "no module ${m}: modules/${m}/module.properties is missing"
+      for n in ${MODULES[@]+"${MODULES[@]}"}; do [[ "${n}" != "${m}" ]] || die "module ${m} is named twice"; done
+      MODULES+=("${m}")
+    done
+  fi
+  for m in "${MODULES[@]}"; do TAGS+=("${m}/${VERSION}"); SLUGS+=("${m}"); done
+  if [[ "${ALL}" == 1 ]]; then TAGS+=("${VERSION}"); SLUGS+=("${SET_SLUG}"); fi
+  while IFS= read -r line; do VFILES+=("${line}"); done < <(version_files)
   export XEWE_NO_BOARD=1 # only a --hardware chip's flash and board steps may look for a board
-
-  if [[ "${PREPARE}" == 1 ]]; then
-    prepare "${VERSION}"
-    return
-  fi
-  [[ "${SKIP_CI}" == 1 ]] && warn "!!!!!!!! --skip-ci: the CI gate is skipped (emergencies only) !!!!!!!!"
-
-  local tag="${VERSION}" title="${TITLE} ${VERSION}" dir="releases/${VERSION}"
-  if [[ -n "${MODULE}" ]]; then
-    tag="${MODULE}/${VERSION}"; title="${MODULE} ${VERSION}"; dir="modules/${MODULE}/releases/${VERSION}"
-  fi
-  local notes="${dir}/notes.txt" card="${dir}/release_card.md" logs="releases/${VERSION}/logs"
+  OUT="build/release/${VERSION}"
+  LOGS="${OUT}/logs"
+  NOTES_FILE="${OUT}/notes.txt"
+  RUN_CHIP="${HARDWARE:-c3}"
+  trap restore_versions EXIT
+  trap 'exit 130' INT TERM
 
   stage 1 preflight
-  GH_OK=0
+  local head tagged="" existing=() missing=() py
+  MODE=fresh
+  head="$(git rev-parse HEAD)"
   if ! command -v gh >/dev/null 2>&1; then
     fail "gh is not installed (https://cli.github.com)"
   elif ! gh auth status >/dev/null 2>&1; then
     fail "gh is not logged in (gh auth login)"
+  fi
+  run git fetch --quiet origin || die "git fetch origin failed"
+  for x in "${TAGS[@]}"; do
+    if tag_local "${x}" || tag_remote "${x}"; then existing+=("${x}"); else missing+=("${x}"); fi
+  done
+  if [[ "${#existing[@]}" -gt 0 ]]; then
+    if [[ "${RESUME}" == 1 ]]; then MODE=tag; else fail "tag ${existing[*]} exists (here or on origin); --resume continues it"; fi
+  elif [[ "${RESUME}" == 1 ]]; then
+    if [[ "$(git log -1 --format=%s)" == "$(commit_message)" ]]; then
+      MODE=commit
+    else
+      fail "--resume: no tag of this run exists and HEAD is not the '$(commit_message)' commit: run without --resume"
+    fi
+  fi
+
+  if [[ "${MODE}" == tag ]]; then
+    # the commit every existing tag points at; the notes and the card of those tags are their own
+    for x in "${existing[@]}"; do
+      tag_local "${x}" || run git fetch --quiet origin "refs/tags/${x}:refs/tags/${x}" || true
+      n="$(tag_commit "${x}")"
+      if [[ -z "${tagged}" ]]; then
+        tagged="${n}"
+      elif [[ "${n}" != "${tagged}" ]]; then
+        fail "tag ${x} points at ${n:0:12}, not at ${tagged:0:12} like the other tags of this run"
+      fi
+    done
+    if ! git cat-file -e "${tagged}^{commit}" 2>/dev/null; then
+      fail "the tagged commit ${tagged:0:12} is not in this clone (git fetch --tags origin)"
+    else
+      for m in "${MODULES[@]}"; do
+        x="$(module_version "${m}" "${tagged}")"
+        [[ "${x}" == "${BASE}" ]] || fail "tag commit ${tagged:0:12}: modules/${m}/module.properties says version=${x:-unset}, not ${BASE}"
+      done
+      mkdir -p "${OUT}"
+      for i in "${!TAGS[@]}"; do
+        x="${TAGS[i]}"; m="${SLUGS[i]}"
+        mkdir -p "${OUT}/${m}"
+        if tag_local "${x}"; then
+          git for-each-ref --format='%(contents)' "refs/tags/${x}" | sed '/-----BEGIN PGP SIGNATURE-----/,$d' > "${OUT}/${m}/tag_message.txt"
+          awk '/^# /{exit} {print}' "${OUT}/${m}/tag_message.txt" | sed -e :a -e '/^\n*$/{$d;N;ba' -e '}' > "${OUT}/${m}/notes.txt"
+          sed -n '/^# /,$p' "${OUT}/${m}/tag_message.txt" > "${OUT}/${m}/release_card.md"
+          [[ -s "${OUT}/${m}/release_card.md" ]] || fail "the message of tag ${x} holds no release card (no line starting with '# ')"
+        else
+          # a missing tag is made from this run's notes and card
+          [[ -s "${OUT}/${m}/release_card.md" ]] || fail "tag ${x} is missing and ${OUT}/${m}/release_card.md is not there: run without --resume"
+          [[ -s "${NOTES_FILE}" ]] || fail "tag ${x} is missing: give its notes again (--notes or --notes-file)"
+        fi
+      done
+      if [[ "${#missing[@]}" -gt 0 && "${#NOTES[@]}" -gt 0 ]]; then write_notes; fi
+    fi
+    check_problems
+    echo "   ok: resuming, tags ${existing[*]} exist (${tagged:0:12})${missing[*]+; to make: ${missing[*]}}"
   else
-    GH_OK=1
-  fi
-  run git fetch --quiet origin
-
-  # resume: the tag exists (here or on origin) but there is no GitHub Release yet.
-  local resume=0 tagged="" problems
-  if tag_local "${tag}" || tag_remote "${tag}"; then
-    [[ "${GH_OK}" == 1 ]] || die "tag ${tag} exists; gh is needed to check for its GitHub Release"
-    if gh release view "${tag}" >/dev/null 2>&1; then
-      die "${tag} is already released (tag and GitHub Release exist)"
-    fi
-    resume=1
-    tagged="$(tag_commit "${tag}")"
-    git cat-file -e "${tagged}^{commit}" 2>/dev/null \
-      || die "tag ${tag} points at ${tagged:0:12}, which is not in this clone (git fetch --tags origin)"
-    if [[ -n "${MODULE}" ]]; then
-      [[ "$(module_version "${MODULE}" "${tagged}")" == "${VERSION}" ]] \
-        || die "tag ${tag} points at ${tagged:0:12}, whose modules/${MODULE}/module.properties does not say version=${VERSION}"
+    [[ "$(git symbolic-ref --quiet --short HEAD || echo '(detached)')" == main ]] \
+      || fail "on branch $(git symbolic-ref --quiet --short HEAD || echo '(detached)'), not main"
+    while IFS= read -r x; do [[ -z "${x}" ]] || fail "${x}"; done < <(tree_problems)
+    if [[ "${MODE}" == commit ]]; then
+      git merge-base --is-ancestor refs/remotes/origin/main HEAD 2>/dev/null \
+        || fail "origin/main is not an ancestor of HEAD: pull first"
+      for m in "${MODULES[@]}"; do
+        x="$(module_version "${m}" HEAD)"
+        [[ "${x}" == "${BASE}" ]] || fail "the release commit's modules/${m}/module.properties says version=${x:-unset}, not ${BASE}"
+      done
     else
-      problems="$(set_problems "${VERSION}" "${tagged}")"
-      [[ -z "${problems}" ]] || die "tag ${tag} points at ${tagged:0:12}, which is not a complete set:"$'\n'"${problems}"
+      x="$(git rev-parse -q --verify refs/remotes/origin/main || true)"
+      if [[ -z "${x}" ]]; then
+        fail "origin has no main branch"
+      elif [[ "${head}" != "${x}" ]]; then
+        fail "main (${head:0:12}) is not level with origin/main (${x:0:12}): pull or push first"
+      fi
     fi
-    if ! git cat-file -e "${tagged}:${notes}" 2>/dev/null || ! git cat-file -e "${tagged}:${card}" 2>/dev/null; then
-      die "tag ${tag} points at ${tagged:0:12}, which lacks ${notes} or ${card}"
+    TOOLS_REF="$(tools_ref)"
+    if [[ -z "${TOOLS_REF}" ]]; then
+      fail "${CI_FILE} does not call xewe-os-tools/.github/workflows/xewe-modules-tests.yml@<ref>"
+      TOOLS_REF="?"
+    elif [[ ! "${TOOLS_REF}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+      if [[ -n "${XEWE_TOOLS_SOURCE:-}" ]]; then
+        warn "${CI_FILE} calls xewe-modules-tests.yml@${TOOLS_REF}, not a tools tag; XEWE_TOOLS_SOURCE is used here"
+      else
+        fail "${CI_FILE} calls xewe-modules-tests.yml@${TOOLS_REF}: pin a tools tag (X.Y.Z), so the cards and CI use the same tools"
+      fi
     fi
-  fi
-
-  local head
-  head="$(git rev-parse HEAD)"
-  # A fresh release needs a clean main at origin's head; a resume only needs the tagged commit.
-  if [[ "${resume}" == 0 ]]; then
-    [[ -s "${notes}" ]] || fail "${notes} is missing (the release notes; scripts/release.sh --prepare ${VERSION} --all)"
-    [[ -s "${card}" ]] || fail "${card} is missing (the release card; scripts/release.sh --prepare ${VERSION} --all)"
-    git ls-files --error-unmatch -- "${notes}" "${card}" >/dev/null 2>&1 \
-      || fail "${notes} and ${card} are not both committed (the prepare commit)"
-    if [[ -s "${notes}" ]] && grep -q -- "${NOTES_MARKER}" "${notes}"; then
-      fail "${notes} is still the skeleton (its ${NOTES_MARKER} line)"
-    fi
-    [[ ! -e "${dir}/testcard.md" ]] || fail "${dir}/testcard.md exists: the release card replaces it; delete it"
-    [[ -z "$(git status --porcelain)" ]] || fail "the working tree is not clean (git status)"
-    local branch remote
-    branch="$(git symbolic-ref --quiet --short HEAD || echo "(detached)")"
-    [[ "${branch}" == main ]] || fail "on branch ${branch}, not main"
-    remote="$(git ls-remote origin refs/heads/main | cut -f1)"
-    if [[ -z "${remote}" ]]; then
-      fail "origin has no main branch"
-    elif [[ "${head}" != "${remote}" ]]; then
-      fail "main (${head:0:12}) is not level with origin/main (${remote:0:12}): pull or push first"
-    fi
-    if [[ -n "${MODULE}" ]]; then
-      local have
-      have="$(module_version "${MODULE}" "")"
-      [[ "${have}" == "${VERSION}" ]] \
-        || fail "modules/${MODULE}/module.properties says version=${have} (scripts/release.sh --prepare ${VERSION} --all)"
+    x="$(tools_ref_input)"
+    [[ "${x}" == "${TOOLS_REF}" ]] \
+      || fail "${CI_FILE}: tools_ref \"${x:-unset}\" is not the workflow's @${TOOLS_REF} (the card job installs tools_ref)"
+    git check-ignore -q "${LOGS}/run.json" || fail ".gitignore does not ignore build/ (the run folder must never be committed)"
+    command -v tar >/dev/null 2>&1 || fail "tar is required"
+    HARNESS_SRC="${XEWE_RELEASE_HARNESS:-../xewe-os}"
+    if [[ -f "${HARNESS_SRC}/xewe.toml" && -f "${HARNESS_SRC}/setup.sh" ]]; then
+      HARNESS_SRC="$(cd "${HARNESS_SRC}" && pwd)"
     else
-      problems="$(set_problems "${VERSION}" "${head}")"
-      [[ -z "${problems}" ]] || fail "not every module is released at ${VERSION} on HEAD:"$'\n'"${problems}"
+      fail "no xewe project at ${HARNESS_SRC} (xewe.toml and setup.sh): set XEWE_RELEASE_HARNESS"
     fi
-  fi
-  [[ "${FAILED}" -eq 0 ]] && echo "   ok: ${tag} on ${head:0:12}"
-
-  local upload_notes="${notes}"
-  if [[ "${resume}" == 1 ]]; then
-    echo "== resuming at stage 4: tag ${tag} exists (${tagged:0:12}), no GitHub Release yet"
-    # the release files are those of the tagged commit, whatever is checked out now
-    UPLOAD_DIR="$(mktemp -d)"
-    trap cleanup EXIT
-    git show "${tagged}:${notes}" > "${UPLOAD_DIR}/notes.txt"
-    git show "${tagged}:${card}" > "${UPLOAD_DIR}/release_card.md"
-    upload_notes="${UPLOAD_DIR}/notes.txt"
-    card="${UPLOAD_DIR}/release_card.md"
-  else
-    stage 2 "release card"
-    # verify is read-only: it runs in a dry run too, with the card tools of --prepare; the local
-    # logs are the shared run's, in releases/<version>/logs/
-    if [[ -x "${VENVS}/card/bin/python" ]]; then
-      XEWE=("${VENVS}/card/bin/python" -m xewe)
-    elif [[ "${DRY_RUN}" == 1 ]]; then
-      XEWE=()
+    py="$(find_python)"
+    if [[ -z "${py}" ]]; then
+      fail "Python >= 3.11 is required (python3.12 is what CI's card job uses)"
     else
-      local py
-      py="$(find_python)"
-      [[ -n "${py}" ]] || die "Python >= 3.11 is required"
-      TOOLS_REF="$(tools_ref)"
-      [[ -n "${TOOLS_REF}" ]] || die "${CI_FILE} does not call xewe-modules-tests.yml@<ref>"
+      echo "   python: ${py}"
+      write_notes
       card_tools "${py}"
+      while IFS= read -r x; do [[ -z "${x}" ]] || fail "${x}"; done < <(notes_problems)
     fi
-    if [[ "${#XEWE[@]}" -gt 0 ]]; then
-      echo "+ ${XEWE[*]} release-card verify --card ${card} --dir ${logs}"
-      "${XEWE[@]}" release-card verify --card "${card}" --dir "${logs}" \
-        || fail "release-card verify failed on ${card} (reasons above)"
+    check_problems
+    # the dotenv the board run uses (the tools read it; this script only exports its path)
+    if [[ -z "${XEWE_ENV:-}" ]]; then
+      if [[ -f "${HARNESS_SRC}/.env" ]]; then
+        export XEWE_ENV="${HARNESS_SRC}/.env"
+      elif [[ -n "${XEWE_TOOLS_SOURCE:-}" && -f "${XEWE_TOOLS_SOURCE}/.env" ]]; then
+        export XEWE_ENV="${XEWE_TOOLS_SOURCE}/.env"
+      fi
+    fi
+    echo "   tools: $(tools_spec) (CI: xewe-modules-tests.yml@${TOOLS_REF})"
+    echo "   harness: ${HARNESS_SRC} (copied to ${HARNESS}; modules all, source this tree)"
+    echo "   dotenv: ${XEWE_ENV:-none}"
+    echo "   tags: ${TAGS[*]}"
+    echo "   hardware: ${HARDWARE:-none} (the ${RUN_CHIP} board tests are $([[ -n "${HARDWARE}" ]] && echo run || echo 'compiled, not run'))"
+    [[ -z "${HARDWARE}" ]] || echo "   the ${HARDWARE} board must have had its first boot (xewe provision --chip ${HARDWARE}); never erase it for the run"
+    x="$(chip_defines "${RUN_CHIP}" | { grep -v '^--define$' || true; } | tr '\n' ' ')"
+    [[ -z "${x}" ]] || echo "   ${RUN_CHIP} defines: ${x% }"
+    echo "   ok: ${VERSION} on ${head:0:12}"
+
+    x=1
+    if [[ "${MODE}" == commit && -f "${LOGS}/run.json" ]]; then
+      for i in "${!SLUGS[@]}"; do [[ -s "${OUT}/${SLUGS[i]}/release_card.md" ]] || x=0; done
     else
-      echo "+ ${VENVS}/card/bin/python -m xewe release-card verify --card ${card} --dir ${logs}"
-      echo "   (not run: no card tools in ${VENVS}/card; --prepare ${VERSION} --all creates them, a real run too)"
+      x=0
     fi
-
-    stage 3 "CI on HEAD"
-    ci_gate "${head}"
-  fi
-
-  stage 4 "tag and GitHub Release"
-  if [[ "${resume}" == 0 ]]; then
-    run git tag -a "${tag}" -m "${TITLE} ${tag}" "${head}"
-  fi
-  tag_remote "${tag}" || run git push origin "refs/tags/${tag}"
-  if [[ -n "${MODULE}" ]]; then
-    run gh release create "${tag}" --verify-tag --latest=false --title "${title}" --notes-file "${upload_notes}" "${card}"
-  else
-    # The set's notes: releases/<version>/notes.txt, then one line per module release.
-    local body m
-    body="$(cat "${upload_notes}"; printf '\nMODULE RELEASES\n\n'
-      for m in modules/*/; do
-        m="$(basename "${m}")"
-        [[ -f "modules/${m}/module.properties" ]] || continue
-        echo "- ${m} ${VERSION}: https://github.com/${REPO}/releases/tag/${m}/${VERSION}"
-      done)"
-    if [[ "${DRY_RUN}" == 1 ]]; then
-      SET_NOTES="<set notes>"
-      echo "   <set notes>:"; while IFS= read -r m; do echo "   | ${m}"; done <<< "${body}"
+    if [[ "${x}" == 1 ]]; then
+      echo "== reusing the results under ${OUT}/ (stages 2 and 3 skipped)"
     else
-      SET_NOTES="$(mktemp)"
-      SET_NOTES_TMP="${SET_NOTES}"
-      trap cleanup EXIT
-      printf '%s\n' "${body}" > "${SET_NOTES}"
+      tests "${VERSION}"
+      card_stage
     fi
-    run gh release create "${tag}" --verify-tag --title "${title}" --notes-file "${SET_NOTES}" "${card}"
+    commit_stage
+    tagged="$(git rev-parse HEAD)"
   fi
 
-  stage 5 consumers
-  if [[ -n "${MODULE}" ]]; then
-    echo "Projects pin ${MODULE} ${VERSION} in xewe.toml [modules], then ./setup.sh:"
-    echo "  ref = \"${tag}\"   # this tag's commit: every module at its then-released version"
-    if tag_local "${VERSION}" || tag_remote "${VERSION}"; then
-      echo "  ref = \"${VERSION}\"   # the set tag ${VERSION}: every module released at ${VERSION}"
-    fi
-  else
-    echo "Projects: xewe.toml [modules] ref = \"${VERSION}\" (or xewe manifest update), then ./setup.sh."
-  fi
-  if [[ "${DRY_RUN}" == 1 && "${FAILED}" -gt 0 ]]; then
-    echo "== dry run: ${FAILED} check(s) failed; a real run stops at the first"
-    exit 1
-  fi
+  tag_stage "${tagged}"
+  release_stage "${tagged}"
+  echo "done in ${SECONDS} s"
 }
 
 # Sourcing the file (tests) defines the functions without running a release.
