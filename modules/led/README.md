@@ -101,7 +101,7 @@ Metadata and dependencies are declared in [`module.properties`](module.propertie
 
 ## Build defines (`src/Led/Config.h`)
 
-All names start with `XEWE_LED_` and hold a fallback in the module's `Config.h`: an uncommented line in the project's `Config.h`, a dotenv value behind `INJECTED_FROM_DOTENV` or `xewe build --define NAME=VALUE` wins (see [build-time values in a project](../../README.md#set-build-time-values)). The file has the two sections of the scheme (default runtime values, compile time defined constants) in [XeWeCore's `doc/CONFIG.md`](https://github.com/xewe-labs/xewe-os-core/blob/main/doc/CONFIG.md).
+All names start with `XEWE_LED_` and hold a fallback in the module's `Config.h`: an uncommented line in the project's `Config.h`, a dotenv value behind `INJECTED_FROM_DOTENV` or `xewe build --define NAME=VALUE` wins (see [build-time values in a project](../../doc/CONTRACT.md)). The file has the two sections of the scheme (default runtime values, compile time defined constants) in [XeWeCore's `doc/CONFIG.md`](https://github.com/xewe-labs/xewe-os-core/blob/main/doc/CONFIG.md).
 
 The file frames its default runtime values with `/* ---- start default runtime values ---- */` ... `/* ---- end default runtime values ---- */` and its compile time defined constants with `/* ---- start compile time defined constants ---- */` ... `/* ---- end compile time defined constants ---- */`.
 
