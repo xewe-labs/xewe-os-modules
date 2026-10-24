@@ -21,14 +21,13 @@ xewe-os-modules/
 │       ├── tests/unit/                  # optional: developer-machine tests (`unit` pytest, C++ for g++)
 │       └── README.md
 ├── doc/
-│   ├── contract.md         # this file
+│   ├── CONTRACT.md         # this file
 │   └── modules.md          # generated index: `tools/validate.py --write-index`
 ├── libraries.toml          # library catalogue: repo and ref of every depends_libraries name
 ├── tools/validate.py       # the tools' validator plus the repository rules (section 5)
 ├── scripts/release.sh      # one command: tests, release commit, tags and GitHub Releases for the named modules (tag <slug>/X.Y.Z) or, with --all, every module and the set (tag X.Y.Z)
 ├── README.md               # what the modules are and how a project uses them
 ├── .github/workflows/      # CI: tests.yml
-├── .agents/                # agent workspace: AGENTS.md (how to work here), RULES.md (hard rules)
 ├── LICENSE.txt             # GPL-3.0-only, one file for the repository
 └── .gitignore              # __pycache__/, *.pyc, .pytest_cache/, build/, .venv/, .DS_Store, releases/*/logs/
 ```
@@ -93,7 +92,7 @@ Each module is released on its own under the tag `<slug>/X.Y.Z` (for example `wi
 `version=X.Y.Z` in its `module.properties`. The repository-wide set tag `X.Y.Z` marks a commit where
 every module is released at that version; it is what a project's `xewe.toml` `[modules] ref` pins.
 A module's `version` is the promise for its commands. Every release publishes the module's generated
-`release_card.md` (README "Releasing"), rendered from one shared check run of the whole repository.
+`release_card.md` ([scripts/README.md](../scripts/README.md)), rendered from one shared check run of the whole repository.
 Renaming or removing a define of `Config.h` is a breaking change too (section 3.2); the 3.1.0 define
 rename is an announced exception, decided for the 3.1.0 set.
 
@@ -274,7 +273,7 @@ copy.
 ### 3.2 Configuration
 
 Every build-time value of a module lives in `src/<Folder>/Config.h`, in the form specified by
-XeWeCore's [`doc/config.md`](https://github.com/xewe-labs/xewe-os-core/blob/main/doc/config.md);
+XeWeCore's [`doc/CONFIG.md`](https://github.com/xewe-labs/xewe-os-core/blob/main/doc/CONFIG.md);
 this section is what a module here follows and what R `config` checks. A module without values has
 no `Config.h`.
 

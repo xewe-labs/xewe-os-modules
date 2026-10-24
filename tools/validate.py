@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate every module of this repo (doc/contract.md section 5).
+"""Validate every module of this repo (doc/CONTRACT.md section 5).
 
 A thin wrapper: the module.properties rules come from xewe-os-tools (`xewe.modules.registry.validate`);
 this file adds only the repo-policy rules. Run it with a Python that has xewe-os-tools

@@ -3,63 +3,10 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # xewe-os-modules/scripts/release.sh
 #
-# release.sh: test the named modules (or every module) once, tag the commit with the notes and one
-# release card per tag in the tag message, then create the GitHub Releases.
+# Tests the named modules (or every module with --all) once, commits the version lines, tags the
+# commit with the notes and one release card per tag, and creates the GitHub Releases.
+# scripts/README.md describes the stages, the flags and the environment.
 # Usage: scripts/release.sh <version> (<module>... | --all) [--hardware c3] [--notes "line" ...] [--notes-file FILE] [--resume] [--ci-timeout <min>]
-#
-# One command, 6 stages. <version> is X.Y.Z or X.Y.Z-suffix (a pre-release), no `v`; the version
-# lines get X.Y.Z. Each named module is released as tag <module>/<version> (e.g. wifi/3.1.7);
-# --all releases every module and also the set tag <version>, which marks a commit where every module
-# is released at <version>. Projects pin either (xewe.toml [modules] ref). The notes are 1 to 3 lines
-# and apply to every tag of the run: --notes once per line, and/or the lines of --notes-file. Run
-# the script once per module when the modules do not share one reason. Everything the run writes
-# is under build/release/<version>/ (gitignored).
-#   1 preflight: refuses, and lists every problem, unless: on main; the work tree has no change at
-#     all (untracked files included); main is level with origin/main after a fetch; every tag of
-#     the run is free here and on origin (--resume excepted); tests.yml calls the tools workflow at
-#     the ref of its tools_ref input (a tools tag, unless XEWE_TOOLS_SOURCE is set); the notes pass
-#     `xewe release-notes check`; build/ is ignored; Python >= 3.11, the harness project (an xewe
-#     project: XEWE_RELEASE_HARNESS, else ../xewe-os) and gh (logged in) are there;
-#   2 tests: the version lines set (module.properties version= and requires_core= of the named
-#     modules, the matching cells of doc/modules.md via tools/validate.py --write-index), then a
-#     card run (`xewe release-card init` on the logs folder), every step recorded by `xewe
-#     release-card record`: the checkers' venv (ruff, clang-format) and two copies of the harness
-#     project with every module selected and this tree as the modules source
-#     (XEWE_MODULES_SOURCE; one for the tests and the all-modules image, one for module-alone
-#     builds), tools/validate.py --harness, `xewe format --check modules tools`, `xewe brand-lint .`,
-#     for each named module and every chip (c3, c6, s3) `xewe modules select <module>` and `xewe
-#     build --chip C`, then `xewe test --unit-only` (unit, JUnit), the all-modules build for the
-#     chip and its board tests. A failing step stops the run before the cards, the commit and the
-#     tags (the log is in the logs folder). The chip
-#     is the --hardware chip, else c3: a --hardware chip is flashed and tested with
-#     --require-board and the gates in BOARD_GATES; without it the board tests are compiled, not
-#     run. XEWE_RELEASE_DEFINES_<CHIP> (environment, KEY=VALUE separated by spaces) are the defines
-#     of the build, flash and board steps. XEWE_ENV, else the harness's dotenv file, else the
-#     tools checkout's is the dotenv the board run uses: the script never reads it, the tools do;
-#   3 release cards: `xewe release-card render` writes build/release/<version>/<module>/
-#     release_card.md for each named module (only that module's tests) and, with --all,
-#     build/release/<version>/_set/release_card.md (every module's tests), or refuses (the draft
-#     is in the logs folder);
-#   4 commit: only the version-line files are added, `release <version>` with --all, else
-#     `release <version> <module>...` (`<n> modules` when there are many); refuses when any other
-#     file changed;
-#   5 tag: per tag the message is the notes, one blank line, that tag's card; `git tag -a
-#     --cleanup=verbatim` (git would drop the card's `#` lines otherwise). Then `git push origin
-#     main`, a check that origin/main equals HEAD, and one `git push origin <tag>` per tag (GitHub
-#     starts no workflow when more than 3 tags arrive in one push): main first, so that the
-#     workflow is registered before a tag triggers it;
-#   6 release: per tag waits for its tests.yml run (--ci-timeout minutes in all, default 60); its
-#     card job compares the tag's card with the run (the `xewe release-card verify --ci` step must
-#     have run and passed). Then `gh release create` (--verify-tag, the notes as the text, the
-#     card as its only asset release_card.md; --prerelease for a suffix); prints the release URLs.
-#     The modules CI runs on tags only when tests.yml triggers on them (`push: tags`); a tag
-#     without a run is reported as such when the wait ends.
-# A run that stops before stage 4 puts the version lines back. --resume: tags that exist (here or on
-# origin) are not made again; the missing ones are made on the same commit. When HEAD is the
-# release commit and no tag exists, build/release/<version>/ is reused if every card is there (else
-# stage 2 runs again), then the run goes on from stage 4. A release that exists is only reported;
-# a missing one is created from its tag's own message.
-# Exit codes: 0 done, 1 a refusal or a failed check.
 set -euo pipefail
 
 REPO="xewe-labs/xewe-os-modules"

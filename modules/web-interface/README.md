@@ -1,6 +1,4 @@
-# web-interface — send CLI commands to the board over HTTP
-
-## Overview
+# web-interface
 
 HTTP page and command endpoint for other devices on the network. A module for
 [XeWe OS](https://github.com/xewe-labs/xewe-os), built on [XeWeCore](https://github.com/xewe-labs/xewe-os-core). It starts an HTTP server on
@@ -26,21 +24,21 @@ driven from a browser, a script or another microcontroller board.
 browser / curl → GET /cmd?c=$pins gpio_toggle 8 → WebServer → os.cli.execute(command) → module callback
 ```
 
-- **`WebInterface` class** (`src/WebInterface/`) — a `xewe::Module` with id `web_interface`; requires Wifi (`add_requirement(wifi)`), cannot be disabled; `loop()` calls `handleClient()`.
-- **Boot** — `begin_routines_required` registers `/`, `/console`, `/cmd` and the catch-all (`onNotFound`); `begin_routines_common` starts the server on the `port` setting and prints the URL. The core runs both on every boot of the enabled module (required → init or regular → common), so the server also answers on the module's first-boot setup boot. Modules declared after this one begin later in the same boot, so routes they add with `get_server().on(...)` answer from the first request.
-- **`WebInterfaceApi.h`** — the catch-all's answers without the server (`CORS_HEADERS`, `PREFLIGHT`, `NOT_FOUND`, `answer(is_options)`); no includes, so the host test checks the bytes the firmware sends.
-- **`get_server()`** — exposes the `WebServer` so other code can register more routes; **`set_root(handler)`** / **`redirect_root(path)`** hand `/` to a project page.
+- `src/WebInterface/` holds the `WebInterface` class, a `xewe::Module` with id `web_interface`; requires Wifi (`add_requirement(wifi)`), cannot be disabled; `loop()` calls `handleClient()`.
+- At boot, `begin_routines_required` registers `/`, `/console`, `/cmd` and the catch-all (`onNotFound`); `begin_routines_common` starts the server on the `port` setting and prints the URL. The core runs both on every boot of the enabled module (required → init or regular → common), so the server also answers on the module's first-boot setup boot. Modules declared after this one begin later in the same boot, so routes they add with `get_server().on(...)` answer from the first request.
+- `WebInterfaceApi.h` holds the catch-all's answers without the server (`CORS_HEADERS`, `PREFLIGHT`, `NOT_FOUND`, `answer(is_options)`); no includes, so the host test checks the bytes the firmware sends.
+- `get_server()` exposes the `WebServer` so other code can register more routes, and `set_root(handler)` and `redirect_root(path)` hand `/` to a project page.
 
-### Commands
+## Commands
 
-**Prefix:** `$web_interface` · requires Wifi
+Commands start with `$web_interface`, and the module requires Wifi.
 
 | Command | Description | Sample Usage |
 | :--- | :--- | :--- |
 | **`status`** | Server uptime and memory usage (plus the `port`/`root` lines). | `$web_interface status` |
 | **`set`** / **`get`** / **`schema`** | Settings table: `port`, `root`. | `$web_interface set root /pad` |
 
-### HTTP API
+## HTTP API
 
 | Route | Method | Response |
 |---|---|---|
@@ -76,7 +74,7 @@ curl "http://192.168.1.50/cmd?c=%24pins%20gpio_toggle%208"
 There is no authentication: anyone on the same network can send any command, including
 `$system` commands. Use it on trusted networks only.
 
-### Requirements
+## Requirements
 
 | | |
 |---|---|
@@ -86,17 +84,17 @@ There is no authentication: anyone on the same network can send any command, inc
 
 Metadata and dependencies are declared in [`module.properties`](module.properties).
 
-### Settings and NVS keys
+## Settings and NVS keys
 
 | Key (namespace `web_interface`) | Type | Default | Meaning |
 |---|---|---|---|
 | `port` | u16 1–65535 | 80 | HTTP port; applies after a restart (RESTART row) |
 | `root` | str ≤ 31 | empty | `GET /` redirects here (e.g. `/pad`); empty = the console page |
 
-### Build defines (`src/WebInterface/Config.h`)
+## Build defines (`src/WebInterface/Config.h`)
 
 All names start with `XEWE_WEB_INTERFACE_` (the slug `web-interface` with `-` written as `_`). They
-are the defaults of the two settings rows, the default-runtime-values section of the scheme in [XeWeCore's `doc/config.md`](https://github.com/xewe-labs/xewe-os-core/blob/main/doc/config.md): a
+are the defaults of the two settings rows, the default-runtime-values section of the scheme in [XeWeCore's `doc/CONFIG.md`](https://github.com/xewe-labs/xewe-os-core/blob/main/doc/CONFIG.md): a
 line in the project's `Config.h` (`xewe modules generate` lists them there commented out, for example
 `// #define XEWE_WEB_INTERFACE_PORT 80`; uncomment one and set the value) or `xewe build --define
 NAME=VALUE` changes the default a fresh device starts with, and
@@ -110,7 +108,7 @@ The file frames its default runtime values with `/* ---- start default runtime v
 | `XEWE_WEB_INTERFACE_PORT` | 80 | `port` | HTTP port, 1 to 65535; takes effect after a restart |
 | `XEWE_WEB_INTERFACE_ROOT` | `""` | `root` | path `GET /` redirects to, up to 31 characters; empty = the console page |
 
-### Tests
+## Tests
 
 `tests/board/test_web-interface.py` (board tests) and `tests/unit/test_web-interface.py` (unit
 tests on the developer machine, no build), run through an xewe-os harness (see the repo

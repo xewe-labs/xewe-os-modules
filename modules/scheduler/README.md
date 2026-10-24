@@ -1,6 +1,4 @@
-# scheduler — run stored commands on a weekly schedule
-
-## Overview
+# scheduler
 
 Runs stored commands on a weekly schedule. A module for [XeWe OS](https://github.com/xewe-labs/xewe-os), built on [XeWeCore](https://github.com/xewe-labs/xewe-os-core). A schedule block
 has a start and end time (minutes from midnight), a weekday, a display colour and one or more CLI
@@ -22,13 +20,13 @@ $schedule add 480 1020 1 FF0000 "$pins gpio_write 8 1" → validate → Schedule
 loop (once per minute): Time.get_current_time() → day + minute match start_time → os.cli.execute(each command)
 ```
 
-- **`Scheduler` class** (`src/Scheduler/`) — a `xewe::Module` with id `schedule`; requires Time (and through it Wifi); cannot be disabled; the schedule becomes active after the reboot that follows first setup.
-- **API** — `add(...)`, `remove(id)`, `get_all_json()`, `load_from_nvs()`, `save_to_nvs()`; `status` prints all blocks as JSON.
+- `src/Scheduler/` holds the `Scheduler` class, a `xewe::Module` with id `schedule`; requires Time (and through it Wifi); cannot be disabled; the schedule becomes active after the reboot that follows first setup.
+- The API is `add(...)`, `remove(id)`, `get_all_json()`, `load_from_nvs()`, `save_to_nvs()`; `status` prints all blocks as JSON.
 - `end_time` and `displayed_color` are stored for interfaces that draw the schedule; only the start minute triggers commands.
 
-### Commands
+## Commands
 
-**Prefix:** `$schedule` · requires Time
+Commands start with `$schedule`, and the module requires Time.
 
 Times are minutes from midnight (0-1439), days are 0 (Monday) to 6 (Sunday); several commands are separated by `|`.
 
@@ -38,7 +36,7 @@ Times are minutes from midnight (0-1439), days are 0 (Monday) to 6 (Sunday); sev
 | **`remove`** | Remove a schedule by id. | `$schedule remove 1` |
 | **`schema`** | Every schedule as a JSON Lines row (`"group":"schedule"`), then `{"end":"schedule","count":N}` (also in `$system schema`). | `$schedule schema` |
 
-### Requirements
+## Requirements
 
 | | |
 |---|---|
@@ -48,7 +46,7 @@ Times are minutes from midnight (0-1439), days are 0 (Monday) to 6 (Sunday); sev
 
 Metadata and dependencies are declared in [`module.properties`](module.properties).
 
-### Settings and NVS keys
+## Settings and NVS keys
 
 No settings table: schedule blocks are not plain settings. Each block is an extra schema row
 (`"group":"schedule"`, with the `$schedule add` command as its `"set"` hint) in `$schedule schema` and
@@ -58,7 +56,7 @@ No settings table: schedule blocks are not plain settings. Each block is an extr
 |---|---|---|
 | `schedules` | FlexData blob | every block: id, start and end minute, day, colour, commands |
 
-### Tests
+## Tests
 
 `tests/board/test_scheduler.py` (board tests) and `tests/unit/test_scheduler.py` (unit test: `module.properties`
 matches the C++ source; developer machine, no build), run through an xewe-os harness (see the repo

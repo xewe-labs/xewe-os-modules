@@ -1,6 +1,4 @@
-# time — network time and automatic timezone detection
-
-## Overview
+# time
 
 NTP time sync and timezone handling. A module for [XeWe OS](https://github.com/xewe-labs/xewe-os), built on [XeWeCore](https://github.com/xewe-labs/xewe-os-core). On first boot it
 detects the timezone from the public IP address by racing three geo-IP services in parallel, asks
@@ -23,13 +21,13 @@ first boot:  SNTP init → 3 tasks × GET geo-IP → first valid offset → "Is 
 later boots: apply stored offset → SNTP sync wait (≤ 50 × 200 ms) → print current time
 ```
 
-- **`Time` class** (`src/Time/`) — a `xewe::Module` with id `time`; requires Wifi, asks for setup on first boot, can be disabled.
-- **API for other modules** — `get_current_time()` (`tm`), `get_current_time_str()`, `print_current_time()`.
-- **Race context** — `TzRace` holds an abort flag, a claimed flag, the result buffer, a binary "winner" semaphore and a counting "done" semaphore used to join the three workers before the context goes out of scope.
+- `src/Time/` holds the `Time` class, a `xewe::Module` with id `time`; requires Wifi, asks for setup on first boot, can be disabled.
+- Other modules call `get_current_time()` (`tm`), `get_current_time_str()`, `print_current_time()`.
+- The race context `TzRace` holds an abort flag, a claimed flag, the result buffer, a binary "winner" semaphore and a counting "done" semaphore used to join the three workers before the context goes out of scope.
 
-### Commands
+## Commands
 
-**Prefix:** `$time` · requires Wifi · asks for the timezone on first boot · can be disabled
+Commands start with `$time`. The module requires Wifi, asks for the timezone on first boot and can be disabled.
 
 | Command | Description | Sample Usage |
 | :--- | :--- | :--- |
@@ -37,7 +35,7 @@ later boots: apply stored offset → SNTP sync wait (≤ 50 × 200 ms) → print
 | **`set`** / **`get`** / **`schema`** | Settings table: `tz_gmt_str` (normalised, applied at once; an invalid value is put back). `set_zone` is its alias. | `$time set tz_gmt_str GMT-8` |
 | **`fetch`** | Sync the current time from the network. | `$time fetch` |
 
-### Requirements
+## Requirements
 
 | | |
 |---|---|
@@ -47,17 +45,17 @@ later boots: apply stored offset → SNTP sync wait (≤ 50 × 200 ms) → print
 
 Metadata and dependencies are declared in [`module.properties`](module.properties).
 
-### Settings and NVS keys
+## Settings and NVS keys
 
 | Key (namespace `time`) | Type | Default | Meaning |
 |---|---|---|---|
 | `tz_gmt_str` | str ≤ 9 | `GMT+00:00` | timezone offset `GMT±HH:MM`; `GMT-8` is normalised to `GMT-08:00` and applied at once; an unparsable value is put back |
 
-### In Config.h
+## Build defines (`src/Time/Config.h`)
 
 All names start with `XEWE_TIME_`. `./setup.sh` (and `xewe modules select`) appends the module's
 `src/Time/Config.h` as one marked block to the project's `Config.h`, every entry commented out, following the scheme in
-[XeWeCore's `doc/config.md`](https://github.com/xewe-labs/xewe-os-core/blob/main/doc/config.md). The module has one default runtime value, asked at first boot, written there as a comment and a commented-out line:
+[XeWeCore's `doc/CONFIG.md`](https://github.com/xewe-labs/xewe-os-core/blob/main/doc/CONFIG.md). The module has one default runtime value, asked at first boot, written there as a comment and a commented-out line:
 
 The file frames its default runtime values with `/* ---- start default runtime values ---- */` ... `/* ---- end default runtime values ---- */`; its compile time defined constants section (`/* ---- start compile time defined constants ---- */` ... `/* ---- end compile time defined constants ---- */`) is empty.
 
@@ -72,7 +70,7 @@ that parses as `GMT±HH:MM` skips the detection and the confirmation; the clock 
 SNTP. One that does not parse falls back to the typed input. A `xewe build --define XEWE_TIME_TZ_GMT_STR=...` wins over the project's `Config.h`.
 The module has no compile time defined constants.
 
-### Tests
+## Tests
 
 `tests/board/test_time.py` (board tests) and `tests/unit/test_time.py` (unit test: `module.properties`
 matches the C++ source; developer machine, no build), run through an xewe-os harness (see the repo

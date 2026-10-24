@@ -1,8 +1,5 @@
-# tests.yml: validator, module unit tests and a c3 compile of the all-modules harness (a template
-# clone with --modules all, modules source = this commit), the format check (blocking),
-# brand-lint and, on a tag, the release card check (the card from the tag message against
-# the unit tests JUnit and the c3 image, job "modules / release card check", which
-# scripts/release.sh waits for), from the tools release 3.1.6, for every push, PR and tag.
+# The tools' modules workflow: validator, unit tests, a c3 build of the all-modules harness, format
+# check, brand-lint and, on a tag, the job "modules / release card check" that scripts/release.sh waits for.
 name: tests
 on:
   push:

@@ -1,6 +1,4 @@
-# pins — GPIO, ADC, PWM and I2C from the command line
-
-## Overview
+# pins
 
 GPIO, ADC, PWM and I2C access from the command line. A module for
 [XeWe OS](https://github.com/xewe-labs/xewe-os), built on [XeWeCore](https://github.com/xewe-labs/xewe-os-core). It exposes the board's pins as
@@ -22,11 +20,11 @@ behind buttons, schedules and HTTP requests.
 $pins gpio_toggle 8 → parse pin → pinMode(OUTPUT) → digitalWrite(!digitalRead) → print new state
 ```
 
-- **`Pins` class** (`src/Pins/`) — a `xewe::Module` with id `pins`; no first-boot setup; can be disabled; stateless (nothing stored in NVS).
+- `src/Pins/` holds the `Pins` class, a `xewe::Module` with id `pins`; no first-boot setup; can be disabled; stateless (nothing stored in NVS).
 
-### Commands
+## Commands
 
-**Prefix:** `$pins` · can be disabled
+Commands start with `$pins`, and the module can be disabled.
 
 Direct hardware access without writing code.
 
@@ -46,7 +44,7 @@ Direct hardware access without writing code.
 
 Pin registry: every command claims its pin for `pins` on first use and refuses a pin another module holds (`! GPIO 3 already claimed by buttons, refused for pins`), so `$pins` cannot reconfigure a fan, sensor or button pin. `pwm_stop` and `release` free it; `i2c_scan` frees its two pins after the scan.
 
-### Requirements
+## Requirements
 
 | | |
 |---|---|
@@ -56,7 +54,7 @@ Pin registry: every command claims its pin for `pins` on first use and refuses a
 
 Metadata and dependencies are declared in [`module.properties`](module.properties).
 
-### Tests
+## Tests
 
 `tests/board/test_pins.py` (board tests) and `tests/unit/test_pins.py` (unit test: `module.properties`
 matches the C++ source; developer machine, no build), run through an xewe-os harness (see the repo

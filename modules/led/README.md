@@ -1,6 +1,4 @@
-# led — addressable LED strip
-
-## Overview
+# led
 
 Drives an addressable LED strip with FastLED. A module for [XeWe OS](https://github.com/xewe-labs/xewe-os),
 built on [XeWeCore](https://github.com/xewe-labs/xewe-os-core). 46 chipsets (one-wire and clocked),
@@ -29,13 +27,13 @@ cmd:   [lock] $led set_mode 5 → mode built + cross-fade → its colour applied
        → NVS writes → colour announced → mode announced
 ```
 
-- **`Led` class** (`src/Led/Led.h`) — a `xewe::Module` with id `led`; first-boot wizard; cannot be disabled.
-- **`LedEngine`** (`LedEngine.h`) — the strip logic without console, NVS or FreeRTOS (host-tested); **`ModeController`**, **`Brightness`**, **`modes/`** — the effects; **`LedCommands`** — the command table; **`Chipsets.h`** — chipset and colour-order tables.
-- **API for other modules** — `sync_color`, `sync_brightness`, `sync_state`, `sync_mode`, `sync_length`, `sync_all` (apply, then notify every listener with the caller's `origin`), `set_mode_param`, `reset_current_mode`, getters `get_rgb`, `get_hsv`, `get_brightness` (last non-zero), `get_state`, `get_current_mode_id`, `get_current_mode_name`, `get_current_mode_param`, `get_all_modes_json`, `get_length`.
+- `src/Led/Led.h` holds the `Led` class, a `xewe::Module` with id `led`; first-boot wizard; cannot be disabled.
+- `LedEngine.h` holds `LedEngine`, the strip logic without console, NVS or FreeRTOS (host-tested). `ModeController`, `Brightness` and `modes/` are the effects, `LedCommands` is the command table, and `Chipsets.h` holds the chipset and colour-order tables.
+- Other modules call `sync_color`, `sync_brightness`, `sync_state`, `sync_mode`, `sync_length`, `sync_all` (apply, then notify every listener with the caller's `origin`), `set_mode_param`, `reset_current_mode`, and the getters `get_rgb`, `get_hsv`, `get_brightness` (last non-zero), `get_state`, `get_current_mode_id`, `get_current_mode_name`, `get_current_mode_param`, `get_all_modes_json`, `get_length`.
 
-### Commands
+## Commands
 
-**Prefix:** `$led` · first-boot setup · cannot be disabled. Numbers are read like Arduino `toInt()` (leading digits, `abc` is 0) and narrowed to the argument type (`300` → 44 for a 0..255 value); no command reports a bad number.
+Commands start with `$led`. The module runs a setup wizard on first boot and cannot be disabled. Numbers are read like Arduino `toInt()` (leading digits, `abc` is 0) and narrowed to the argument type (`300` → 44 for a 0..255 value); no command reports a bad number.
 
 | Command | Description | Sample Usage |
 | :--- | :--- | :--- |
@@ -64,17 +62,17 @@ cmd:   [lock] $led set_mode 5 → mode built + cross-fade → its colour applied
 
 Modes (id, name, parameters): 0 Solid (hue, sat) · 1 Color Fade (hue, sat 0..245, speed, fire_step, h_gap, min_bright) · 2 Color Fade Two Zone (hue, hue_b, blend 2..255, speed, fire_step, min_bright, min_sat) · 3 Brightness Fade (hue, sat, speed, noise_step, min_bright) · 4 Pulse (hue, sat, speed 1..255) · 5 Rainbow (speed, density) · 6 Christmas Lights (density, speed 0..20). `$led get_mode_params` shows ranges and values.
 
-### Setup wizard
+## Setup wizard
 
 On the first boot and after `$led reset` (prompts wait for an answer) the wizard asks six questions: clock line (and its pin), chipset (menu of 46), voltage (5/12/24 V), parallel strips (count and the length of each, the longest becomes `num_led`) or one strip length, and the colour order, found by a calibration (the strip shows green, then red; answer what you see; the order found is used from that answer on, so the fade-out already shows the right colours). Before them it confirms the data pin.
 
 Each question is asked only while its `_PROMPT` define exists (see Build defines). A value set in the project's `Config.h` is stored without a question: `XEWE_LED_USE_CLK` answers the clock line, `XEWE_LED_CHIP` the chipset, `XEWE_LED_VOLTAGE` the voltage, `XEWE_LED_LINES` the parallel strips and `XEWE_LED_NUM_LED` the length (the length of every parallel line when `XEWE_LED_LINES` is set, too). The data-pin and clock-pin confirmations appear only while some question still prompts. When `XEWE_LED_COLORDER` is set the calibration is skipped: the module stores that order, shows green at brightness 50 and prints `Color order set to <ORDER>`; `$led set_color_order ""` still runs it. A "no" to a pin question prints how to change pins (`XEWE_LED_PIN_*`) and the setup continues; with wrong pins the calibration shows nothing, and its "Other" answer restarts the device into the wizard.
 
-### Listeners
+## Listeners
 
 `LedListener` (`src/Led/LedListener.h`): `on_color(rgb)`, `on_brightness(value)`, `on_state(on)`, `on_mode(id)`, `on_length(n)` and `on_all(rgb, brightness, on, mode, length)` (default: the five in the order state, length, mode, brightness, colour). Add one with `led.listeners.add(&l)` (up to `XEWE_LED_LISTENERS`). Events carry the setter's `origin` (`nullptr` from the CLI; the `Led` object for changes the strip makes itself, such as the colour of a newly selected mode, which is announced before the mode). Callbacks run in the caller's task, outside the render lock, after the whole change has been applied; a callback may call the `Led` API again.
 
-### Requirements
+## Requirements
 
 | | |
 |---|---|
@@ -84,7 +82,7 @@ Each question is asked only while its `_PROMPT` define exists (see Build defines
 
 Metadata and dependencies are declared in [`module.properties`](module.properties).
 
-### Settings and NVS keys
+## Settings and NVS keys
 
 | Key (namespace `led`) | Type | Default | Meaning |
 |---|---|---|---|
@@ -101,9 +99,9 @@ Metadata and dependencies are declared in [`module.properties`](module.propertie
 | `state` | u8 (bool) | false | on/off |
 | `mode_params` | FlexData blob | – | `{schema: 1, params: [{mode, key, value}]}` for every mode used |
 
-### Build defines (`src/Led/Config.h`)
+## Build defines (`src/Led/Config.h`)
 
-All names start with `XEWE_LED_` and hold a fallback in the module's `Config.h`: an uncommented line in the project's `Config.h`, a dotenv value behind `INJECTED_FROM_DOTENV` or `xewe build --define NAME=VALUE` wins (see [Config.h in a project](../../README.md#using-modules-in-a-project)). The file has the two sections of the scheme (default runtime values, compile time defined constants) in [XeWeCore's `doc/config.md`](https://github.com/xewe-labs/xewe-os-core/blob/main/doc/config.md).
+All names start with `XEWE_LED_` and hold a fallback in the module's `Config.h`: an uncommented line in the project's `Config.h`, a dotenv value behind `INJECTED_FROM_DOTENV` or `xewe build --define NAME=VALUE` wins (see [build-time values in a project](../../README.md#set-build-time-values)). The file has the two sections of the scheme (default runtime values, compile time defined constants) in [XeWeCore's `doc/CONFIG.md`](https://github.com/xewe-labs/xewe-os-core/blob/main/doc/CONFIG.md).
 
 The file frames its default runtime values with `/* ---- start default runtime values ---- */` ... `/* ---- end default runtime values ---- */` and its compile time defined constants with `/* ---- start compile time defined constants ---- */` ... `/* ---- end compile time defined constants ---- */`.
 
@@ -148,7 +146,7 @@ Led Dock V2 pins per chip (the module default is 4 and 3; a release image sets i
 
 Other pins: uncomment `XEWE_LED_PIN_DATA` and `XEWE_LED_PIN_CLOCK` in the project's `Config.h` and set them, or `xewe build --define XEWE_LED_PIN_DATA=<gpio> --define XEWE_LED_PIN_CLOCK=<gpio>`. The data pin, and the clock pin of clocked chipsets, are claimed in the core pin registry at boot; a pin held by another module leaves the strip without output (reported). Strapping pins are claimed with the core's warning.
 
-### Behaviour kept for stored commands and devices in use
+## Behaviour kept for stored commands and devices in use
 
 These are deliberate, so that stored button and schedule strings, stored values and the web page behave the same as on devices already in use:
 
@@ -162,7 +160,7 @@ These are deliberate, so that stored button and schedule strings, stored values 
 - `set_length` above the maximum prints the error and is still announced to listeners; `reset_current_mode` is not announced.
 - The help sample usages of `adj_hue`, `adj_sat`, `adj_val` show `adj_h`, `adj_s`, `adj_v`.
 
-### Corrected behaviour
+## Corrected behaviour
 
 - Color Fade Two Zone reports Hue A at full saturation as its colour (`get_rgb`), so entering mode 2 gives a defined colour.
 - LEDs past `num_led` stay dark from boot on; only `num_led` pixels are rendered.
@@ -174,7 +172,7 @@ These are deliberate, so that stored button and schedule strings, stored values 
 - Running the colour-order calibration again on a calibrated strip (`$led set_color_order ""`) finds the strip's order: the test colours are shown in plain RGB order. Earlier versions showed them through the order already set, so a GRB strip answered truthfully came out as RGB.
 - `$led set voltage` with a value other than 5, 12 or 24 prints only `! Led: voltage must be 5, 12 or 24; kept <v>` and stores nothing. Earlier versions printed `voltage=<value>` first and wrote NVS twice (the value, then the kept one).
 
-### Known issues
+## Known issues
 
 - Every chipset template is linked: about +330 KB flash on s3 and +360 KB on c3/c6 compared with no LED module.
 - `FastLED.show()` always sends `XEWE_LED_NUM_LEDS_MAX` pixels (about 18 ms for 600 WS2812); a smaller maximum raises the frame rate.
@@ -182,7 +180,7 @@ These are deliberate, so that stored button and schedule strings, stored values 
 - Christmas Lights draws its flicker offsets from FastLED's unseeded `random16()`; the pattern depends on how many instances were built since boot.
 - The ESP32-S3 compiler fuses two float operations of the HSV conversion, so a few hue/saturation pairs give a colour one step apart from C3/C6.
 
-### Tests
+## Tests
 
 `tests/board/test_led.py` (board tests) and `tests/unit/test_led.py` (unit tests, developer machine), run through an xewe-os harness (see the repo [README](../../README.md)):
 

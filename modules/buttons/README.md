@@ -1,11 +1,9 @@
-# buttons — bind CLI commands to physical buttons
-
-## Overview
+# buttons
 
 Binds commands to physical buttons with software debouncing. A module for
 [XeWe OS](https://github.com/xewe-labs/xewe-os), built on [XeWeCore](https://github.com/xewe-labs/xewe-os-core). Each mapping ties a GPIO pin,
 an input mode (pull-up or pull-down), a trigger event (press, release or change) and a debounce
-interval to one CLI command, so a button can do anything the command line can — reboot the board,
+interval to one CLI command, so a button can do anything the command line can: reboot the board,
 toggle a pin, run a schedule. Mappings are stored in NVS and restored on boot without any setup
 prompt.
 
@@ -23,12 +21,12 @@ $buttons add 9 "$system reboot" pullup on_press 50 → pinMode(INPUT_PULLUP) →
 loop: digitalRead → stable for debounce_ms? → state changed? → event matches? → os.cli.execute(command)
 ```
 
-- **`Buttons` class** (`src/Buttons/`) — a `xewe::Module` with id `buttons`; no first-boot setup; can be disabled.
-- **API** — `add(pin, command, type, event, debounce)`, `remove(id)` (false when no mapping has that id), `load_from_nvs()`, `save_to_nvs()`.
+- `src/Buttons/` holds the `Buttons` class, a `xewe::Module` with id `buttons`; no first-boot setup; can be disabled.
+- The API is `add(pin, command, type, event, debounce)`, `remove(id)` (false when no mapping has that id), `load_from_nvs()`, `save_to_nvs()`.
 
-### Commands
+## Commands
 
-**Prefix:** `$buttons` · can be disabled
+Commands start with `$buttons`, and the module can be disabled.
 
 | Command | Description | Sample Usage |
 | :--- | :--- | :--- |
@@ -38,7 +36,7 @@ loop: digitalRead → stable for debounce_ms? → state changed? → event match
 
 Pins are claimed in the core pin registry (`xewe::pins`): `add` refuses a pin another module holds; a stored mapping whose pin is taken is reported at boot and ignored; `remove` releases the pin once no mapping uses it.
 
-### Requirements
+## Requirements
 
 | | |
 |---|---|
@@ -48,7 +46,7 @@ Pins are claimed in the core pin registry (`xewe::pins`): `add` refuses a pin an
 
 Metadata and dependencies are declared in [`module.properties`](module.properties).
 
-### Settings and NVS keys
+## Settings and NVS keys
 
 No settings table: the mappings are not plain settings. Each mapping is an extra schema row
 (`"group":"button"`) in `$buttons schema` and `$system schema`.
@@ -57,7 +55,7 @@ No settings table: the mappings are not plain settings. Each mapping is an extra
 |---|---|---|
 | `data` | FlexData blob | every mapping: id, pin, command, input mode, event, debounce |
 
-### Tests
+## Tests
 
 `tests/board/test_buttons.py` (board tests) and `tests/unit/test_buttons.py` (unit test: `module.properties`
 matches the C++ source; developer machine, no build), run through an xewe-os harness (see the repo

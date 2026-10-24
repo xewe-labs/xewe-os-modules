@@ -1,6 +1,4 @@
-# led-web — LED control page in the browser
-
-## Overview
+# led-web
 
 A web page for the [led](../led) module. A module for [XeWe OS](https://github.com/xewe-labs/xewe-os),
 built on [XeWeCore](https://github.com/xewe-labs/xewe-os-core). The page (mode menu, the current
@@ -25,13 +23,13 @@ page → GET /set?brightness=128 → web interface server → led.sync_brightnes
 $led set_mode 5 (CLI) → led → on_color, on_mode → "C…", "M5" to every page → the page reloads /modes
 ```
 
-- **`LedWeb` class** (`src/LedWeb/LedWeb.h`) — a `xewe::Module` with id `led_web`; requires `led` and `web_interface`; can be disabled (asks on the first boot). At begin it registers its routes on `web_interface.get_server()`, takes `/` with `set_root`, starts the WebSocket server and adds itself to `led.listeners`. `loop()` serves the WebSocket clients and the heartbeat.
-- **`LedWebApi.h`** — route table, CORS headers, `/set`, `/state`, `/modes`, `/name` handlers, the status page address, the frame formats and the page sessions (client count, heartbeat, `F` on connect, closing every page) (no server, no Arduino).
+- `src/LedWeb/LedWeb.h` holds the `LedWeb` class, a `xewe::Module` with id `led_web`; requires `led` and `web_interface`; can be disabled (asks on the first boot). At begin it registers its routes on `web_interface.get_server()`, takes `/` with `set_root`, starts the WebSocket server and adds itself to `led.listeners`. `loop()` serves the WebSocket clients and the heartbeat.
+- `LedWebApi.h` holds the route table, CORS headers, `/set`, `/state`, `/modes`, `/name` handlers, the status page address, the frame formats and the page sessions (client count, heartbeat, `F` on connect, closing every page) (no server, no Arduino).
 - When the module is disabled nothing is registered: `/` is the web interface's console again and the other paths are unknown to the server.
 
-### Commands
+## Commands
 
-**Prefix:** `$led_web` · requires Led and Web Interface · can be disabled
+Commands start with `$led_web`. The module requires Led and Web Interface and can be disabled.
 
 | Command | Description | Sample Usage |
 | :--- | :--- | :--- |
@@ -39,7 +37,7 @@ $led set_mode 5 (CLI) → led → on_color, on_mode → "C…", "M5" to every pa
 | **`reset`** | Closes every WebSocket connection, then the core reset (the module stores nothing of its own) and restarts | `$led_web reset` |
 | **`enable`** / **`disable`** | Core enable/disable (disable asks for confirmation); both restart | `$led_web disable` |
 
-### HTTP API
+## HTTP API
 
 All routes are `GET`. Numbers are read like Arduino `toInt()` (leading digits, `abc` is 0) and narrowed like the `$led` commands (`300` → 44 for brightness).
 
@@ -57,7 +55,7 @@ Other paths, and `OPTIONS` preflights, are answered by the web interface's serve
 issues). The page's "Set Up Schedule" button opens `/schedule`, which this module does not serve; a
 project that has a schedule page registers it there.
 
-### WebSocket frames (server → page, text)
+## WebSocket frames (server → page, text)
 
 | Frame | Format | Sent on |
 |---|---|---|
@@ -71,7 +69,7 @@ project that has a schedule page registers it there.
 Text sent by a page is ignored. The length is not shown on the page, so `on_length` sends nothing.
 The page also understands `P<key>:<value>`; the led module has no parameter event, so it is not sent.
 
-### Listeners
+## Listeners
 
 Implements `LedListener` (registered on `led.listeners` at begin). It sends every event as a frame,
 including events caused by this module's own `/set` (origin is not filtered), in the order the led
@@ -79,7 +77,7 @@ reports them: a mode change gives `C` (the mode's colour) then `M`, `$led reset`
 The frames go out from inside the callback, so a page's `/set` echo is sent before the HTTP answer.
 It registers no listener set of its own.
 
-### Requirements
+## Requirements
 
 | | |
 |---|---|
@@ -89,15 +87,15 @@ It registers no listener set of its own.
 
 Metadata and dependencies are declared in [`module.properties`](module.properties).
 
-### Settings and NVS keys
+## Settings and NVS keys
 
 None of its own (namespace `led_web` holds only the core's `is_enabled` and `not_first_boot`).
 
-### Build defines (`src/LedWeb/Config.h`)
+## Build defines (`src/LedWeb/Config.h`)
 
 The module has no configurable values: its `Config.h` has both sections empty. The WebSocket port (81) and the heartbeat interval (1000 ms) are constants in `LedWeb.h`, matched to the page script, which connects to port 81 and shows Offline after 2.2 s without a heartbeat.
 
-### Known issues
+## Known issues
 
 - No authentication: anyone on the local network can change the LEDs (as with the web interface's `/cmd`).
 - At most 5 WebSocket connections at once (the library's `WEBSOCKETS_SERVER_CLIENT_MAX`).
@@ -109,7 +107,7 @@ The module has no configurable values: its `Config.h` has both sections empty. T
 - `status` prints the HTTP port from the web interface's `port` setting; after
   `$web_interface set port` it shows the new port before the restart that applies it.
 
-### Tests
+## Tests
 
 `tests/board/test_led-web.py` (board tests) and `tests/unit/test_led-web.py` (unit tests, developer machine), run through an xewe-os harness (see the repo [README](../../README.md)):
 

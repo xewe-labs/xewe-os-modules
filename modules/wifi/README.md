@@ -1,6 +1,4 @@
-# wifi — joins a WiFi network and keeps it connected
-
-## Overview
+# wifi
 
 Connects to a local WiFi network and keeps the connection alive. A module for
 [XeWe OS](https://github.com/xewe-labs/xewe-os), built on [XeWeCore](https://github.com/xewe-labs/xewe-os-core). On first boot it scans for
@@ -24,12 +22,12 @@ later boots: begin_routines_regular → connect(no prompt) → join(stored, 10 s
 loop:        while not connected → 5 s "disable and reset?" prompt → reconnect
 ```
 
-- **`Wifi` class** (`src/Wifi/`) — a `xewe::Module` with id `wifi`; requires initial setup, can be disabled, registers three commands.
-- **Status** — `status()` returns the SSID, local IP and MAC address, which appear in `$system status`.
+- `src/Wifi/` holds the `Wifi` class, a `xewe::Module` with id `wifi`; requires initial setup, can be disabled, registers three commands.
+- `status()` returns the SSID, local IP and MAC address, which appear in `$system status`.
 
-### Commands
+## Commands
 
-**Prefix:** `$wifi` · asks for a network on first boot · can be disabled
+Commands start with `$wifi`. The module asks for a network on first boot and can be disabled.
 
 | Command | Description | Sample Usage |
 | :--- | :--- | :--- |
@@ -38,7 +36,7 @@ loop:        while not connected → 5 s "disable and reset?" prompt → reconne
 | **`scan`** | List available networks. | `$wifi scan` |
 | **`set`** / **`get`** / **`schema`** | Settings table: `ssid` (str ≤ 32), `psw` (str ≤ 63, secret: shown as `********`); `$wifi connect` uses them. | `$wifi set ssid "My Net"` |
 
-### Requirements
+## Requirements
 
 | | |
 |---|---|
@@ -48,18 +46,18 @@ loop:        while not connected → 5 s "disable and reset?" prompt → reconne
 
 Metadata and dependencies are declared in [`module.properties`](module.properties).
 
-### Settings and NVS keys
+## Settings and NVS keys
 
 | Key (namespace `wifi`) | Type | Default | Meaning |
 |---|---|---|---|
 | `ssid` | str ≤ 32 | empty | network name, used by `$wifi connect` and at boot |
 | `psw` | str ≤ 63 | empty | password; a SECRET row, never printed (`********`) |
 
-### In Config.h
+## Build defines (`src/Wifi/Config.h`)
 
 All names start with `XEWE_WIFI_`. `./setup.sh` (and `xewe modules select`) appends the module's
 `src/Wifi/Config.h` as one marked block to the project's `Config.h`, every entry commented out; the file follows the scheme in
-[XeWeCore's `doc/config.md`](https://github.com/xewe-labs/xewe-os-core/blob/main/doc/config.md), and an uncommented line in the project's `Config.h`, a dotenv value behind `INJECTED_FROM_DOTENV` or
+[XeWeCore's `doc/CONFIG.md`](https://github.com/xewe-labs/xewe-os-core/blob/main/doc/CONFIG.md), and an uncommented line in the project's `Config.h`, a dotenv value behind `INJECTED_FROM_DOTENV` or
 `xewe build --define NAME=VALUE` wins over the module's default.
 
 The file frames its default runtime values with `/* ---- start default runtime values ---- */` ... `/* ---- end default runtime values ---- */` and its compile time defined constants with `/* ---- start compile time defined constants ---- */` ... `/* ---- end compile time defined constants ---- */`.
@@ -88,7 +86,7 @@ reaches the repository). What the first boot does:
 - Only `XEWE_WIFI_SSID` set: the password is asked.
 - Only `XEWE_WIFI_PSW` set: ignored, the network is chosen from the scan and the password is asked.
 
-### Known issues
+## Known issues
 
 - **`loop()` waits for the network, by design.** While the module is enabled and disconnected,
   `loop()` does not return until WiFi is back. Each pass is a 5 s "Disable and reset WiFi module?"
@@ -98,10 +96,10 @@ reaches the repository). What the first boot does:
   prompt). The CLI and every other module wait meanwhile. This is intended: time, web-interface
   and scheduler (through time) need the network, so the device holds until it is back instead of
   running them offline. Answering yes to the prompt (and confirming) disables the module and its
-  dependents, which ends the wait ([contract](../../doc/contract.md#6-known-limits), section 6).
+  dependents, which ends the wait ([contract](../../doc/CONTRACT.md#6-known-limits), section 6).
 - Credentials are stored in NVS unencrypted.
 
-### Tests
+## Tests
 
 `tests/board/test_wifi.py` (board tests) and `tests/unit/test_wifi.py` (unit test: `module.properties`
 matches the C++ source; developer machine, no build), run through an xewe-os harness (see the repo
