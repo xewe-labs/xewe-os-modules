@@ -4,6 +4,8 @@
 
 #include "Wifi.h"
 
+#include <esp_mac.h>
+
 Wifi::Wifi(xewe::Os& host)
     : xewe::Module(host,
           /* id                  */ "wifi",
@@ -230,11 +232,10 @@ std::string Wifi::get_ssid() const {
 std::string Wifi::get_mac_address() const {
     if (is_disabled(true))
         return {};
-    if (is_disconnected(true))
-        return {};
 
     uint8_t mac[6];
-    WiFi.macAddress(mac);
+    if (esp_read_mac(mac, ESP_MAC_WIFI_STA) != ESP_OK)
+        return {};
     char buf[18];
     snprintf(buf, sizeof(buf), "%02X:%02X:%02X:%02X:%02X:%02X", mac[0], mac[1], mac[2], mac[3],
         mac[4], mac[5]);
